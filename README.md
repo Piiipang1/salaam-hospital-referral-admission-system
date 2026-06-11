@@ -49,3 +49,24 @@ The system eliminates manual paper-based workflows by providing a centralized pl
 - Admission Reports
 - Referral Reports
 - Dashboard Analytics
+
+## Technology Stack
+
+### Frontend
+- React.js
+- HTML5
+- CSS3
+- JavaScript
+
+### Backend
+- Node.js
+- Express.js
+
+### Database
+- MySQL
+
+### Development Tools
+- Visual Studio Code
+- XAMPP
+- Git
+- GitHub
