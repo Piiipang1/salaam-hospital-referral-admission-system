@@ -70,3 +70,10 @@ The system eliminates manual paper-based workflows by providing a centralized pl
 - XAMPP
 - Git
 - GitHub
+
+## System Users
+
+- Administrator
+- Doctor
+- Nurse
+- Hospital Staff
