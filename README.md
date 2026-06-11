@@ -17,3 +17,35 @@ The system eliminates manual paper-based workflows by providing a centralized pl
 - Monitor room and bed availability
 - Enhance communication among healthcare providers
 - Reduce administrative workload and human errors
+
+## Features
+
+### Authentication & Security
+- Secure Login
+- Role-Based Access Control
+- User Management
+
+### Patient Management
+- Patient Registration
+- Patient Profile Management
+- Medical History Tracking
+
+### Triage Management
+- Vital Signs Recording
+- Priority Level Assignment
+- Doctor Assignment
+
+### Referral Management
+- Internal Referral Creation
+- Referral Status Tracking
+- Referral History Logs
+
+### Admission Management
+- Admission Processing
+- Room Assignment
+- Bed Availability Monitoring
+
+### Reporting
+- Admission Reports
+- Referral Reports
+- Dashboard Analytics
