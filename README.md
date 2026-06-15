@@ -77,3 +77,14 @@ The system eliminates manual paper-based workflows by providing a centralized pl
 - Doctor
 - Nurse
 - Hospital Staff
+
+##How to run it
+
+1. Make sure both servers are running:
+# Terminal 1 — Backend
+cd backend
+node server.js
+
+# Terminal 2 — Frontend (already running)
+cd frontend
+npm run dev
