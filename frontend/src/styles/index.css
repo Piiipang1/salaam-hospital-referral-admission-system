@@ -335,3 +335,106 @@ hr {
   margin-bottom: var(--space-2);
 }
 
+/* ── File Input Widget ──────────────────────────────────── */
+.file-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.file-input-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  white-space: nowrap;
+}
+.file-input-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-muted);
+}
+.file-input-name {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+/* ── Lab Upload Section (inside DiagnosisForm) ──────────── */
+.lab-upload-section {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px dashed var(--color-border);
+}
+.lab-upload-heading {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--space-4);
+}
+.lab-upload-optional {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-text-disabled);
+}
+
+/* ── Lab Results List (inside Diagnoses tab cards) ──────── */
+.lab-results-section {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.lab-results-heading {
+  margin-bottom: var(--space-3);
+  color: var(--color-text-muted);
+}
+.lab-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.lab-result-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition-fast);
+}
+.lab-result-item:hover { border-color: var(--color-border-light); }
+.lab-result-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+.lab-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.lab-result-link {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-primary);
+  text-decoration: none;
+  word-break: break-word;
+}
+.lab-result-link:hover { text-decoration: underline; }
+
