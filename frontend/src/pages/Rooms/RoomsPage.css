@@ -1,0 +1,31 @@
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+.room-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  transition: border-color var(--transition-base), transform var(--transition-base);
+}
+.room-card:hover { transform: translateY(-2px); }
+.room-card--available { border-color: rgba(16,185,129,0.3); }
+.room-card--occupied  { border-color: rgba(239,68,68,0.3); opacity:0.8; }
+.room-card__icon { font-size: 2rem; }
+.room-card__info { display:flex; flex-direction:column; gap:2px; }
+.room-card__bed  { font-size: var(--font-size-lg); font-weight:700; color:var(--color-text); }
+.room-card__type { font-size: var(--font-size-xs); color:var(--color-text-muted); }
+.room-card__edit {
+  position:absolute; top:var(--space-3); right:var(--space-3);
+  background:none; border:none; cursor:pointer; font-size:0.85rem; opacity:0.4;
+  transition:opacity var(--transition-fast);
+}
+.room-card:hover .room-card__edit { opacity:1; }
