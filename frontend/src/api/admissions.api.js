@@ -1,0 +1,5 @@
+import api from './axios';
+export const getAllAdmissions  = (params = {}) => api.get('/api/admissions', { params }).then(r => r.data);
+export const getAdmissionById = (id) => api.get(`/api/admissions/${id}`).then(r => r.data);
+export const createAdmission  = (data) => api.post('/api/admissions', data).then(r => r.data);
+export const dischargePatient = (id) => api.put(`/api/admissions/${id}/discharge`).then(r => r.data);
