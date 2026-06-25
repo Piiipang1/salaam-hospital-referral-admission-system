@@ -1,0 +1,13 @@
+.page-wrapper {
+  margin-left: var(--sidebar-width);
+  margin-top: var(--topbar-height);
+  min-height: calc(100vh - var(--topbar-height));
+  padding: var(--space-6) var(--space-8);
+  transition: margin-left var(--transition-slow);
+}
+@media (max-width: 1023px) {
+  .page-wrapper { margin-left: var(--sidebar-collapsed-width); }
+}
+@media (max-width: 767px) {
+  .page-wrapper { margin-left: 0; padding: var(--space-4); }
+}
