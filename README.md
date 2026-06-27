@@ -78,6 +78,32 @@ The system eliminates manual paper-based workflows by providing a centralized pl
 - Nurse
 - Hospital Staff
 
+## 📂 Project Structure
+
+```text
+patient-referral-admission-system/
+│
+├── frontend/
+│   ├── src/
+│   ├── public/
+│   └── package.json
+│
+├── backend/
+│   ├── routes/
+│   ├── controllers/
+│   ├── models/
+│   ├── middleware/
+│   └── package.json
+│
+├── database/
+│   └── hospital_db.sql
+│
+├── screenshots/
+│
+├── README.md
+└── LICENSE
+```
+
 ##How to run it
 
 1. Make sure both servers are running:
