@@ -1,0 +1,45 @@
+/* ── Card.css ───────────────────────────────────────────────── */
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+  /* Allow action button to wrap below title on very small screens */
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.card__title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.card__body { padding: var(--space-6); }
+.card--no-pad .card__body { padding: 0; }
+
+/* ── Mobile ≤767px: tighten card spacing ───────────────────── */
+@media (max-width: 767px) {
+  .card__header {
+    padding: var(--space-4) var(--space-5);
+  }
+  .card__body {
+    padding: var(--space-4) var(--space-5);
+  }
+}
+
+/* ── Small mobile ≤480px ────────────────────────────────────── */
+@media (max-width: 480px) {
+  .card__header {
+    padding: var(--space-3) var(--space-4);
+  }
+  .card__body {
+    padding: var(--space-3) var(--space-4);
+  }
+}
