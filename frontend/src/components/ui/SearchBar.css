@@ -1,0 +1,15 @@
+.search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-bar__icon {
+  position: absolute;
+  left: var(--space-3);
+  font-size: var(--font-size-sm);
+  pointer-events: none;
+}
+.search-bar__input {
+  padding-left: calc(var(--space-3) * 2 + 1.1em);
+  min-width: 240px;
+}
