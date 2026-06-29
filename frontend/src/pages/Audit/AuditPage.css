@@ -1,0 +1,132 @@
+/* ── AuditPage.css ──────────────────────────────────────────── */
+/* Shared filter controls (filter-select, filter-date,           */
+/* filter-date-sep, filter-clear-btn) are defined globally in    */
+/* index.css — do NOT duplicate them here.                       */
+
+.audit-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* ── Filter toolbar ──────────────────────────────────────────── */
+.audit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* ── Action pill ─────────────────────────────────────────────── */
+.audit-action-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  font-family: var(--font-family-mono, monospace);
+}
+
+/* ── Role pill ───────────────────────────────────────────────── */
+.audit-role-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+.audit-role-pill--admin  { background: var(--color-primary-muted); color: var(--color-primary); }
+.audit-role-pill--doctor { background: var(--color-info-muted);    color: var(--color-info);    }
+.audit-role-pill--nurse,
+.audit-role-pill--staff  { background: var(--color-success-muted); color: var(--color-success); }
+.audit-role-pill--unknown { background: var(--color-surface-2); color: var(--color-text-muted); }
+
+/* ── Table cell helpers ──────────────────────────────────────── */
+.audit-datetime {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+.audit-user {
+  font-weight: 500;
+  color: var(--color-text);
+}
+.audit-table-name {
+  font-size: var(--font-size-xs);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 1px var(--space-2);
+  color: var(--color-text-muted);
+  font-family: var(--font-family-mono, monospace);
+}
+.audit-record-id {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-disabled);
+  font-family: var(--font-family-mono, monospace);
+}
+
+/* ── Pagination ──────────────────────────────────────────────── */
+.audit-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+}
+.audit-pagination__info {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.audit-pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.audit-page-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+  white-space: nowrap;
+}
+.audit-page-btn:hover:not(:disabled) {
+  background: var(--color-surface-2);
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+.audit-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.audit-page-current {
+  min-width: 32px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* ── Mobile ≤767px ───────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .audit-toolbar      { gap: var(--space-2); }
+  .audit-pagination   { justify-content: center; }
+  .audit-pagination__info { width: 100%; text-align: center; }
+}
+
+/* ── Small mobile ≤480px ─────────────────────────────────────── */
+@media (max-width: 480px) {
+  .audit-page-btn     { padding: var(--space-1) var(--space-2); font-size: var(--font-size-xs); }
+  .audit-action-pill,
+  .audit-role-pill    { font-size: 10px; }
+}
