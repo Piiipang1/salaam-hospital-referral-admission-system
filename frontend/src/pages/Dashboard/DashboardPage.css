@@ -1,0 +1,289 @@
+/* ── DashboardPage.css ──────────────────────────────────────── */
+
+.dashboard-page  { display: flex; flex-direction: column; gap: var(--space-6); }
+.dashboard-footer { margin-top: var(--space-2); }
+
+/* ─────────────────────────────────────────────────────────────
+   Role badge — shown in page header
+───────────────────────────────────────────────────────────── */
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-4);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  flex-shrink: 0;
+}
+.role-badge--admin  { background: var(--color-primary-muted); color: var(--color-primary); border: 1px solid var(--color-primary); }
+.role-badge--doctor { background: var(--color-info-muted);    color: var(--color-info);    border: 1px solid var(--color-info); }
+.role-badge--nurse,
+.role-badge--staff  { background: var(--color-success-muted); color: var(--color-success); border: 1px solid var(--color-success); }
+
+/* ─────────────────────────────────────────────────────────────
+   Stat card grid
+───────────────────────────────────────────────────────────── */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+@media (max-width: 1023px) { .dashboard-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 767px)  { .dashboard-page { gap: var(--space-4); } .dashboard-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-3); } }
+@media (max-width: 480px)  { .dashboard-grid { grid-template-columns: 1fr; } }
+
+/* ─────────────────────────────────────────────────────────────
+   Role-specific section (Doctor panel / Nurse-Staff panel)
+───────────────────────────────────────────────────────────── */
+.role-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+}
+
+.role-section__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.role-section__title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+.role-section__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--space-3);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.role-section__badge--doctor { background: var(--color-info-muted);    color: var(--color-info); }
+.role-section__badge--nurse  { background: var(--color-success-muted); color: var(--color-success); }
+
+/* ── Role mini-stats row ── */
+.role-stats-row {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.role-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-6);
+  min-width: 110px;
+  flex: 1;
+  text-align: center;
+}
+.role-stat__value {
+  font-size: var(--font-size-3xl);
+  font-weight: 700;
+  line-height: 1;
+}
+.role-stat__value--primary { color: var(--color-primary); }
+.role-stat__value--warning  { color: var(--color-warning); }
+.role-stat__value--danger   { color: var(--color-danger);  }
+.role-stat__value--success  { color: var(--color-success); }
+.role-stat__value--info     { color: var(--color-info);    }
+.role-stat__label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Recent Activity section
+───────────────────────────────────────────────────────────── */
+.activity-section { display: flex; flex-direction: column; gap: var(--space-4); }
+.activity-section__heading {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+.activity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+@media (max-width: 900px) { .activity-grid { grid-template-columns: 1fr; } }
+
+/* ─────────────────────────────────────────────────────────────
+   Activity panel card
+───────────────────────────────────────────────────────────── */
+.activity-panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.activity-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+.activity-panel__icon  { font-size: 1.1rem; line-height: 1; }
+.activity-panel__title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0;
+  flex: 1;
+}
+/* Count pill next to panel title */
+.activity-panel__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: #fff;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.activity-panel__body { display: flex; flex-direction: column; flex: 1; }
+.activity-empty {
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+  color: var(--color-text-disabled);
+  font-size: var(--font-size-sm);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Activity item row
+───────────────────────────────────────────────────────────── */
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  color: inherit;
+  font-family: var(--font-family);
+  transition: background var(--transition-fast);
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-item:hover      { background: var(--color-surface-2); }
+.activity-item:focus-visible { outline: 2px solid var(--color-primary); outline-offset: -2px; }
+
+/* Avatar circles */
+.activity-item__avatar {
+  width: 36px; height: 36px; min-width: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.activity-item__avatar--admission { background: var(--color-primary-muted); }
+.activity-item__avatar--referral  { background: var(--color-warning-muted); }
+.activity-item__avatar--triage    { background: var(--color-danger-muted);  }
+.activity-item__avatar--diagnosis { background: var(--color-info-muted);    }
+
+/* Text body */
+.activity-item__body { flex: 1; min-width: 0; }
+.activity-item__name {
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 0 var(--space-1);
+}
+.activity-item__meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+/* Right: badge + time */
+.activity-item__right {
+  display: flex; flex-direction: column; align-items: flex-end;
+  gap: var(--space-1); flex-shrink: 0;
+}
+.activity-item__time {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-disabled);
+  white-space: nowrap;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Skeleton loader
+───────────────────────────────────────────────────────────── */
+.activity-item--skeleton { pointer-events: none; cursor: default; }
+.skeleton {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--color-surface-2) 25%, var(--color-border) 50%, var(--color-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s infinite;
+}
+@keyframes skeleton-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton--avatar  { width: 36px; height: 36px; min-width: 36px; border-radius: 50%; flex-shrink: 0; }
+.skeleton--line    { height: 12px; border-radius: var(--radius-full); }
+.skeleton--line-lg { width: 60%; margin-bottom: var(--space-2); }
+.skeleton--line-sm { width: 40%; }
+
+/* ─────────────────────────────────────────────────────────────
+   Mobile ≤767px
+───────────────────────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .role-section        { padding: var(--space-4); }
+  .role-stats-row      { gap: var(--space-2); }
+  .role-stat           { padding: var(--space-3) var(--space-4); min-width: 90px; }
+  .role-stat__value    { font-size: var(--font-size-2xl); }
+  .activity-section__heading { font-size: var(--font-size-md); }
+  .activity-panel__header    { padding: var(--space-3) var(--space-4); }
+  .activity-item       { padding: var(--space-3) var(--space-4); gap: var(--space-2); }
+  .activity-item__avatar { width: 30px; height: 30px; min-width: 30px; font-size: 0.85rem; }
+  .activity-item__right .badge { display: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Small mobile ≤480px
+───────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .role-section        { padding: var(--space-3); }
+  .role-stats-row      { gap: var(--space-2); }
+  .role-stat           { min-width: 0; flex: 1; }
+  .activity-item       { padding: var(--space-2) var(--space-3); }
+  .activity-item__avatar { display: none; }
+  .activity-item__name   { font-size: var(--font-size-xs); }
+  .role-badge            { display: none; }
+}
