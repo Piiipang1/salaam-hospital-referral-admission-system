@@ -79,6 +79,12 @@ const updateDiagnosis = async (req, res) => {
        WHERE diagnosis_id = ?`,
       [medical_condition, doctor_id, req.params.id]
     );
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'diagnoses', ?)",
+      [req.user.user_id, req.params.id]
+    );
+
     return res.status(200).json({ success: true, message: 'Diagnosis updated.' });
   } catch (err) {
     console.error('updateDiagnosis error:', err);
@@ -100,6 +106,12 @@ const addTreatment = async (req, res) => {
        VALUES (?, ?, ?, ?, ?)`,
       [req.params.id, prescribed_medications, dosage || null, frequency || null, treatment_duration || null]
     );
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'treatments', ?)",
+      [req.user.user_id, result.insertId]
+    );
+
     return res.status(201).json({ success: true, message: 'Treatment added.', treatment_id: result.insertId });
   } catch (err) {
     console.error('addTreatment error:', err);
@@ -122,6 +134,12 @@ const addLabResult = async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?)`,
       [patient_id, req.params.id, test_type, results || null, file_attachment, date_conducted || new Date()]
     );
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'lab_results', ?)",
+      [req.user.user_id, result.insertId]
+    );
+
     return res.status(201).json({ success: true, message: 'Lab result added.', lab_result_id: result.insertId });
   } catch (err) {
     console.error('addLabResult error:', err);

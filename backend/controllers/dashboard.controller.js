@@ -3,7 +3,6 @@ const db = require('../config/db');
 // GET /api/dashboard/stats
 const getStats = async (req, res) => {
   try {
-    // Run all six COUNT queries in parallel — no inter-dependency between them
     const [
       [[{ total_patients }]],
       [[{ active_admissions }]],
@@ -22,14 +21,7 @@ const getStats = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      data: {
-        total_patients,
-        active_admissions,
-        available_rooms,
-        pending_referrals,
-        todays_triages,
-        total_doctors,
-      },
+      data: { total_patients, active_admissions, available_rooms, pending_referrals, todays_triages, total_doctors },
     });
   } catch (err) {
     console.error('getStats error:', err);
@@ -37,4 +29,194 @@ const getStats = async (req, res) => {
   }
 };
 
-module.exports = { getStats };
+// GET /api/dashboard/recent-activity
+const getRecentActivity = async (req, res) => {
+  try {
+    const [admissions, referrals] = await Promise.all([
+      db.query(`
+        SELECT a.admission_id, a.admission_date, a.status AS admission_status, a.admission_type,
+               CONCAT(p.first_name, ' ', p.last_name) AS patient_name, p.patient_id,
+               CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
+               r.room_type, r.bed_number
+        FROM admissions a
+        LEFT JOIN patients p ON a.patient_id = p.patient_id
+        LEFT JOIN doctors  d ON a.doctor_id  = d.doctor_id
+        LEFT JOIN rooms    r ON a.room_id    = r.room_id
+        ORDER BY a.admission_date DESC LIMIT 5
+      `),
+      db.query(`
+        SELECT r.referral_id, r.referral_date, r.status AS referral_status,
+               CONCAT(p.first_name, ' ', p.last_name)   AS patient_name, p.patient_id,
+               CONCAT(ad.first_name, ' ', ad.last_name) AS assigned_doctor_name,
+               CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name,
+               diag.medical_condition
+        FROM referrals r
+        LEFT JOIN diagnoses diag ON r.diagnosis_id       = diag.diagnosis_id
+        LEFT JOIN patients  p    ON diag.patient_id      = p.patient_id
+        LEFT JOIN doctors   ad   ON r.assigned_doctor_id  = ad.doctor_id
+        LEFT JOIN doctors   rd   ON r.referring_doctor_id = rd.doctor_id
+        ORDER BY r.referral_date DESC LIMIT 5
+      `),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: { recent_admissions: admissions[0], recent_referrals: referrals[0] },
+    });
+  } catch (err) {
+    console.error('getRecentActivity error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// GET /api/dashboard/my-stats
+// Returns role-specific stats + a focused action list for each role.
+const getMyStats = async (req, res) => {
+  const { role, linked_id } = req.user;
+
+  try {
+
+    // ── Doctor ────────────────────────────────────────────────────────────────
+    if (role === 'doctor') {
+      const [
+        [[{ my_pending_referrals }]],
+        [[{ my_active_patients }]],
+        [[{ my_todays_diagnoses }]],
+        pendingReferralRows,
+        todayDiagnosisRows,
+      ] = await Promise.all([
+
+        db.query(
+          "SELECT COUNT(*) AS my_pending_referrals FROM referrals WHERE assigned_doctor_id = ? AND status = 'Pending'",
+          [linked_id]
+        ),
+        db.query(
+          `SELECT COUNT(DISTINCT diag.patient_id) AS my_active_patients
+           FROM diagnoses diag
+           JOIN admissions a ON a.patient_id = diag.patient_id AND a.status = 'Active'
+           WHERE diag.doctor_id = ?`,
+          [linked_id]
+        ),
+        db.query(
+          "SELECT COUNT(*) AS my_todays_diagnoses FROM diagnoses WHERE doctor_id = ? AND DATE(diagnosis_date) = CURDATE()",
+          [linked_id]
+        ),
+
+        // List: pending referrals assigned to this doctor (up to 8)
+        db.query(
+          `SELECT r.referral_id, r.referral_date, r.status,
+                  CONCAT(p.first_name, ' ', p.last_name)   AS patient_name, p.patient_id,
+                  diag.medical_condition,
+                  CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name
+           FROM referrals r
+           LEFT JOIN diagnoses diag ON r.diagnosis_id       = diag.diagnosis_id
+           LEFT JOIN patients  p    ON diag.patient_id      = p.patient_id
+           LEFT JOIN doctors   rd   ON r.referring_doctor_id = rd.doctor_id
+           WHERE r.assigned_doctor_id = ? AND r.status = 'Pending'
+           ORDER BY r.referral_date DESC LIMIT 8`,
+          [linked_id]
+        ),
+
+        // List: today's diagnoses by this doctor (up to 8)
+        db.query(
+          `SELECT diag.diagnosis_id, diag.diagnosis_date, diag.medical_condition,
+                  CONCAT(p.first_name, ' ', p.last_name) AS patient_name, p.patient_id
+           FROM diagnoses diag
+           LEFT JOIN patients p ON diag.patient_id = p.patient_id
+           WHERE diag.doctor_id = ? AND DATE(diag.diagnosis_date) = CURDATE()
+           ORDER BY diag.diagnosis_date DESC LIMIT 8`,
+          [linked_id]
+        ),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        role: 'doctor',
+        data: {
+          stats: { my_pending_referrals, my_active_patients, my_todays_diagnoses },
+          my_pending_referrals: pendingReferralRows[0],
+          my_todays_diagnoses: todayDiagnosisRows[0],
+        },
+      });
+    }
+
+    // ── Nurse / Staff ─────────────────────────────────────────────────────────
+    if (role === 'nurse' || role === 'staff') {
+      const [
+        [[{ todays_triages }]],
+        [[{ available_rooms }]],
+        [[{ pending_admissions }]],
+        todayTriageRows,
+        pendingAdmissionRows,
+      ] = await Promise.all([
+
+        db.query('SELECT COUNT(*) AS todays_triages FROM triages WHERE DATE(triage_datetime) = CURDATE()'),
+        db.query("SELECT COUNT(*) AS available_rooms FROM rooms WHERE availability_status = 'available'"),
+        db.query("SELECT COUNT(*) AS pending_admissions FROM admissions WHERE status = 'Active'"),
+
+        // List: today's triages (up to 8, newest first)
+        db.query(`
+          SELECT t.triage_id, t.triage_datetime, t.triage_level, t.notes,
+                 CONCAT(p.first_name, ' ', p.last_name) AS patient_name, p.patient_id
+          FROM triages t
+          LEFT JOIN patients p ON t.patient_id = p.patient_id
+          WHERE DATE(t.triage_datetime) = CURDATE()
+          ORDER BY t.triage_datetime DESC LIMIT 8
+        `),
+
+        // List: pending admissions (up to 8, oldest first so most urgent on top)
+        db.query(`
+          SELECT a.admission_id, a.admission_date, a.admission_type, a.status,
+                 CONCAT(p.first_name, ' ', p.last_name) AS patient_name, p.patient_id,
+                 r.room_type, r.bed_number
+          FROM admissions a
+          LEFT JOIN patients p ON a.patient_id = p.patient_id
+          LEFT JOIN rooms    r ON a.room_id    = r.room_id
+          WHERE a.status = 'Pending'
+          ORDER BY a.admission_date ASC LIMIT 8
+        `),
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        role: 'nurse_staff',
+        data: {
+          stats: { todays_triages, available_rooms, pending_admissions },
+          todays_triages: todayTriageRows[0],
+          pending_admissions: pendingAdmissionRows[0],
+        },
+      });
+    }
+
+    // ── Admin — global stats (same as /stats) ─────────────────────────────────
+    const [
+      [[{ total_patients }]],
+      [[{ active_admissions }]],
+      [[{ available_rooms }]],
+      [[{ pending_referrals }]],
+      [[{ todays_triages }]],
+      [[{ total_doctors }]],
+    ] = await Promise.all([
+      db.query('SELECT COUNT(*) AS total_patients FROM patients'),
+      db.query("SELECT COUNT(*) AS active_admissions FROM admissions WHERE status = 'Active'"),
+      db.query("SELECT COUNT(*) AS available_rooms FROM rooms WHERE availability_status = 'available'"),
+      db.query("SELECT COUNT(*) AS pending_referrals FROM referrals WHERE status = 'Pending'"),
+      db.query('SELECT COUNT(*) AS todays_triages FROM triages WHERE DATE(triage_datetime) = CURDATE()'),
+      db.query("SELECT COUNT(*) AS total_doctors FROM doctors WHERE employment_status = 'Active'"),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      role: 'admin',
+      data: {
+        stats: { total_patients, active_admissions, available_rooms, pending_referrals, todays_triages, total_doctors },
+      },
+    });
+
+  } catch (err) {
+    console.error('getMyStats error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { getStats, getRecentActivity, getMyStats };

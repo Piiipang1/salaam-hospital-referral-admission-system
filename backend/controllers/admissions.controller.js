@@ -190,14 +190,20 @@ const createAdmission = async (req, res) => {
 // PUT /api/admissions/:id/discharge
 const dischargePatient = async (req, res) => {
   try {
-    const [admission] = await db.query(
-      'SELECT room_id, status FROM admissions WHERE admission_id = ?',
+    // Fetch admission + patient + doctor in one shot — needed for notification text
+    const [admRows] = await db.query(
+      `SELECT a.room_id, a.status, a.doctor_id, a.patient_id,
+              CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+       FROM admissions a
+       LEFT JOIN patients p ON a.patient_id = p.patient_id
+       WHERE a.admission_id = ?`,
       [req.params.id]
     );
-    if (admission.length === 0) {
+    if (admRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Admission not found.' });
     }
-    if (admission[0].status === 'Discharged') {
+    const adm = admRows[0];
+    if (adm.status === 'Discharged') {
       return res.status(409).json({ success: false, message: 'Patient is already discharged.' });
     }
 
@@ -210,7 +216,7 @@ const dischargePatient = async (req, res) => {
       );
       await connection.query(
         "UPDATE rooms SET availability_status = 'available' WHERE room_id = ?",
-        [admission[0].room_id]
+        [adm.room_id]
       );
       await connection.query(
         "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'DISCHARGE', 'admissions', ?)",
@@ -218,13 +224,59 @@ const dischargePatient = async (req, res) => {
       );
       await connection.commit();
       connection.release();
-
-      return res.status(200).json({ success: true, message: 'Patient discharged. Room is now available.' });
     } catch (txErr) {
       await connection.rollback();
       connection.release();
       throw txErr;
     }
+
+    // ── Respond immediately — notifications are best-effort ───────────────────
+    res.status(200).json({ success: true, message: 'Patient discharged. Room is now available.' });
+
+    // ── Post-commit discharge notifications ───────────────────────────────────
+    try {
+      const dischargeDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric', month: 'short', day: 'numeric',
+      });
+
+      // Resolve assigned doctor's user account
+      const [[doctorUser]] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'doctor' AND linked_id = ? AND is_active = 1",
+        [adm.doctor_id]
+      );
+      const [admins] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
+      );
+
+      const notifRows = [];
+
+      if (doctorUser) {
+        notifRows.push([
+          doctorUser.user_id,
+          `🏥 Your patient ${adm.patient_name} has been discharged on ${dischargeDate}. Admission ID: ${req.params.id}.`,
+          null,
+        ]);
+      }
+
+      const adminMsg =
+        `🏥 Patient ${adm.patient_name} has been discharged. Admission ID: ${req.params.id}.`;
+
+      for (const admin of admins) {
+        if (admin.user_id !== req.user.user_id) {
+          notifRows.push([admin.user_id, adminMsg, null]);
+        }
+      }
+
+      if (notifRows.length > 0) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+          [notifRows]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('dischargePatient: notification insert failed (non-fatal):', notifErr.message);
+    }
+
   } catch (err) {
     console.error('dischargePatient error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });

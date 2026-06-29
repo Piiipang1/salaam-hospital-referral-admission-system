@@ -1,0 +1,47 @@
+/* ── PatientsPage.css ───────────────────────────────────────── */
+/* Shared filter styles (filter-select, filter-date,             */
+/* filter-clear-btn, filter-active-dot) live in index.css        */
+
+.patients-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* Toolbar: search bar takes all available width before filters */
+.patients-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.patients-toolbar .search-bar {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Pagination row */
+.patients-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-top: var(--space-2);
+  flex-wrap: wrap;
+}
+.patients-pagination__info {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.patients-pagination__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ── Mobile ≤767px ──────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .patients-toolbar { gap: var(--space-2); }
+  .patients-toolbar .search-bar { min-width: 100%; }
+  .patients-pagination { justify-content: center; }
+  .patients-pagination__info {
+    width: 100%;
+    text-align: center;
+  }
+}

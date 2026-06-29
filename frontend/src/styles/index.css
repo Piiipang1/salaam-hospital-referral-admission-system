@@ -232,6 +232,20 @@ hr {
   border-top: 1px solid var(--color-border);
 }
 
+/* Collapse form rows and stack action buttons on small mobile */
+@media (max-width: 480px) {
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+  .form-actions > * {
+    width: 100%;
+  }
+}
+
 /* ── Divider ────────────────────────────────────────────────── */
 .divider {
   border: none;
@@ -239,10 +253,109 @@ hr {
   margin: var(--space-6) 0;
 }
 
+/* ── Shared Filter Controls ──────────────────────────────────── */
+/* Used on PatientsPage, TriagePage, ReferralsPage               */
+
+/* Generic toolbar row that holds any mix of filter controls */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Dropdown select that matches the dark design system */
+.filter-select {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  padding: var(--space-2) var(--space-3);
+  height: 38px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+.filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
+}
+
+/* Date input — same height and styling as filter-select */
+.filter-date {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family);
+  padding: var(--space-2) var(--space-3);
+  height: 38px;
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+  color-scheme: dark; /* makes the browser chrome dark on Chromium */
+}
+.filter-date:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-muted);
+}
+
+/* Small "—" separator between from/to date inputs */
+.filter-date-sep {
+  color: var(--color-text-disabled);
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+/* Clear-filters button — appears only when filters are active */
+.filter-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+.filter-clear-btn:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* Active filter indicator dot */
+.filter-active-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  flex-shrink: 0;
+}
+
+/* ── Mobile: stack filter controls full-width at ≤767px ──────── */
+@media (max-width: 767px) {
+  .filter-toolbar     { gap: var(--space-2); }
+  .filter-select,
+  .filter-date        { width: 100%; height: 40px; }
+}
+
+
 /* ── Responsive breakpoints ─────────────────────────────────── */
 /* mobile: < 768px, tablet: 768–1023px, desktop: >= 1024px */
 @media (max-width: 768px) {
   .hide-mobile { display: none !important; }
+}
+@media (max-width: 1023px) {
+  .hide-tablet { display: none !important; }
 }
 @media (min-width: 769px) {
   .show-mobile-only { display: none !important; }
@@ -260,6 +373,10 @@ hr {
 }
 .page-title    { font-size: var(--font-size-2xl); font-weight: 700; color: var(--color-text); }
 .page-subtitle { font-size: var(--font-size-sm);  color: var(--color-text-muted); margin-top: var(--space-1); }
+
+@media (max-width: 767px) {
+  .page-title { font-size: var(--font-size-xl); }
+}
 
 /* Back navigation link (used in detail pages) */
 .back-link {
@@ -279,7 +396,12 @@ hr {
   display: flex;
   gap: 2px;
   border-bottom: 1px solid var(--color-border);
+  /* Allow horizontal scroll on very small screens */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; /* hide scrollbar on Firefox */
 }
+.detail-tabs::-webkit-scrollbar { display: none; }
 .detail-tab {
   padding: var(--space-3) var(--space-5);
   font-size: var(--font-size-sm);
@@ -291,9 +413,18 @@ hr {
   border-bottom: 2px solid transparent;
   transition: color var(--transition-fast), border-color var(--transition-fast);
   font-family: var(--font-family);
+  white-space: nowrap; /* prevent tab labels from wrapping */
+  flex-shrink: 0;
 }
 .detail-tab:hover { color: var(--color-text); }
 .detail-tab--active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
+
+@media (max-width: 767px) {
+  .detail-tab {
+    padding: var(--space-2) var(--space-4);
+    font-size: var(--font-size-xs);
+  }
+}
 
 /* Vital signs row grid */
 .vitals-grid {
@@ -307,11 +438,33 @@ hr {
 }
 .vitals-grid > div { display: flex; flex-direction: column; gap: 2px; }
 
+@media (max-width: 480px) {
+  .vitals-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-3);
+  }
+}
+
 /* Patient / entity info grid */
 .patient-info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: var(--space-4);
+}
+
+@media (max-width: 767px) {
+  .patient-info-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+@media (max-width: 480px) {
+  .patient-info-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
 }
 .patient-info-grid > div { display: flex; flex-direction: column; gap: var(--space-1); }
 

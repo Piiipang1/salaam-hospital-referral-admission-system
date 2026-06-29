@@ -1,11 +1,18 @@
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
 const referralsController = require('../controllers/referrals.controller');
-const auth = require('../middleware/auth');
+const auth        = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
+const { upload }  = require('../middleware/upload');
 
-// POST /api/referrals
-router.post('/', auth, requireRole('admin', 'doctor', 'nurse', 'staff'), referralsController.createReferral);
+// POST /api/referrals  — accepts optional file_attachment via multipart/form-data
+router.post(
+  '/',
+  auth,
+  requireRole('admin', 'doctor', 'nurse', 'staff'),
+  upload.single('file_attachment'),
+  referralsController.createReferral
+);
 
 // GET /api/referrals
 router.get('/', auth, referralsController.getAllReferrals);

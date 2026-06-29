@@ -25,39 +25,127 @@ const createTriage = async (req, res) => {
       [req.user.user_id, result.insertId]
     );
 
-    return res.status(201).json({ success: true, message: 'Triage created.', triage_id: result.insertId });
+    // ── Respond immediately ───────────────────────────────────────────────────
+    res.status(201).json({ success: true, message: 'Triage created.', triage_id: result.insertId });
+
+    // ── Post-insert notifications (best-effort, non-blocking) ─────────────────
+    try {
+      // Resolve patient name
+      const [[patient]] = await db.query(
+        'SELECT CONCAT(first_name, \' \', last_name) AS patient_name FROM patients WHERE patient_id = ?',
+        [patient_id]
+      );
+      const patientName = patient?.patient_name ?? `Patient #${patient_id}`;
+
+      // Triage level emoji prefix for visual scanning
+      const levelEmoji = triage_level === 'Critical'   ? '🚨'
+                       : triage_level === 'Urgent'     ? '⚠️'
+                       :                                  '🟢';
+
+      const baseMsg = `${levelEmoji} New ${triage_level} triage recorded for ${patientName}. Triage ID: ${result.insertId}.`;
+
+      const notifRows = [];
+
+      // 1. Notify all active admins (except the actor if they are admin)
+      const [admins] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
+      );
+      for (const admin of admins) {
+        if (admin.user_id !== req.user.user_id) {
+          notifRows.push([admin.user_id, baseMsg, null]);
+        }
+      }
+
+      // 2. For Critical or Urgent — also notify any doctor with an active admission for this patient
+      if (triage_level === 'Critical' || triage_level === 'Urgent') {
+        const [activeDoctors] = await db.query(
+          `SELECT DISTINCT u.user_id
+           FROM admissions a
+           JOIN users u ON u.linked_id = a.doctor_id AND u.role = 'doctor' AND u.is_active = 1
+           WHERE a.patient_id = ? AND a.status = 'Active'`,
+          [patient_id]
+        );
+        for (const doc of activeDoctors) {
+          // Avoid duplicate if doctor is the actor (unlikely but safe)
+          if (doc.user_id !== req.user.user_id) {
+            notifRows.push([
+              doc.user_id,
+              `${levelEmoji} Your patient ${patientName} has a new ${triage_level} triage. Triage ID: ${result.insertId}.`,
+              null,
+            ]);
+          }
+        }
+      }
+
+      if (notifRows.length > 0) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+          [notifRows]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('createTriage: notification insert failed (non-fatal):', notifErr.message);
+    }
+
   } catch (err) {
     console.error('createTriage error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
 
+
 // GET /api/triages
 const getAllTriages = async (req, res) => {
-  const { level, date, page = 1, limit = 20 } = req.query;
+  const { level, from_date, to_date, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
-    let conditions = [];
-    const params = [];
+    const conditions = [];
+    const params     = [];
 
-    if (level) { conditions.push('t.triage_level = ?'); params.push(level); }
-    if (date)  { conditions.push('DATE(t.triage_datetime) = ?'); params.push(date); }
+    // Triage level filter — 'Critical' | 'Urgent' | 'Non-Urgent'
+    if (level) {
+      conditions.push('t.triage_level = ?');
+      params.push(level);
+    }
+
+    // Date range filter on triage_datetime
+    if (from_date) {
+      conditions.push('DATE(t.triage_datetime) >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('DATE(t.triage_datetime) <= ?');
+      params.push(to_date);
+    }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    const [rows] = await db.query(
-      `SELECT t.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-              vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate
-       FROM triages t
-       LEFT JOIN patients p ON t.patient_id = p.patient_id
-       LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
-       ${where}
-       ORDER BY t.triage_datetime DESC LIMIT ? OFFSET ?`,
-      [...params, parseInt(limit), offset]
-    );
+    // Run data + count in parallel
+    const [[rows], [[{ total }]]] = await Promise.all([
+      db.query(
+        `SELECT t.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+                vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate
+         FROM triages t
+         LEFT JOIN patients p ON t.patient_id = p.patient_id
+         LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
+         ${where}
+         ORDER BY t.triage_datetime DESC LIMIT ? OFFSET ?`,
+        [...params, parseInt(limit), offset]
+      ),
+      db.query(
+        `SELECT COUNT(*) AS total FROM triages t ${where}`,
+        params
+      ),
+    ]);
 
-    return res.status(200).json({ success: true, data: rows });
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+    });
   } catch (err) {
     console.error('getAllTriages error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
@@ -98,6 +186,12 @@ const updateTriage = async (req, res) => {
        WHERE triage_id = ?`,
       [triage_level, notes, visit_room_id, req.params.id]
     );
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'triages', ?)",
+      [req.user.user_id, req.params.id]
+    );
+
     return res.status(200).json({ success: true, message: 'Triage updated.' });
   } catch (err) {
     console.error('updateTriage error:', err);
@@ -121,6 +215,11 @@ const addVitalSigns = async (req, res) => {
       `INSERT INTO vital_signs (triage_id, blood_pressure, heart_rate, temperature, respiratory_rate, recorded_at)
        VALUES (?, ?, ?, ?, ?, NOW())`,
       [req.params.id, blood_pressure, heart_rate, temperature, respiratory_rate]
+    );
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'vital_signs', ?)",
+      [req.user.user_id, result.insertId]
     );
 
     return res.status(201).json({ success: true, message: 'Vital signs recorded.', vs_id: result.insertId });

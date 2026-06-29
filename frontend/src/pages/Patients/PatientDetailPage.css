@@ -1,0 +1,29 @@
+/* PatientDetailPage — page-specific styles only.
+   Shared classes (back-link, detail-tabs, detail-list, vitals-grid,
+   patient-info-grid, info-label) are defined in styles/index.css */
+
+.patient-detail { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* Action buttons row — wraps on small screens */
+.patient-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* ── Mobile ≤767px: tighten gap between sections ────────────── */
+@media (max-width: 767px) {
+  .patient-detail { gap: var(--space-4); }
+  .patient-actions { gap: var(--space-2); }
+}
+
+/* ── Small mobile ≤480px: action buttons go full-width ───────── */
+@media (max-width: 480px) {
+  .patient-actions {
+    flex-direction: column;
+  }
+  .patient-actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+}

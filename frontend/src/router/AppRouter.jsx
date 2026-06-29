@@ -16,6 +16,7 @@ import RoomsPage           from '../pages/Rooms/RoomsPage';
 import NotificationsPage   from '../pages/Notifications/NotificationsPage';
 import ReportsPage         from '../pages/Reports/ReportsPage';
 import UserManagementPage  from '../pages/UserManagement/UserManagementPage';
+import AuditPage           from '../pages/Audit/AuditPage';
 
 /** Redirect to /login if not authenticated */
 const ProtectedRoute = ({ children }) => {
@@ -82,6 +83,16 @@ const AppRouter = () => {
             element={
               <RoleRoute roles={['admin']}>
                 <UserManagementPage />
+              </RoleRoute>
+            }
+          />
+
+          {/* admin only — audit trail */}
+          <Route
+            path="audit"
+            element={
+              <RoleRoute roles={['admin']}>
+                <AuditPage />
               </RoleRoute>
             }
           />

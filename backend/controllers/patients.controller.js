@@ -2,34 +2,58 @@ const db = require('../config/db');
 
 // GET /api/patients
 const getAllPatients = async (req, res) => {
-  const { search, page = 1, limit = 20 } = req.query;
+  const { search, sex, from_date, to_date, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
-    let query = `
-      SELECT patient_id, first_name, last_name, sex, date_of_birth,
-             contact_number, address, created_at
-      FROM patients
-    `;
-    const params = [];
+    const conditions = [];
+    const params     = [];
 
+    // Text search — full name OR patient_id
     if (search) {
-      query += ` WHERE CONCAT(first_name, ' ', last_name) LIKE ?
-                 OR patient_id LIKE ?`;
+      conditions.push("(CONCAT(first_name, ' ', last_name) LIKE ? OR patient_id LIKE ?)");
       params.push(`%${search}%`, `%${search}%`);
     }
 
-    query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    params.push(parseInt(limit), offset);
+    // Sex filter — 'Male' | 'Female' | 'Other'
+    if (sex) {
+      conditions.push('sex = ?');
+      params.push(sex);
+    }
 
-    const [rows] = await db.query(query, params);
+    // Registration date range
+    if (from_date) {
+      conditions.push('DATE(created_at) >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('DATE(created_at) <= ?');
+      params.push(to_date);
+    }
 
-    const [[{ total }]] = await db.query(
-      `SELECT COUNT(*) AS total FROM patients ${search ? "WHERE CONCAT(first_name, ' ', last_name) LIKE ? OR patient_id LIKE ?" : ''}`,
-      search ? [`%${search}%`, `%${search}%`] : []
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const [rows] = await db.query(
+      `SELECT patient_id, first_name, last_name, sex, date_of_birth,
+              contact_number, address, created_at
+       FROM patients
+       ${where}
+       ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
     );
 
-    return res.status(200).json({ success: true, data: rows, total, page: parseInt(page), limit: parseInt(limit) });
+    const [[{ total }]] = await db.query(
+      `SELECT COUNT(*) AS total FROM patients ${where}`,
+      params
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+    });
   } catch (err) {
     console.error('getAllPatients error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });

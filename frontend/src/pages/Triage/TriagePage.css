@@ -1,0 +1,60 @@
+/* ── TriagePage.css ─────────────────────────────────────────── */
+
+.triage-page { display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* ── Filter toolbar ─────────────────────────────────────────── */
+.triage-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* ── Triage level pill group ────────────────────────────────── */
+.triage-level-pills {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.triage-level-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast),
+              border-color var(--transition-fast);
+}
+.triage-level-pill:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+
+/* ── Date range wrapper ─────────────────────────────────────── */
+/* .filter-date-sep is defined globally in index.css             */
+.triage-date-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ── Mobile ≤767px ──────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .triage-toolbar        { gap: var(--space-2); }
+  .triage-date-range     { width: 100%; }
+  .triage-date-range .filter-date { flex: 1; }
+}
+
+/* ── Small mobile ≤480px ────────────────────────────────────── */
+@media (max-width: 480px) {
+  .triage-level-pills { gap: var(--space-1); }
+  .triage-level-pill  { padding: var(--space-1) var(--space-3); font-size: var(--font-size-xs); }
+}

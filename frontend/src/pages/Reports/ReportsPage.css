@@ -1,0 +1,110 @@
+/* ── ReportsPage.css ────────────────────────────────────────── */
+
+.report-summary-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  background: linear-gradient(135deg, var(--color-primary-muted), var(--color-surface-2));
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6) var(--space-8);
+}
+.report-summary-card__icon { font-size: 2.5rem; }
+.report-summary-card__value { display:block; font-size:var(--font-size-3xl); font-weight:700; color:var(--color-primary); }
+.report-summary-card__label { display:block; font-size:var(--font-size-sm); color:var(--color-text-muted); }
+
+/* ── Chart Panel ────────────────────────────────────────────── */
+.report-chart-panel {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  animation: chart-fadein 0.35s ease;
+}
+
+@keyframes chart-fadein {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+.report-chart-panel__title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: var(--space-5);
+}
+
+/* Constrain chart height — prevents canvas from going full-page */
+.report-chart-panel__canvas-wrap {
+  position: relative;
+  height: 360px;
+}
+
+/* Doughnut chart — centered with legend beside it on wide screens */
+.report-chart-panel__canvas-wrap--doughnut {
+  height: 320px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+/* ── Tablet ≤1023px ─────────────────────────────────────────── */
+@media (max-width: 1023px) {
+  .report-chart-panel {
+    padding: var(--space-5);
+  }
+  .report-chart-panel__canvas-wrap {
+    height: 300px;
+  }
+  .report-chart-panel__canvas-wrap--doughnut {
+    height: 280px;
+    max-width: 100%;
+  }
+  .report-summary-card {
+    padding: var(--space-5) var(--space-6);
+  }
+}
+
+/* ── Mobile ≤767px ──────────────────────────────────────────── */
+@media (max-width: 767px) {
+  .report-chart-panel {
+    padding: var(--space-4);
+  }
+
+  /* Reduce chart height on mobile so it remains readable without scrolling */
+  .report-chart-panel__canvas-wrap {
+    height: 240px;
+  }
+
+  /* Doughnut: switch legend to bottom (handled by chart options — see ReportsPage.jsx)
+     and shrink height */
+  .report-chart-panel__canvas-wrap--doughnut {
+    height: 240px;
+    max-width: 100%;
+  }
+
+  .report-chart-panel__title {
+    font-size: var(--font-size-xs);
+    margin-bottom: var(--space-4);
+  }
+
+  .report-summary-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+  }
+  .report-summary-card__icon { font-size: 2rem; }
+  .report-summary-card__value { font-size: var(--font-size-2xl); }
+}
+
+/* ── Small mobile ≤480px ────────────────────────────────────── */
+@media (max-width: 480px) {
+  .report-chart-panel__canvas-wrap {
+    height: 200px;
+  }
+  .report-chart-panel__canvas-wrap--doughnut {
+    height: 200px;
+  }
+}

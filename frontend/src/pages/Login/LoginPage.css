@@ -1,0 +1,97 @@
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  padding: var(--space-4);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Decorative gradient circles */
+.login-page__bg-circle {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.15;
+  pointer-events: none;
+}
+.login-page__bg-circle--1 {
+  width: 500px; height: 500px;
+  background: var(--color-primary);
+  top: -150px; right: -150px;
+}
+.login-page__bg-circle--2 {
+  width: 400px; height: 400px;
+  background: var(--color-info);
+  bottom: -100px; left: -100px;
+}
+
+.login-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-10) var(--space-10);
+  width: 100%;
+  max-width: 440px;
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  animation: card-rise 0.4s ease;
+}
+@keyframes card-rise {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.login-card__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.login-card__brand-icon {
+  font-size: 2.8rem;
+  line-height: 1;
+}
+.login-card__brand-name {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.2;
+}
+.login-card__brand-sub {
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+
+.login-card__heading {
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  color: var(--color-text);
+}
+.login-card__sub {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-top: calc(-1 * var(--space-3));
+}
+
+.login-form { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.login-card__footer {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-disabled);
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 480px) {
+  .login-card { padding: var(--space-8) var(--space-6); }
+}

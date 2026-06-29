@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAllTriages, createTriage } from '../../api/triages.api';
-import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -9,23 +8,56 @@ import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Alert from '../../components/ui/Alert';
 import TriageForm from '../../components/forms/TriageForm';
+import './TriagePage.css';
+
+const TRIAGE_LEVELS = ['Critical', 'Urgent', 'Non-Urgent'];
+
+// Level colour mapping for the filter pill buttons
+const LEVEL_COLORS = {
+  Critical:    { bg: 'var(--color-danger)',  muted: 'var(--color-danger-muted)'  },
+  Urgent:      { bg: 'var(--color-warning)', muted: 'var(--color-warning-muted)' },
+  'Non-Urgent':{ bg: 'var(--color-info)',    muted: 'var(--color-info-muted)'    },
+};
 
 const TriagePage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+
+  // ── Filter state ─────────────────────────────────────────────
+  const [level,    setLevel]    = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate,   setToDate]   = useState('');
+
+  // ── Data / UI state ──────────────────────────────────────────
   const [data,    setData]    = useState([]);
+  const [total,   setTotal]   = useState(0);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
   const [modal,   setModal]   = useState(false);
   const [saving,  setSaving]  = useState(false);
 
+  // ── Data fetching ─────────────────────────────────────────────
   const load = useCallback(() => {
     setLoading(true);
-    getAllTriages().then((r) => { if (r.success) setData(r.data); }).catch(() => setError('Failed to load triages.')).finally(() => setLoading(false));
-  }, []);
+    const params = {};
+    if (level)    params.level     = level;
+    if (fromDate) params.from_date = fromDate;
+    if (toDate)   params.to_date   = toDate;
+
+    getAllTriages(params)
+      .then((r) => {
+        if (r.success) {
+          setData(r.data);
+          setTotal(r.total ?? r.data.length);
+        }
+      })
+      .catch(() => setError('Failed to load triages.'))
+      .finally(() => setLoading(false));
+  }, [level, fromDate, toDate]);
+
   useEffect(() => { load(); }, [load]);
 
+  // ── Handlers ──────────────────────────────────────────────────
   const handleCreate = async (form) => {
     setSaving(true);
     try {
@@ -37,27 +69,128 @@ const TriagePage = () => {
     finally { setSaving(false); }
   };
 
+  const clearFilters = () => { setLevel(''); setFromDate(''); setToDate(''); };
+  const hasActiveFilters = level || fromDate || toDate;
+
+  // ── Table columns ─────────────────────────────────────────────
   const columns = [
-    { key: 'triage_id',       label: 'ID',       width: '60px' },
-    { key: 'patient_name',    label: 'Patient',  render: (r) => `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || `Patient #${r.patient_id}` },
-    { key: 'triage_level',    label: 'Level',    render: (r) => <Badge status={r.triage_level} /> },
+    { key: 'triage_id',       label: 'ID',        width: '60px' },
+    { key: 'patient_name',    label: 'Patient',   render: (r) => `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || `Patient #${r.patient_id}` },
+    { key: 'triage_level',    label: 'Level',     render: (r) => <Badge status={r.triage_level} /> },
     { key: 'triage_datetime', label: 'Date/Time', render: (r) => formatDate(r.triage_datetime, true) },
-    { key: 'notes',           label: 'Notes',    render: (r) => <span style={{ color:'var(--color-text-muted)', fontSize:'var(--font-size-sm)' }}>{r.notes ? r.notes.substring(0, 60) + (r.notes.length > 60 ? '…' : '') : '—'}</span> },
-    { key: 'actions', label: '', width: '80px', align: 'right', render: (r) => <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); navigate(`/triage/${r.triage_id}`); }}>View</Button> },
+    { key: 'notes',           label: 'Notes',     render: (r) => (
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+          {r.notes ? r.notes.substring(0, 60) + (r.notes.length > 60 ? '…' : '') : '—'}
+        </span>
+      ),
+    },
+    { key: 'actions', label: '', width: '80px', align: 'right',
+      render: (r) => (
+        <Button size="sm" variant="ghost"
+          onClick={(e) => { e.stopPropagation(); navigate(`/triage/${r.triage_id}`); }}>
+          View
+        </Button>
+      ),
+    },
   ];
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
+    <div className="triage-page">
+
+      {/* ── Header ── */}
       <div className="page-header">
-        <div><h2 className="page-title">Triage</h2><p className="page-subtitle">{data.length} triage record{data.length !== 1 ? 's' : ''}</p></div>
-        <Button id="create-triage-btn" variant="primary" onClick={() => setModal(true)}>+ Record Triage</Button>
+        <div>
+          <h2 className="page-title">Triage</h2>
+          <p className="page-subtitle">
+            {total} triage record{total !== 1 ? 's' : ''}
+            {hasActiveFilters ? ' (filtered)' : ''}
+          </p>
+        </div>
+        <Button id="create-triage-btn" variant="primary" onClick={() => setModal(true)}>
+          + Record Triage
+        </Button>
       </div>
+
+      {/* ── Alerts ── */}
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
-      <Table columns={columns} data={data} loading={loading} emptyMessage="No triage records found." onRowClick={(r) => navigate(`/triage/${r.triage_id}`)} />
+
+      {/* ── Filter toolbar ── */}
+      <div className="triage-toolbar">
+
+        {/* Triage level pills */}
+        <div className="triage-level-pills">
+          <button
+            className={`triage-level-pill${level === '' ? ' triage-level-pill--active' : ''}`}
+            onClick={() => setLevel('')}
+            style={level === '' ? { background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' } : {}}
+          >
+            All
+          </button>
+          {TRIAGE_LEVELS.map((lvl) => {
+            const active = level === lvl;
+            const colors = LEVEL_COLORS[lvl];
+            return (
+              <button
+                key={lvl}
+                className={`triage-level-pill${active ? ' triage-level-pill--active' : ''}`}
+                onClick={() => setLevel(active ? '' : lvl)}
+                style={active
+                  ? { background: colors.bg, borderColor: colors.bg, color: '#fff' }
+                  : { borderColor: colors.bg, color: colors.bg }
+                }
+              >
+                {lvl}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Date range */}
+        <div className="triage-date-range">
+          <input
+            id="triage-from-date"
+            type="date"
+            className="filter-date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            title="From date"
+            aria-label="Triage from date"
+          />
+          <span className="filter-date-sep">—</span>
+          <input
+            id="triage-to-date"
+            type="date"
+            className="filter-date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            title="To date"
+            aria-label="Triage to date"
+          />
+        </div>
+
+        {/* Clear button */}
+        {hasActiveFilters && (
+          <button className="filter-clear-btn" onClick={clearFilters} title="Clear all filters">
+            ✕ Clear
+          </button>
+        )}
+      </div>
+
+      {/* ── Data table ── */}
+      <Table
+        columns={columns}
+        data={data}
+        loading={loading}
+        emptyMessage="No triage records match the current filters."
+        onRowClick={(r) => navigate(`/triage/${r.triage_id}`)}
+      />
+
+      {/* ── Create triage modal ── */}
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Record Triage" size="md">
         <TriageForm onSubmit={handleCreate} loading={saving} />
       </Modal>
+
     </div>
   );
 };

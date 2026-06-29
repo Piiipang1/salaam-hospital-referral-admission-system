@@ -1,8 +1,12 @@
+/* ── RoomsPage.css ──────────────────────────────────────────── */
+
+/* Desktop: auto-fill from 180px min */
 .rooms-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: var(--space-4);
 }
+
 .room-card {
   position: relative;
   background: var(--color-surface);
@@ -29,3 +33,36 @@
   transition:opacity var(--transition-fast);
 }
 .room-card:hover .room-card__edit { opacity:1; }
+
+/* ── Tablet ≤1023px: keep auto-fill, just ensure min isn't too wide */
+@media (max-width: 1023px) {
+  .rooms-grid {
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: var(--space-3);
+  }
+}
+
+/* ── Mobile ≤767px: 3 columns minimum */
+@media (max-width: 767px) {
+  .rooms-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+  .room-card {
+    padding: var(--space-4) var(--space-3);
+  }
+  .room-card__icon { font-size: 1.6rem; }
+  .room-card__bed  { font-size: var(--font-size-md); }
+}
+
+/* ── Small mobile ≤480px: 2 columns */
+@media (max-width: 480px) {
+  .rooms-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .room-card {
+    padding: var(--space-3);
+    gap: var(--space-2);
+  }
+  .room-card__icon { font-size: 1.4rem; }
+}

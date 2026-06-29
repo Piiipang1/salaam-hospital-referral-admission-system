@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getAllUsers, createUser, updateUser, deactivateUser } from '../../api/users.api';
-import { createBackup, listBackups, getBackupDownloadUrl } from '../../api/backup.api';
+import { createBackup, listBackups, getBackupDownloadUrl, restoreBackup, deleteBackup } from '../../api/backup.api';
 import { formatDate } from '../../utils/formatDate';
 import { ROLE_LABELS } from '../../utils/constants';
 import Badge from '../../components/ui/Badge';
@@ -41,6 +41,10 @@ const UserManagementPage = () => {
   const [backupRunning,  setBackupRunning]  = useState(false);
   const [backupError,    setBackupError]    = useState('');
   const [backupSuccess,  setBackupSuccess]  = useState('');
+  const [restoreTarget,  setRestoreTarget]  = useState(null);  // filename to restore
+  const [restoreRunning, setRestoreRunning] = useState(false);
+  const [deleteTarget,   setDeleteTarget]   = useState(null);  // filename to delete
+  const [deleteRunning,  setDeleteRunning]  = useState(false);
 
   // ── User load ──────────────────────────────────────────────────────────────
   const load = useCallback(() => {
@@ -93,12 +97,52 @@ const UserManagementPage = () => {
     try {
       const res = await createBackup();
       setBackupSuccess(`Backup created: ${res.filename} (${res.size})`);
-      loadBackups(); // refresh list
+      loadBackups();
     } catch (err) {
       const detail = err.response?.data?.detail || err.response?.data?.message || 'Backup failed.';
       setBackupError(detail);
     } finally {
       setBackupRunning(false);
+    }
+  };
+
+  // ── Restore handler ────────────────────────────────────────────────────────
+  const handleRestore = async () => {
+    if (!restoreTarget) return;
+    setRestoreRunning(true);
+    setBackupError('');
+    setBackupSuccess('');
+    try {
+      const res = await restoreBackup(restoreTarget);
+      setBackupSuccess(`✅ ${res.message}`);
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.response?.data?.message || 'Restore failed.';
+      setBackupError(`Restore failed: ${detail}`);
+    } finally {
+      setRestoreRunning(false);
+      setRestoreTarget(null);
+    }
+  };
+
+  // ── Delete handler — optimistic UI: remove from list immediately ───────────
+  const handleDeleteBackup = async () => {
+    if (!deleteTarget) return;
+    setDeleteRunning(true);
+    setBackupError('');
+    setBackupSuccess('');
+    // Optimistic update — remove from local list right away
+    setBackups((prev) => prev.filter((b) => b.filename !== deleteTarget));
+    try {
+      await deleteBackup(deleteTarget);
+      setBackupSuccess(`🗑️ Backup deleted: ${deleteTarget}`);
+    } catch (err) {
+      // Rollback: reload the list so the file reappears if delete actually failed
+      loadBackups();
+      const detail = err.response?.data?.detail || err.response?.data?.message || 'Delete failed.';
+      setBackupError(`Delete failed: ${detail}`);
+    } finally {
+      setDeleteRunning(false);
+      setDeleteTarget(null);
     }
   };
 
@@ -170,7 +214,7 @@ const UserManagementPage = () => {
             {/* Header row */}
             <div style={{
               display:'grid',
-              gridTemplateColumns:'1fr auto auto',
+              gridTemplateColumns:'1fr auto auto auto',
               gap:'var(--space-4)',
               padding:'var(--space-2) var(--space-3)',
               fontSize:'var(--font-size-xs)',
@@ -183,13 +227,14 @@ const UserManagementPage = () => {
               <span>Filename</span>
               <span style={{textAlign:'right'}}>Size</span>
               <span style={{textAlign:'right'}}>Age</span>
+              <span style={{textAlign:'right'}}>Actions</span>
             </div>
 
             {/* Backup rows */}
             {backups.map((b) => (
               <div key={b.filename} style={{
                 display:'grid',
-                gridTemplateColumns:'1fr auto auto',
+                gridTemplateColumns:'1fr auto auto auto',
                 gap:'var(--space-4)',
                 alignItems:'center',
                 padding:'var(--space-3)',
@@ -229,21 +274,37 @@ const UserManagementPage = () => {
                   {b.size}
                 </span>
 
-                {/* Age + download button */}
-                <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)',justifyContent:'flex-end'}}>
-                  <span style={{
-                    fontSize:'var(--font-size-xs)',
-                    color:'var(--color-text-muted)',
-                    whiteSpace:'nowrap',
-                  }}>
-                    {relativeDate(b.created_at)}
-                  </span>
-                  <a
-                    href={getBackupDownloadUrl(b.filename)}
-                    download={b.filename}
-                  >
+                {/* Age */}
+                <span style={{
+                  fontSize:'var(--font-size-xs)',
+                  color:'var(--color-text-muted)',
+                  whiteSpace:'nowrap',
+                  textAlign:'right',
+                }}>
+                  {relativeDate(b.created_at)}
+                </span>
+
+                {/* Actions: Download + Restore + Delete */}
+                <div style={{display:'flex',alignItems:'center',gap:'var(--space-2)',justifyContent:'flex-end'}}>
+                  <a href={getBackupDownloadUrl(b.filename)} download={b.filename}>
                     <Button size="sm" variant="outline" as="span">⬇ Download</Button>
                   </a>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setRestoreTarget(b.filename)}
+                    title="Restore database from this backup"
+                  >
+                    ♻ Restore
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => setDeleteTarget(b.filename)}
+                    title="Permanently delete this backup file"
+                  >
+                    🗑 Delete
+                  </Button>
                 </div>
               </div>
             ))}
@@ -258,12 +319,43 @@ const UserManagementPage = () => {
 
       <ConfirmDialog
         isOpen={!!confirm}
-        onClose={()=>setConfirm(null)}
+        onClose={() => setConfirm(null)}
         onConfirm={handleDeactivate}
         title="Deactivate User"
         message={`Deactivate account "${confirm?.username}"? They will no longer be able to log in.`}
         confirmLabel="Deactivate"
         loading={saving}
+      />
+
+      {/* ── Restore confirmation dialog ─────────────────────────────────────── */}
+      <ConfirmDialog
+        isOpen={!!restoreTarget}
+        onClose={() => setRestoreTarget(null)}
+        onConfirm={handleRestore}
+        title="⚠️ Restore Database"
+        message={
+          `Are you sure you want to restore from:\n\n` +
+          `"${restoreTarget}"\n\n` +
+          `This will OVERWRITE ALL current data with the backup. ` +
+          `This action cannot be undone.`
+        }
+        confirmLabel="Yes, Restore"
+        loading={restoreRunning}
+      />
+
+      {/* ── Delete confirmation dialog ───────────────────────────────────────── */}
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDeleteBackup}
+        title="🗑️ Delete Backup"
+        message={
+          `Permanently delete this backup file?\n\n` +
+          `"${deleteTarget}"\n\n` +
+          `This cannot be undone. Download a local copy first if you need to keep it.`
+        }
+        confirmLabel="Yes, Delete"
+        loading={deleteRunning}
       />
     </div>
   );

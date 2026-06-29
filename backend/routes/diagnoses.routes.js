@@ -1,20 +1,9 @@
 const express = require('express');
-const router = express.Router();
+const router  = express.Router();
 const diagnosesController = require('../controllers/diagnoses.controller');
-const auth = require('../middleware/auth');
+const auth        = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
-const multer = require('multer');
-const path = require('path');
-
-// Multer config for lab result file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, path.join(__dirname, '../uploads')),
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  },
-});
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB limit
+const { upload }  = require('../middleware/upload');
 
 // POST /api/diagnoses
 router.post('/', auth, requireRole('admin', 'doctor'), diagnosesController.createDiagnosis);

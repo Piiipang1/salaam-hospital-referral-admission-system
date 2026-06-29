@@ -4,38 +4,63 @@ const db = require('../config/db');
 const createReferral = async (req, res) => {
   const { diagnosis_id, referring_doctor_id, assigned_doctor_id } = req.body;
 
+  // Multer stores the file (if any) in req.file
+  const file_attachment = req.file ? req.file.filename : null;
+
   if (!diagnosis_id || !assigned_doctor_id) {
     return res.status(400).json({ success: false, message: 'diagnosis_id and assigned_doctor_id are required.' });
   }
 
   try {
     const [result] = await db.query(
-      `INSERT INTO referrals (diagnosis_id, referring_doctor_id, assigned_doctor_id, referral_date, status)
-       VALUES (?, ?, ?, NOW(), 'Pending')`,
-      [diagnosis_id, referring_doctor_id || null, assigned_doctor_id]
+      `INSERT INTO referrals
+         (diagnosis_id, referring_doctor_id, assigned_doctor_id, referral_date, status, file_attachment)
+       VALUES (?, ?, ?, NOW(), 'Pending', ?)`,
+      [diagnosis_id, referring_doctor_id || null, assigned_doctor_id, file_attachment]
     );
-
-    // Notify the assigned doctor
-    const [doctor] = await db.query(
-      'SELECT linked_id FROM users WHERE role = "doctor" AND linked_id = ?',
-      [assigned_doctor_id]
-    );
-    if (doctor.length > 0) {
-      const userRes = await db.query('SELECT user_id FROM users WHERE linked_id = ? AND role = "doctor"', [assigned_doctor_id]);
-      if (userRes[0].length > 0) {
-        await db.query(
-          `INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)`,
-          [userRes[0][0].user_id, `You have a new referral assigned to you. Referral ID: ${result.insertId}`, result.insertId]
-        );
-      }
-    }
 
     await db.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'referrals', ?)",
       [req.user.user_id, result.insertId]
     );
 
-    return res.status(201).json({ success: true, message: 'Referral created.', referral_id: result.insertId });
+    // ── Respond immediately ────────────────────────────────────────────────────
+    res.status(201).json({
+      success: true,
+      message: 'Referral created.',
+      referral_id: result.insertId,
+      file_attachment,
+    });
+
+    // ── Post-insert: notify assigned doctor (best-effort) ─────────────────────
+    try {
+      // Resolve patient name + condition + assigned doctor's user account in one query
+      const [[detail]] = await db.query(
+        `SELECT CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+                diag.medical_condition,
+                u.user_id AS assigned_user_id
+         FROM   diagnoses diag
+         LEFT JOIN patients p ON p.patient_id      = diag.patient_id
+         LEFT JOIN users    u ON u.linked_id        = ? AND u.role = 'doctor' AND u.is_active = 1
+         WHERE  diag.diagnosis_id = ?`,
+        [assigned_doctor_id, diagnosis_id]
+      );
+
+      if (detail?.assigned_user_id) {
+        const condPart = detail.medical_condition ? ` for ${detail.medical_condition}` : '';
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
+          [
+            detail.assigned_user_id,
+            `🔄 You have a new referral assigned: ${detail.patient_name ?? `Patient #`}${condPart}. Referral ID: ${result.insertId}.`,
+            result.insertId,
+          ]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('createReferral: notification insert failed (non-fatal):', notifErr.message);
+    }
+
   } catch (err) {
     console.error('createReferral error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
@@ -44,23 +69,36 @@ const createReferral = async (req, res) => {
 
 // GET /api/referrals
 const getAllReferrals = async (req, res) => {
-  const { status, page = 1, limit = 20 } = req.query;
+  const { status, from_date, to_date, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
-    const params = [];
-    let where = '';
+    const conditions = [];
+    const params     = [];
 
+    // Status filter
     if (status) {
-      where = 'WHERE r.status = ?';
+      conditions.push('r.status = ?');
       params.push(status);
+    }
+
+    // Date range filter on referral_date
+    if (from_date) {
+      conditions.push('DATE(r.referral_date) >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('DATE(r.referral_date) <= ?');
+      params.push(to_date);
     }
 
     // Doctors only see their own referrals
     if (req.user.role === 'doctor') {
-      where = where ? `${where} AND r.assigned_doctor_id = ?` : 'WHERE r.assigned_doctor_id = ?';
+      conditions.push('r.assigned_doctor_id = ?');
       params.push(req.user.linked_id);
     }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     // Run data query and count query in parallel
     const [[rows], [[{ total }]]] = await Promise.all([
@@ -139,7 +177,47 @@ const updateReferralStatus = async (req, res) => {
       [req.user.user_id, req.params.id]
     );
 
-    return res.status(200).json({ success: true, message: `Referral status updated to ${status}.` });
+    // ── Respond immediately ────────────────────────────────────────────────────
+    res.status(200).json({ success: true, message: `Referral status updated to ${status}.` });
+
+    // ── Notify referring doctor on meaningful status changes ──────────────────
+    // Only send when status is something the referring doctor needs to act on.
+    if (['Accepted', 'Completed', 'Cancelled'].includes(status)) {
+      try {
+        // Fetch referral detail in one query: patient name, condition, referring doctor id
+        const [[detail]] = await db.query(
+          `SELECT CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+                  diag.medical_condition,
+                  r.referring_doctor_id,
+                  u.user_id AS referring_user_id
+           FROM   referrals r
+           LEFT JOIN diagnoses diag ON r.diagnosis_id   = diag.diagnosis_id
+           LEFT JOIN patients  p    ON diag.patient_id  = p.patient_id
+           LEFT JOIN users     u    ON u.linked_id       = r.referring_doctor_id
+                                    AND u.role = 'doctor' AND u.is_active = 1
+           WHERE  r.referral_id = ?`,
+          [req.params.id]
+        );
+
+        if (detail?.referring_user_id) {
+          const statusEmoji = status === 'Accepted'  ? '✅'
+                            : status === 'Completed' ? '🏅'
+                            :                          '❌'; // Cancelled
+          const condPart = detail.medical_condition ? ` for ${detail.medical_condition}` : '';
+          await db.query(
+            'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
+            [
+              detail.referring_user_id,
+              `${statusEmoji} Your referral${condPart} for ${detail.patient_name ?? 'a patient'} has been marked ${status}. Referral ID: ${req.params.id}.`,
+              parseInt(req.params.id),
+            ]
+          );
+        }
+      } catch (notifErr) {
+        console.warn('updateReferralStatus: notification insert failed (non-fatal):', notifErr.message);
+      }
+    }
+
   } catch (err) {
     console.error('updateReferralStatus error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
