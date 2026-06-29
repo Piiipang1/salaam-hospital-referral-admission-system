@@ -1,0 +1,71 @@
+/* ── Table.css ──────────────────────────────────────────────── */
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch; /* smooth momentum scrolling on iOS */
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+.data-table thead {
+  background: var(--color-surface-2);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.data-table th {
+  padding: var(--space-3) var(--space-4);
+  font-weight: 600;
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.data-table td {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  vertical-align: middle;
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr {
+  transition: background var(--transition-fast);
+}
+.data-table tbody tr:hover { background: var(--color-surface-2); }
+.table-row--clickable { cursor: pointer; }
+
+.table-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-12);
+}
+.table-empty {
+  text-align: center !important;
+  color: var(--color-text-muted);
+  padding: var(--space-12) !important;
+  font-size: var(--font-size-sm);
+}
+
+/* ── Mobile ≤767px: tighter cell padding, smaller font ──────── */
+@media (max-width: 767px) {
+  .data-table {
+    font-size: var(--font-size-xs);
+    /* Ensure table doesn't shrink below content; scroll kicks in */
+    min-width: 520px;
+  }
+  .data-table th,
+  .data-table td {
+    padding: var(--space-2) var(--space-3);
+  }
+  .table-empty {
+    padding: var(--space-8) !important;
+  }
+}
