@@ -189,6 +189,24 @@ const turnaColumns = [
   { key:'turnaround_minutes', label:'Turnaround (min)', align:'right' },
 ];
 
+// ─── CSV export helpers ────────────────────────────────────────────────────────
+const csvEscape = (value) => {
+  const str = value === null || value === undefined ? '' : String(value);
+  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+};
+
+const toCsv = (columns, rows) => {
+  const header = columns.map((c) => csvEscape(c.label)).join(',');
+  const lines = rows.map((row) => columns.map((c) => csvEscape(row[c.key])).join(','));
+  return [header, ...lines].join('\n');
+};
+
+const TAB_FILE_PREFIX = {
+  Admissions: 'admissions',
+  Referrals:  'referrals',
+  Turnaround: 'turnaround',
+};
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 const TABS = ['Admissions', 'Referrals', 'Turnaround'];
 
@@ -231,6 +249,22 @@ const ReportsPage = () => {
   const columns = tab === 'Admissions' ? admColumns
                 : tab === 'Referrals'  ? refColumns
                 : turnaColumns;
+
+  const downloadCsv = () => {
+    if (!data.length) return;
+    const csvContent = toCsv(columns, data);
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const today = new Date().toISOString().split('T')[0];
+
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${TAB_FILE_PREFIX[tab]}-report-${today}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   // ── Chart option helpers with title ───────────────────────────────
   const admChartOptions = {
@@ -329,6 +363,11 @@ const ReportsPage = () => {
           <Button id="run-report-btn" variant="primary" onClick={run} loading={loading}>
             Generate Report
           </Button>
+          {data.length > 0 && (
+            <Button id="download-csv-btn" variant="secondary" onClick={downloadCsv}>
+              Download CSV
+            </Button>
+          )}
         </div>
       </Card>
 

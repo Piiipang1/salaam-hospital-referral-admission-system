@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getAllTriages, createTriage } from '../../api/triages.api';
+import { useAuth } from '../../context/AuthContext';
+import { canManageTriage } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -21,6 +23,7 @@ const LEVEL_COLORS = {
 
 const TriagePage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // ── Filter state ─────────────────────────────────────────────
   const [level,    setLevel]    = useState('');
@@ -75,7 +78,7 @@ const TriagePage = () => {
   // ── Table columns ─────────────────────────────────────────────
   const columns = [
     { key: 'triage_id',       label: 'ID',        width: '60px' },
-    { key: 'patient_name',    label: 'Patient',   render: (r) => `${r.first_name ?? ''} ${r.last_name ?? ''}`.trim() || `Patient #${r.patient_id}` },
+    { key: 'patient_name',    label: 'Patient',   render: (r) => r.patient_name || `Patient #${r.patient_id}` },
     { key: 'triage_level',    label: 'Level',     render: (r) => <Badge status={r.triage_level} /> },
     { key: 'triage_datetime', label: 'Date/Time', render: (r) => formatDate(r.triage_datetime, true) },
     { key: 'notes',           label: 'Notes',     render: (r) => (
@@ -106,9 +109,11 @@ const TriagePage = () => {
             {hasActiveFilters ? ' (filtered)' : ''}
           </p>
         </div>
-        <Button id="create-triage-btn" variant="primary" onClick={() => setModal(true)}>
-          + Record Triage
-        </Button>
+        {canManageTriage(user?.role) && (
+          <Button id="create-triage-btn" variant="primary" onClick={() => setModal(true)}>
+            + Record Triage
+          </Button>
+        )}
       </div>
 
       {/* ── Alerts ── */}

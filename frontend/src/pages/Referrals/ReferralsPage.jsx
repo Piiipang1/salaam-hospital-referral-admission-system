@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getAllReferrals, createReferral, updateReferralStatus } from '../../api/referrals.api';
 import { useAuth } from '../../context/AuthContext';
-import { canUpdateReferralStatus } from '../../utils/roleGuard';
+import { canUpdateReferralStatus, canCreateReferral } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
 import { REFERRAL_STATUSES } from '../../utils/constants';
 import Badge from '../../components/ui/Badge';
@@ -122,9 +122,11 @@ const ReferralsPage = () => {
           <h2 className="page-title">Referrals</h2>
           <p className="page-subtitle">{total} referral{total !== 1 ? 's' : ''}</p>
         </div>
-        <Button id="create-referral-btn" variant="primary" onClick={() => setModal('create')}>
-          + Create Referral
-        </Button>
+        {canCreateReferral(user?.role) && (
+          <Button id="create-referral-btn" variant="primary" onClick={() => setModal('create')}>
+            + Create Referral
+          </Button>
+        )}
       </div>
 
       {/* Alerts */}

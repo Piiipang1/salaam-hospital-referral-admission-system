@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getAllAdmissions, createAdmission, dischargePatient } from '../../api/admissions.api';
+import { useAuth } from '../../context/AuthContext';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -10,6 +11,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import AdmissionForm from '../../components/forms/AdmissionForm';
 
 const AdmissionsPage = () => {
+  const { user } = useAuth();
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -50,7 +52,7 @@ const AdmissionsPage = () => {
     { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
     {
       key: 'actions', label: '', width: '120px', align: 'right',
-      render: (r) => r.status === 'Active' && (
+      render: (r) => r.status === 'Active' && (user?.role === 'admin' || (user?.role === 'doctor' && user?.linked_id === r.doctor_id)) && (
         <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); setConfirm(r); }}>Discharge</Button>
       ),
     },

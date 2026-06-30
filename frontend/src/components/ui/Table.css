@@ -59,7 +59,7 @@
   .data-table {
     font-size: var(--font-size-xs);
     /* Ensure table doesn't shrink below content; scroll kicks in */
-    min-width: 520px;
+    min-width: 380px;
   }
   .data-table th,
   .data-table td {

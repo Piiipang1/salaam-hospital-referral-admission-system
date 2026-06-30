@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPatientById, getPatientHistory, updatePatient } from '../../api/patients.api';
 import { createTriage } from '../../api/triages.api';
-import { createDiagnosis, addLabResult } from '../../api/diagnoses.api';
+import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessment } from '../../api/diagnoses.api';
 import { createReferral } from '../../api/referrals.api';
 import { createAdmission } from '../../api/admissions.api';
 import { useAuth } from '../../context/AuthContext';
-import { canManagePatients, canDiagnose } from '../../utils/roleGuard';
+import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral } from '../../utils/roleGuard';
 import { formatDate, calcAge } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -20,10 +20,12 @@ import DiagnosisForm from '../../components/forms/DiagnosisForm';
 import ReferralForm from '../../components/forms/ReferralForm';
 import AdmissionForm from '../../components/forms/AdmissionForm';
 import VitalSignsForm from '../../components/forms/VitalSignsForm';
+import TreatmentForm from '../../components/forms/TreatmentForm';
+import DoctorAssessmentForm from '../../components/forms/DoctorAssessmentForm';
 import { addVitalSigns } from '../../api/triages.api';
 import './PatientDetailPage.css';
 
-const TABS = ['Triage', 'Diagnoses', 'Referrals', 'Admissions', 'Documents'];
+const TABS = ['Triage', 'Diagnoses', 'Treatment Plan', 'Referrals', 'Admissions', 'Documents'];
 
 // Build the public URL for an uploaded file
 const fileUrl = (filename) =>
@@ -53,6 +55,9 @@ const PatientDetailPage = () => {
   const [saving,   setSaving]   = useState(false);
   const [vitalTriageId, setVitalTriageId] = useState(null);
 
+  // Doctor assessment (disposition + clinical notes) for the patient's latest diagnosis
+  const [assessment, setAssessment] = useState(null);
+
   // Lab result upload state (per-diagnosis, from Diagnoses tab)
   const [labModal,       setLabModal]       = useState(false);
   const [labDiagnosisId, setLabDiagnosisId] = useState(null);
@@ -68,7 +73,17 @@ const PatientDetailPage = () => {
     Promise.all([getPatientById(id), getPatientHistory(id)])
       .then(([pRes, hRes]) => {
         if (pRes.success) setPatient(pRes.data);
-        if (hRes.success) setHistory(hRes.data);
+        if (hRes.success) {
+          setHistory(hRes.data);
+          const latestDiagnosisId = hRes.data.diagnoses?.[0]?.diagnosis_id;
+          if (latestDiagnosisId) {
+            getAssessment(latestDiagnosisId)
+              .then((aRes) => { if (aRes.success) setAssessment(aRes.data); })
+              .catch(() => {});
+          } else {
+            setAssessment(null);
+          }
+        }
       })
       .catch(() => setError('Failed to load patient data.'))
       .finally(() => setLoading(false));
@@ -146,6 +161,12 @@ const PatientDetailPage = () => {
   const diagnoses = history.diagnoses ?? [];
   const referrals = history.referrals ?? [];
   const admissions= history.admissions?? [];
+  const treatments = diagnoses.flatMap((d) =>
+    (d.treatments ?? []).map((tx) => ({ ...tx, medical_condition: d.medical_condition }))
+  );
+  const latestDiagnosis = diagnoses[0] ?? null;
+
+  const handleAddTreatment = (data) => addTreatment(data.diagnosis_id, data);
 
   return (
     <div className="patient-detail">
@@ -178,9 +199,9 @@ const PatientDetailPage = () => {
 
       {/* Action buttons */}
       <div className="patient-actions">
-        <Button size="sm" variant="primary"   onClick={() => setModal('triage')}>+ Triage</Button>
+        {canManageTriage(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('triage')}>+ Triage</Button>}
         {canDiagnose(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('diagnosis')}>+ Diagnosis</Button>}
-        <Button size="sm" variant="secondary" onClick={() => setModal('referral')}>+ Referral</Button>
+        {canCreateReferral(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('referral')}>+ Referral</Button>}
         <Button size="sm" variant="secondary" onClick={() => setModal('admission')}>+ Admission</Button>
       </div>
 
@@ -201,7 +222,9 @@ const PatientDetailPage = () => {
                   <Badge status={t.triage_level} />
                   <span className="text-sm text-muted">{formatDate(t.triage_datetime, true)}</span>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => { setVitalTriageId(t.triage_id); setModal('vitals'); }}>+ Vitals</Button>
+                {canManageTriage(user?.role) && (
+                  <Button size="sm" variant="ghost" onClick={() => { setVitalTriageId(t.triage_id); setModal('vitals'); }}>+ Vitals</Button>
+                )}
               </div>
               <p className="text-sm" style={{ marginTop:'var(--space-3)' }}>{t.notes || '—'}</p>
               {t.blood_pressure && (
@@ -269,6 +292,52 @@ const PatientDetailPage = () => {
         </div>
       )}
 
+      {tab === 'Treatment Plan' && (
+        <div className="detail-list">
+          {/* ── Doctor Assessment (disposition + clinical notes) ── */}
+          <Card className="detail-item">
+            <div className="detail-item__header">
+              <span className="font-semibold">Doctor Assessment</span>
+              {canDiagnose(user?.role) && latestDiagnosis && (
+                <Button size="sm" variant="ghost" onClick={() => setModal('assessment')}>
+                  {assessment ? 'Update Assessment' : 'Add Assessment'}
+                </Button>
+              )}
+            </div>
+            {!latestDiagnosis ? (
+              <p className="text-sm text-muted">No diagnosis recorded yet.</p>
+            ) : assessment ? (
+              <>
+                <div className="flex items-center gap-2" style={{ marginTop: 'var(--space-2)' }}>
+                  <Badge status={assessment.disposition} />
+                  <span className="text-sm text-muted">{formatDate(assessment.assessed_at, true)}</span>
+                </div>
+                <p className="text-sm" style={{ marginTop: 'var(--space-3)' }}>{assessment.clinical_notes || '—'}</p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">No assessment recorded yet.</p>
+            )}
+          </Card>
+
+          {canDiagnose(user?.role) && (
+            <div className="patient-actions" style={{ marginBottom: 'var(--space-2)' }}>
+              <Button size="sm" variant="primary" onClick={() => setModal('treatment')}>+ Add Treatment</Button>
+            </div>
+          )}
+          {treatments.length === 0 ? <p className="text-muted">No treatment records.</p> : treatments.map((tx) => (
+            <Card key={tx.treatment_id} className="detail-item">
+              <div className="detail-item__header">
+                <span className="font-semibold">{tx.prescribed_medications}</span>
+              </div>
+              <p className="text-sm text-muted">Diagnosis: {tx.medical_condition || `#${tx.diagnosis_id}`}</p>
+              <p className="text-sm text-muted">Dosage: {tx.dosage || '—'}</p>
+              <p className="text-sm text-muted">Frequency: {tx.frequency || '—'}</p>
+              <p className="text-sm text-muted">Duration: {tx.treatment_duration || '—'}</p>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {tab === 'Referrals' && (
         <div className="detail-list">
           {referrals.length === 0 ? <p className="text-muted">No referral history.</p> : referrals.map((r) => (
@@ -303,6 +372,15 @@ const PatientDetailPage = () => {
                   </div>
                 </div>
               )}
+              {/* Doctor's e-signature */}
+              <div className="lab-upload-section">
+                <p className="lab-upload-heading">Doctor&apos;s Signature</p>
+                {r.e_signature ? (
+                  <img src={r.e_signature} alt="Doctor's signature" className="signature-canvas" />
+                ) : (
+                  <p className="text-sm text-muted">No signature on file.</p>
+                )}
+              </div>
             </Card>
           ))}
         </div>
@@ -420,9 +498,19 @@ const PatientDetailPage = () => {
       <Modal isOpen={modal === 'diagnosis'} onClose={() => setModal(null)} title="Record Diagnosis" size="md"><DiagnosisForm patientId={id}    onSubmit={act(createDiagnosis)} loading={saving} /></Modal>
       {/* Referral modal — ReferralForm builds FormData; act() passes it straight through */}
       <Modal isOpen={modal === 'referral'} onClose={() => setModal(null)} title="Create Referral" size="md">
-        <ReferralForm onSubmit={(fd) => act(createReferral)(fd)} loading={saving} />
+        <ReferralForm diagnoses={diagnoses} onSubmit={(fd) => act(createReferral)(fd)} loading={saving} />
       </Modal>
       <Modal isOpen={modal === 'admission'} onClose={() => setModal(null)} title="Admit Patient"    size="md"><AdmissionForm patientId={id}    onSubmit={act(createAdmission)} loading={saving} /></Modal>
+      <Modal isOpen={modal === 'treatment'} onClose={() => setModal(null)} title="Add Treatment" size="md">
+        <TreatmentForm diagnoses={diagnoses} onSubmit={act(handleAddTreatment)} loading={saving} />
+      </Modal>
+      <Modal isOpen={modal === 'assessment'} onClose={() => setModal(null)} title={assessment ? 'Update Assessment' : 'Add Assessment'} size="md">
+        <DoctorAssessmentForm
+          initial={assessment ?? {}}
+          onSubmit={act((data) => saveAssessment(latestDiagnosis.diagnosis_id, data))}
+          loading={saving}
+        />
+      </Modal>
       <Modal isOpen={modal === 'vitals'}    onClose={() => setModal(null)} title="Record Vital Signs" size="md">
         <VitalSignsForm triageId={vitalTriageId} onSubmit={act((d) => addVitalSigns(vitalTriageId, d))} loading={saving} />
       </Modal>
