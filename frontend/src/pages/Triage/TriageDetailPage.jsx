@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getTriageById, updateTriage, addVitalSigns } from '../../api/triages.api';
+import { useAuth } from '../../context/AuthContext';
+import { canManageTriage } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Card from '../../components/ui/Card';
@@ -14,6 +16,7 @@ import VitalSignsForm from '../../components/forms/VitalSignsForm';
 const TriageDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [triage,  setTriage]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -45,10 +48,12 @@ const TriageDetailPage = () => {
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
       <Card title={`Triage #${triage.triage_id}`} action={
-        <div style={{ display:'flex', gap:'var(--space-2)' }}>
-          <Button size="sm" variant="outline" onClick={() => setModal('edit')}>Edit Triage</Button>
-          <Button size="sm" variant="primary" onClick={() => setModal('vitals')}>Update Vitals</Button>
-        </div>
+        canManageTriage(user?.role) && (
+          <div style={{ display:'flex', gap:'var(--space-2)' }}>
+            <Button size="sm" variant="outline" onClick={() => setModal('edit')}>Edit Triage</Button>
+            <Button size="sm" variant="primary" onClick={() => setModal('vitals')}>Update Vitals</Button>
+          </div>
+        )
       }>
         <div className="patient-info-grid">
           <div><span className="info-label">Patient ID</span><span>#{triage.patient_id}</span></div>

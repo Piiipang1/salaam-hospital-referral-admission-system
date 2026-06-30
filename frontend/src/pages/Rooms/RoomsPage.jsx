@@ -12,6 +12,11 @@ import './RoomsPage.css';
 
 const ROOM_ICONS = { 'General Ward':'🛏️', 'Private Room':'🚪', 'ICU':'💊', 'Pediatric Ward':'🧒', 'Emergency Room':'🚨' };
 
+const TRIAGE_COLORS = { Critical: '#e53e3e', Urgent: '#d97706', 'Non-Urgent': '#38a169' };
+
+// patient_condition can be a long clinical paragraph — keep the room card compact
+const truncate = (str, n) => (str && str.length > n ? str.slice(0, n) + '…' : str);
+
 const RoomsPage = () => {
   const { user } = useAuth();
   const [rooms,   setRooms]   = useState([]);
@@ -67,6 +72,25 @@ const RoomsPage = () => {
               <span className="room-card__bed">{room.bed_number}</span>
               <span className="room-card__type">{room.room_type}</span>
             </div>
+            {room.availability_status === 'occupied' && room.patient_name && (
+              <div className="room-card__patient">
+                <span className="room-card__patient-name">{room.patient_name}</span>
+                <span className="room-card__condition">
+                  {room.patient_condition ? truncate(room.patient_condition, 50) : 'No diagnosis on record'}
+                </span>
+                {room.triage_level && (
+                  <span
+                    className="room-card__triage-badge"
+                    style={{ backgroundColor: TRIAGE_COLORS[room.triage_level], color: '#fff' }}
+                  >
+                    {room.triage_level}
+                  </span>
+                )}
+                <span className="room-card__admission-type">
+                  Admitted: {room.admission_type || 'Regular'}
+                </span>
+              </div>
+            )}
             <Badge status={room.availability_status} />
             {canManageRooms(user?.role) && (
               <button className="room-card__edit" onClick={() => openEdit(room)} title="Edit room">✏️</button>

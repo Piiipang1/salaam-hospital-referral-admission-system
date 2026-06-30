@@ -35,6 +35,11 @@ export const STATUS_COLORS = {
   // Room
   available:  'success',
   occupied:   'danger',
+  // Doctor assessment disposition
+  Admit:      'primary',
+  Discharge:  'success',
+  Refer:      'info',
+  Observe:    'warning',
 };
 
 // Role display labels
