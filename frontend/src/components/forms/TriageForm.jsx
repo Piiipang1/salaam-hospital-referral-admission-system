@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
 import { TRIAGE_LEVELS } from '../../utils/constants';
+import { useAuth } from '../../context/AuthContext';
+import { getActiveEmployees } from '../../api/employees.api';
 
 const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
+  const { user } = useAuth();
   const [form, setForm] = useState({
     patient_id:    initial.patient_id    ?? patientId ?? '',
     triage_level:  initial.triage_level  ?? '',
@@ -12,13 +15,31 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
     employee_id:   initial.employee_id   ?? '',
   });
   const [error, setError] = useState('');
+  const [employees,         setEmployees]         = useState([]);
+  const [employeesFetching, setEmployeesFetching] = useState(true);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Load active employees on mount
+  useEffect(() => {
+    getActiveEmployees()
+      .then((res) => { if (res.success) setEmployees(res.data); })
+      .catch(() => setError('Failed to load employees list.'))
+      .finally(() => setEmployeesFetching(false));
+  }, []);
+
+  const selfEmployee = employees.find((e) => e.employee_id === user?.linked_id);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.triage_level) { setError('Triage level is required.'); return; }
     setError('');
-    onSubmit(form);
+
+    if (user?.role === 'nurse' || user?.role === 'staff') {
+      const { employee_id, ...rest } = form;
+      onSubmit(rest);
+    } else {
+      onSubmit(form);
+    }
   };
 
   return (
@@ -38,10 +59,35 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
           <label htmlFor="tf-room">Visit Room ID</label>
           <input id="tf-room" type="number" value={form.visit_room_id} onChange={set('visit_room_id')} placeholder="Optional room ID" />
         </div>
-        <div className="form-group">
-          <label htmlFor="tf-emp">Employee ID (Nurse)</label>
-          <input id="tf-emp" type="number" value={form.employee_id} onChange={set('employee_id')} placeholder="Optional employee ID" />
-        </div>
+        {(user?.role === 'nurse' || user?.role === 'staff') ? (
+          <div className="form-group">
+            <label htmlFor="tf-emp">Attending Nurse / Staff</label>
+            <input
+              id="tf-emp"
+              type="text"
+              value={
+                employeesFetching
+                  ? 'Loading...'
+                  : selfEmployee
+                    ? `${selfEmployee.first_name} ${selfEmployee.last_name} (You)`
+                    : 'Loading...'
+              }
+              disabled
+            />
+          </div>
+        ) : (
+          <div className="form-group">
+            <label htmlFor="tf-emp">Attending Nurse / Staff</label>
+            <select id="tf-emp" value={form.employee_id} onChange={set('employee_id')}>
+              <option value="">— Select employee (optional) —</option>
+              {employees.map((e) => (
+                <option key={e.employee_id} value={e.employee_id}>
+                  {e.first_name} {e.last_name} ({e.role})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>

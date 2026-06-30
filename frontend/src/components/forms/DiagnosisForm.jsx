@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
+import Spinner from '../ui/Spinner';
 import { toInputDate } from '../../utils/formatDate';
 import { addLabResult } from '../../api/diagnoses.api';
+import { getActiveDoctors } from '../../api/doctors.api';
 
 const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading }) => {
   const [form, setForm] = useState({
@@ -17,9 +19,19 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
   const [labFileName,  setLabFileName]  = useState('');
   const [labUploading, setLabUploading] = useState(false);
   const [error,        setError]        = useState('');
+  const [doctors,      setDoctors]      = useState([]);
+  const [fetching,     setFetching]     = useState(true);
   const fileInputRef = useRef(null);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Load active doctors on mount
+  useEffect(() => {
+    getActiveDoctors()
+      .then((res) => { if (res.success) setDoctors(res.data); })
+      .catch(() => setError('Failed to load doctors list.'))
+      .finally(() => setFetching(false));
+  }, []);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -43,7 +55,7 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.doctor_id || !form.medical_condition || !form.diagnosis_date) {
-      setError('Doctor ID, medical condition, and diagnosis date are required.');
+      setError('Doctor, medical condition, and diagnosis date are required.');
       return;
     }
     if (labFile && !testType.trim()) {
@@ -81,6 +93,8 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
 
   const isSubmitting = loading || labUploading;
 
+  if (fetching) return <Spinner />;
+
   return (
     <form onSubmit={handleSubmit} noValidate>
       {error && <Alert type="error" message={error} style={{ marginBottom: 'var(--space-4)' }} />}
@@ -88,8 +102,20 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
       {/* ── Core diagnosis fields ── */}
       <div className="form-row">
         <div className="form-group">
-          <label htmlFor="df-doc">Doctor ID *</label>
-          <input id="df-doc" type="number" value={form.doctor_id} onChange={set('doctor_id')} placeholder="e.g. 1" required />
+          <label htmlFor="df-doc">Doctor *</label>
+          <select id="df-doc" value={form.doctor_id} onChange={set('doctor_id')} required>
+            <option value="">— Select doctor —</option>
+            {doctors.map((d) => (
+              <option key={d.doctor_id} value={d.doctor_id}>
+                Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
+              </option>
+            ))}
+          </select>
+          {doctors.length === 0 && (
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+              No active doctors found.
+            </span>
+          )}
         </div>
         <div className="form-group">
           <label htmlFor="df-date">Diagnosis Date *</label>

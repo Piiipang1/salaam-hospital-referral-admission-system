@@ -12,14 +12,18 @@ const NAV_ITEMS = [
   { to: '/admissions',    icon: '🏥', label: 'Admissions'       },
   { to: '/rooms',         icon: '🛏️', label: 'Rooms'            },
   { to: '/notifications', icon: '🔔', label: 'Notifications'    },
-  { to: '/reports',       icon: '📈', label: 'Reports',         roles: ['admin', 'doctor'] },
+  { to: '/reports',       icon: '📈', label: 'Reports',         roles: ['admin'] },
   { to: '/users',         icon: '👤', label: 'User Management', roles: ['admin'] },
   { to: '/audit',         icon: '🔍', label: 'Audit Trail',     roles: ['admin'] },
 ];
 
-const Sidebar = ({ collapsed, onClose }) => {
+const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+
+  const displayName = (user?.first_name && user?.last_name)
+    ? `${user.first_name} ${user.last_name}`
+    : user?.username;
 
   const handleLogout = async () => {
     await logout();
@@ -33,9 +37,9 @@ const Sidebar = ({ collapsed, onClose }) => {
   return (
     <>
       {/* Mobile overlay backdrop */}
-      <div className="sidebar-backdrop" onClick={onClose} aria-hidden="true" />
+      <div className={`sidebar-backdrop${mobileOpen ? ' active' : ''}`} onClick={onClose} aria-hidden="true" />
 
-      <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}`}>
+      <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}${mobileOpen ? ' sidebar--mobile-open' : ''}`}>
         {/* Brand */}
         <div className="sidebar__brand">
           <span className="sidebar__brand-icon">🏥</span>
@@ -70,10 +74,10 @@ const Sidebar = ({ collapsed, onClose }) => {
           {!collapsed && (
             <div className="sidebar__user">
               <div className="sidebar__user-avatar">
-                {user?.username?.[0]?.toUpperCase() ?? '?'}
+                {displayName?.[0]?.toUpperCase() ?? '?'}
               </div>
               <div className="sidebar__user-info">
-                <span className="sidebar__user-name">{user?.username}</span>
+                <span className="sidebar__user-name">{displayName}</span>
                 <span className="sidebar__user-role">{ROLE_LABELS[user?.role] ?? user?.role}</span>
               </div>
             </div>
