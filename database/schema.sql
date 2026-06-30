@@ -14,6 +14,7 @@
 --   triages.triage_level : Critical, Urgent, Non-Urgent
 --   referrals.status     : Pending, Accepted, Completed, Cancelled
 --   admissions.status    : Active, Discharged
+--   doctor_assessments.disposition : Admit, Discharge, Refer, Observe
 -- =============================================================================
 
 DROP DATABASE IF EXISTS salaam_hospital;
@@ -34,6 +35,7 @@ USE salaam_hospital;
 --  Tier 6  treatments         → diagnoses
 --          lab_results        → patients, diagnoses
 --          referrals          → diagnoses, doctors
+--          doctor_assessments → diagnoses, doctors
 --  Tier 7  admissions         → patients, diagnoses, doctors, rooms
 --          doctor_in_charge   → doctors, patients
 --  Tier 8  notifications      → users, referrals
@@ -304,8 +306,10 @@ CREATE TABLE lab_results (
 -- Queried by: referrals.controller, patients.controller,
 --             reports.controller, dashboard.controller
 -- Columns from code: referral_id, diagnosis_id, referring_doctor_id,
---                    assigned_doctor_id, referral_date, status
+--                    assigned_doctor_id, referral_date, status, e_signature
 -- ENUM from referrals.controller validStatuses: Pending, Accepted, Completed, Cancelled
+-- e_signature stores a base64 PNG data URL captured from the signature canvas
+-- in ReferralForm (frontend) — nullable, referrals may be submitted without one
 -- -----------------------------------------------------------------------------
 CREATE TABLE referrals (
     referral_id          INT UNSIGNED    NOT NULL AUTO_INCREMENT,
@@ -315,6 +319,7 @@ CREATE TABLE referrals (
     referral_date        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     status               ENUM('Pending','Accepted','Completed','Cancelled')
                                          NOT NULL DEFAULT 'Pending',
+    e_signature          TEXT            DEFAULT NULL,
     PRIMARY KEY (referral_id),
     CONSTRAINT fk_referrals_diagnosis
         FOREIGN KEY (diagnosis_id)        REFERENCES diagnoses (diagnosis_id)
@@ -324,6 +329,32 @@ CREATE TABLE referrals (
         ON UPDATE CASCADE ON DELETE SET NULL,
     CONSTRAINT fk_referrals_assigned_doc
         FOREIGN KEY (assigned_doctor_id)  REFERENCES doctors   (doctor_id)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- doctor_assessments
+-- Queried by: diagnoses.controller (saveAssessment, getAssessment)
+-- Columns from code: assessment_id, diagnosis_id, doctor_id, clinical_notes,
+--                    disposition, assessed_at
+-- ENUM from diagnoses.controller validDispositions: Admit, Discharge, Refer, Observe
+-- One record per diagnosis — saveAssessment UPSERTs (UPDATE if a row already
+-- exists for the diagnosis_id, else INSERT)
+-- -----------------------------------------------------------------------------
+CREATE TABLE doctor_assessments (
+    assessment_id  INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    diagnosis_id   INT UNSIGNED    NOT NULL,
+    doctor_id      INT UNSIGNED    NOT NULL,
+    clinical_notes TEXT            DEFAULT NULL,
+    disposition    ENUM('Admit','Discharge','Refer','Observe') NOT NULL,
+    assessed_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (assessment_id),
+    CONSTRAINT fk_doctor_assessments_diagnosis
+        FOREIGN KEY (diagnosis_id) REFERENCES diagnoses (diagnosis_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_doctor_assessments_doctor
+        FOREIGN KEY (doctor_id) REFERENCES doctors (doctor_id)
         ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
