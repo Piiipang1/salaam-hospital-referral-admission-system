@@ -6,13 +6,21 @@ const getAllAdmissions = async (req, res) => {
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
+    const conditions = [];
     const params = [];
-    let where = '';
 
     if (status) {
-      where = 'WHERE a.status = ?';
+      conditions.push('a.status = ?');
       params.push(status);
     }
+
+    // Doctors only see admissions they are assigned to
+    if (req.user.role === 'doctor') {
+      conditions.push('a.doctor_id = ?');
+      params.push(req.user.linked_id);
+    }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const [rows] = await db.query(
       `SELECT a.*,
@@ -168,6 +176,26 @@ const createAdmission = async (req, res) => {
         }
       }
 
+      // 3b. Notify the doctor who originally referred this patient, if any
+      const [[referral]] = await db.query(
+        `SELECT u.user_id AS referring_user_id
+         FROM referrals ref
+         JOIN diagnoses diag ON diag.diagnosis_id = ref.diagnosis_id
+         JOIN users u ON u.linked_id = ref.referring_doctor_id AND u.role = 'doctor' AND u.is_active = 1
+         WHERE diag.patient_id = ? AND ref.status IN ('Accepted','Pending')
+         ORDER BY ref.referral_date DESC LIMIT 1`,
+        [patient_id]
+      );
+
+      if (referral?.referring_user_id && referral.referring_user_id !== detail?.doctor_user_id) {
+        notifRows.push([
+          referral.referring_user_id,
+          `🛏️ Your referred patient ${detail?.patient_name ?? `Patient #${patient_id}`} has been admitted to ` +
+          `${detail?.room_type ?? 'Room'} — Bed ${detail?.bed_number ?? room_id}. Admission ID: ${admissionId}.`,
+          null,
+        ]);
+      }
+
       // 4. Bulk insert all notifications in one round-trip
       if (notifRows.length > 0) {
         await db.query(
@@ -205,6 +233,10 @@ const dischargePatient = async (req, res) => {
     const adm = admRows[0];
     if (adm.status === 'Discharged') {
       return res.status(409).json({ success: false, message: 'Patient is already discharged.' });
+    }
+
+    if (req.user.role === 'doctor' && req.user.linked_id !== adm.doctor_id) {
+      return res.status(403).json({ success: false, message: 'You are not the assigned doctor for this admission.' });
     }
 
     const connection = await db.getConnection();

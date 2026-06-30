@@ -174,7 +174,29 @@ const createPatient = async (req, res) => {
       [req.user.user_id, result.insertId]
     );
 
-    return res.status(201).json({ success: true, message: 'Patient registered.', patient_id: result.insertId });
+    // ── Respond immediately — notifications are best-effort ───────────────────
+    res.status(201).json({ success: true, message: 'Patient registered.', patient_id: result.insertId });
+
+    // ── Post-insert: notify all active admins (best-effort, non-blocking) ─────
+    try {
+      const [admins] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
+      );
+
+      const message = `🧑‍⚕️ New patient registered: ${first_name} ${last_name}. Patient ID: ${result.insertId}.`;
+
+      for (const admin of admins) {
+        if (admin.user_id !== req.user.user_id) {
+          await db.query(
+            'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
+            [admin.user_id, message, null]
+          );
+        }
+      }
+    } catch (notifErr) {
+      console.warn('createPatient: notification insert failed (non-fatal):', notifErr.message);
+    }
+
   } catch (err) {
     console.error('createPatient error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });

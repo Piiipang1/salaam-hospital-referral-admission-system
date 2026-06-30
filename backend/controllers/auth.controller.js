@@ -3,6 +3,26 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 require('dotenv').config();
 
+// Resolve a user's real name from doctors/employees based on role + linked_id.
+// admin has no linked name record, so both come back null.
+const getNameForUser = async (role, linkedId) => {
+  if (role === 'doctor') {
+    const [[doc]] = await db.query(
+      'SELECT first_name, last_name FROM doctors WHERE doctor_id = ?',
+      [linkedId]
+    );
+    return { firstName: doc?.first_name ?? null, lastName: doc?.last_name ?? null };
+  }
+  if (role === 'nurse' || role === 'staff') {
+    const [[emp]] = await db.query(
+      'SELECT first_name, last_name FROM employees WHERE employee_id = ?',
+      [linkedId]
+    );
+    return { firstName: emp?.first_name ?? null, lastName: emp?.last_name ?? null };
+  }
+  return { firstName: null, lastName: null };
+};
+
 // POST /api/auth/login
 const login = async (req, res) => {
   const { username, password } = req.body;
@@ -40,15 +60,19 @@ const login = async (req, res) => {
       [user.user_id, user.user_id]
     );
 
+    const { firstName, lastName } = await getNameForUser(user.role, user.linked_id);
+
     return res.status(200).json({
       success: true,
       message: 'Login successful.',
       token,
       user: {
-        user_id: user.user_id,
-        username: user.username,
-        role: user.role,
-        linked_id: user.linked_id,
+        user_id:    user.user_id,
+        username:   user.username,
+        role:       user.role,
+        linked_id:  user.linked_id,
+        first_name: firstName ?? null,
+        last_name:  lastName  ?? null,
       },
     });
   } catch (err) {
@@ -81,7 +105,14 @@ const getMe = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'User not found.' });
     }
-    return res.status(200).json({ success: true, user: rows[0] });
+
+    const userRow = rows[0];
+    const { firstName, lastName } = await getNameForUser(userRow.role, userRow.linked_id);
+
+    return res.status(200).json({
+      success: true,
+      user: { ...userRow, first_name: firstName ?? null, last_name: lastName ?? null },
+    });
   } catch (err) {
     console.error('getMe error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });

@@ -112,9 +112,179 @@ const addTreatment = async (req, res) => {
       [req.user.user_id, result.insertId]
     );
 
-    return res.status(201).json({ success: true, message: 'Treatment added.', treatment_id: result.insertId });
+    // ── Respond immediately — notifications are best-effort ───────────────────
+    res.status(201).json({ success: true, message: 'Treatment added.', treatment_id: result.insertId });
+
+    // ── Post-insert: notify nurses/staff to prepare administration ────────────
+    try {
+      const [[diag]] = await db.query(
+        `SELECT d.patient_id, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+         FROM diagnoses d
+         JOIN patients p ON p.patient_id = d.patient_id
+         WHERE d.diagnosis_id = ?`,
+        [req.params.id]
+      );
+
+      const [staffUsers] = await db.query(
+        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
+      );
+
+      const patientName = diag?.patient_name ?? 'a patient';
+      const message = `💊 New treatment prescribed for ${patientName}: ${prescribed_medications}. Please prepare for administration.`;
+
+      const notifRows = [];
+      for (const su of staffUsers) {
+        if (su.user_id !== req.user.user_id) {
+          notifRows.push([su.user_id, message, null]);
+        }
+      }
+
+      if (notifRows.length > 0) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+          [notifRows]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('addTreatment: notification insert failed (non-fatal):', notifErr.message);
+    }
+
   } catch (err) {
     console.error('addTreatment error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// GET /api/diagnoses/:id/treatments
+const getTreatments = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT * FROM treatments WHERE diagnosis_id = ? ORDER BY created_at DESC',
+      [req.params.id]
+    );
+    return res.status(200).json({ success: true, data: rows });
+  } catch (err) {
+    console.error('getTreatments error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// POST /api/diagnoses/:id/assessment — create or update the doctor's assessment for a diagnosis
+const saveAssessment = async (req, res) => {
+  const { doctor_id, clinical_notes, disposition } = req.body;
+  const validDispositions = ['Admit', 'Discharge', 'Refer', 'Observe'];
+
+  if (!doctor_id || !disposition) {
+    return res.status(400).json({ success: false, message: 'doctor_id and disposition are required.' });
+  }
+  if (!validDispositions.includes(disposition)) {
+    return res.status(400).json({ success: false, message: `disposition must be one of: ${validDispositions.join(', ')}.` });
+  }
+
+  try {
+    const [existing] = await db.query(
+      'SELECT assessment_id FROM doctor_assessments WHERE diagnosis_id = ?',
+      [req.params.id]
+    );
+
+    let assessmentId, statusCode, message;
+
+    if (existing.length > 0) {
+      await db.query(
+        `UPDATE doctor_assessments
+         SET doctor_id = ?, clinical_notes = ?, disposition = ?, assessed_at = NOW()
+         WHERE diagnosis_id = ?`,
+        [doctor_id, clinical_notes || null, disposition, req.params.id]
+      );
+
+      await db.query(
+        "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'doctor_assessments', ?)",
+        [req.user.user_id, existing[0].assessment_id]
+      );
+
+      assessmentId = existing[0].assessment_id;
+      statusCode = 200;
+      message = 'Assessment updated.';
+    } else {
+      const [result] = await db.query(
+        `INSERT INTO doctor_assessments (diagnosis_id, doctor_id, clinical_notes, disposition)
+         VALUES (?, ?, ?, ?)`,
+        [req.params.id, doctor_id, clinical_notes || null, disposition]
+      );
+
+      await db.query(
+        "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'doctor_assessments', ?)",
+        [req.user.user_id, result.insertId]
+      );
+
+      assessmentId = result.insertId;
+      statusCode = 201;
+      message = 'Assessment created.';
+    }
+
+    // ── Respond immediately — notifications are best-effort ───────────────────
+    res.status(statusCode).json({ success: true, message, assessment_id: assessmentId });
+
+    // ── Post-save: notify nurses/staff to act on the doctor's disposition ─────
+    // Applies to both the create and update paths above.
+    try {
+      const [[diag]] = await db.query(
+        `SELECT d.patient_id, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+         FROM diagnoses d
+         JOIN patients p ON p.patient_id = d.patient_id
+         WHERE d.diagnosis_id = ?`,
+        [req.params.id]
+      );
+
+      const patientName = diag?.patient_name ?? 'a patient';
+      const dispositionMessages = {
+        Admit:     `🛏️ Doctor has ordered ADMISSION for ${patientName}. Please prepare bed assignment.`,
+        Discharge: `🏥 Doctor has ordered DISCHARGE for ${patientName}. Please prepare discharge documents.`,
+        Refer:     `🔄 Doctor has ordered REFERRAL for ${patientName}. Referral will be created.`,
+        Observe:   `👁️ Doctor has ordered OBSERVATION for ${patientName}. Please monitor the patient.`,
+      };
+      const notifMessage = dispositionMessages[disposition];
+
+      const [staffUsers] = await db.query(
+        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
+      );
+
+      const notifRows = [];
+      for (const su of staffUsers) {
+        if (su.user_id !== req.user.user_id) {
+          notifRows.push([su.user_id, notifMessage, null]);
+        }
+      }
+
+      if (notifRows.length > 0) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+          [notifRows]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('saveAssessment: notification insert failed (non-fatal):', notifErr.message);
+    }
+
+  } catch (err) {
+    console.error('saveAssessment error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// GET /api/diagnoses/:id/assessment
+const getAssessment = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT da.*, CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name
+       FROM doctor_assessments da
+       LEFT JOIN doctors doc ON da.doctor_id = doc.doctor_id
+       WHERE da.diagnosis_id = ?`,
+      [req.params.id]
+    );
+    return res.status(200).json({ success: true, data: rows[0] || null });
+  } catch (err) {
+    console.error('getAssessment error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
@@ -140,7 +310,40 @@ const addLabResult = async (req, res) => {
       [req.user.user_id, result.insertId]
     );
 
-    return res.status(201).json({ success: true, message: 'Lab result added.', lab_result_id: result.insertId });
+    // ── Respond immediately — notification is best-effort ─────────────────────
+    res.status(201).json({ success: true, message: 'Lab result added.', lab_result_id: result.insertId });
+
+    // ── Post-insert: notify the doctor in charge (best-effort, non-blocking) ──
+    try {
+      const [[doctorUser]] = await db.query(
+        `SELECT u.user_id
+         FROM doctor_in_charge dic
+         JOIN users u ON u.linked_id = dic.doctor_id AND u.role = 'doctor' AND u.is_active = 1
+         WHERE dic.patient_id = ?
+         ORDER BY dic.assigned_at DESC LIMIT 1`,
+        [patient_id]
+      );
+
+      if (doctorUser?.user_id && doctorUser.user_id !== req.user.user_id) {
+        const [[patient]] = await db.query(
+          "SELECT CONCAT(first_name, ' ', last_name) AS patient_name FROM patients WHERE patient_id = ?",
+          [patient_id]
+        );
+        const patientName = patient?.patient_name ?? `Patient #${patient_id}`;
+
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
+          [
+            doctorUser.user_id,
+            `🔬 Lab result ready for review: ${test_type} for ${patientName}. Lab Result ID: ${result.insertId}.`,
+            null,
+          ]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('addLabResult: notification insert failed (non-fatal):', notifErr.message);
+    }
+
   } catch (err) {
     console.error('addLabResult error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
@@ -161,4 +364,4 @@ const getLabResults = async (req, res) => {
   }
 };
 
-module.exports = { createDiagnosis, getDiagnosisById, updateDiagnosis, addTreatment, addLabResult, getLabResults };
+module.exports = { createDiagnosis, getDiagnosisById, updateDiagnosis, addTreatment, getTreatments, saveAssessment, getAssessment, addLabResult, getLabResults };
