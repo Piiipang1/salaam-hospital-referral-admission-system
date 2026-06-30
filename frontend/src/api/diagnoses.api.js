@@ -3,6 +3,9 @@ export const createDiagnosis = (data) => api.post('/api/diagnoses', data).then(r
 export const getDiagnosisById = (id) => api.get(`/api/diagnoses/${id}`).then(r => r.data);
 export const updateDiagnosis = (id, data) => api.put(`/api/diagnoses/${id}`, data).then(r => r.data);
 export const addTreatment   = (id, data) => api.post(`/api/diagnoses/${id}/treatments`, data).then(r => r.data);
+export const getTreatments  = (id) => api.get(`/api/diagnoses/${id}/treatments`).then(r => r.data);
+export const saveAssessment = (id, data) => api.post(`/api/diagnoses/${id}/assessment`, data).then(r => r.data);
+export const getAssessment  = (id) => api.get(`/api/diagnoses/${id}/assessment`).then(r => r.data);
 export const addLabResult   = (id, formData) => api.post(`/api/diagnoses/${id}/lab-results`, formData, {
   headers: { 'Content-Type': 'multipart/form-data' },
 }).then(r => r.data);

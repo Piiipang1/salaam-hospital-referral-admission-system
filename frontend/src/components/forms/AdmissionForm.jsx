@@ -5,6 +5,13 @@ import Spinner from '../ui/Spinner';
 import { ADMISSION_TYPES } from '../../utils/constants';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { getAllRooms } from '../../api/rooms.api';
+import { getPatientHistory } from '../../api/patients.api';
+
+// medical_condition can be a long clinical paragraph — keep dropdown options readable
+const truncate = (str, n) => str?.length > n ? str.slice(0, n) + '…' : (str ?? '');
+
+// Build the dropdown label for a diagnosis option — diagnosis ID is already unique, so skip the date
+const diagnosisLabel = (d) => `Dx#${d.diagnosis_id} — ${truncate(d.medical_condition, 35)}`;
 
 const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading }) => {
   const [form, setForm] = useState({
@@ -19,9 +26,33 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
   const [rooms,   setRooms]   = useState([]);
   const [fetching, setFetching] = useState(true);
 
+  // Diagnosis dropdown — looked up by patient ID (known up front or typed in by the user)
+  const [diagnosisOptions, setDiagnosisOptions] = useState([]);
+  const [diagLoading,      setDiagLoading]      = useState(false);
+  const [diagFetched,      setDiagFetched]      = useState(false);
+
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  // Load doctors and available rooms when form mounts
+  const fetchDiagnosesForPatient = (pid) => {
+    if (!pid) return;
+    setDiagLoading(true);
+    getPatientHistory(pid)
+      .then((res) => { if (res.success) setDiagnosisOptions(res.data.diagnoses ?? []); })
+      .catch(() => setError('Failed to load diagnoses for that patient.'))
+      .finally(() => { setDiagLoading(false); setDiagFetched(true); });
+  };
+
+  const handlePatientIdChange = (e) => {
+    const value = e.target.value;
+    setForm((f) => ({ ...f, patient_id: value, diagnosis_id: '' }));
+    setDiagnosisOptions([]);
+    setDiagFetched(false);
+  };
+
+  const handlePatientIdBlur = () => fetchDiagnosesForPatient(form.patient_id);
+
+  // Load doctors and available rooms when form mounts; also look up diagnoses
+  // for the patient if one was already supplied (e.g. from PatientDetailPage)
   useEffect(() => {
     Promise.all([getActiveDoctors(), getAllRooms()])
       .then(([docRes, roomRes]) => {
@@ -30,6 +61,8 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
       })
       .catch(() => setError('Failed to load doctors or rooms.'))
       .finally(() => setFetching(false));
+
+    if (form.patient_id) fetchDiagnosesForPatient(form.patient_id);
   }, []);
 
   const handleSubmit = (e) => {
@@ -55,20 +88,40 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
             id="af-pat"
             type="number"
             value={form.patient_id}
-            onChange={set('patient_id')}
+            onChange={handlePatientIdChange}
+            onBlur={handlePatientIdBlur}
             placeholder="Patient ID"
             required
           />
         </div>
         <div className="form-group">
-          <label htmlFor="af-diag">Diagnosis ID</label>
-          <input
-            id="af-diag"
-            type="number"
-            value={form.diagnosis_id}
-            onChange={set('diagnosis_id')}
-            placeholder="Linked diagnosis (optional)"
-          />
+          <label htmlFor="af-diag">Diagnosis</label>
+          <div style={{ overflow: 'hidden', width: '100%' }}>
+            <select
+              id="af-diag"
+              value={form.diagnosis_id}
+              onChange={set('diagnosis_id')}
+              size="1"
+              style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              <option value="">— Select diagnosis —</option>
+              {diagnosisOptions.map((d) => (
+                <option key={d.diagnosis_id} value={d.diagnosis_id}>
+                  {diagnosisLabel(d)}
+                </option>
+              ))}
+            </select>
+          </div>
+          {diagLoading && (
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+              Loading diagnoses…
+            </span>
+          )}
+          {!diagLoading && diagFetched && diagnosisOptions.length === 0 && (
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+              No diagnoses recorded for this patient yet.
+            </span>
+          )}
         </div>
       </div>
 
