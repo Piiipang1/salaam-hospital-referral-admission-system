@@ -2,7 +2,11 @@ const db = require('../config/db');
 
 // POST /api/referrals
 const createReferral = async (req, res) => {
-  const { diagnosis_id, referring_doctor_id, assigned_doctor_id } = req.body;
+  const { diagnosis_id, assigned_doctor_id, e_signature } = req.body;
+
+  // A doctor is always recorded as their own referrer (cannot spoof another doctor);
+  // an admin may create a referral on behalf of a doctor via referring_doctor_id in the body.
+  const referring_doctor_id = req.user.role === 'doctor' ? req.user.linked_id : req.body.referring_doctor_id;
 
   // Multer stores the file (if any) in req.file
   const file_attachment = req.file ? req.file.filename : null;
@@ -14,9 +18,9 @@ const createReferral = async (req, res) => {
   try {
     const [result] = await db.query(
       `INSERT INTO referrals
-         (diagnosis_id, referring_doctor_id, assigned_doctor_id, referral_date, status, file_attachment)
-       VALUES (?, ?, ?, NOW(), 'Pending', ?)`,
-      [diagnosis_id, referring_doctor_id || null, assigned_doctor_id, file_attachment]
+         (diagnosis_id, referring_doctor_id, assigned_doctor_id, referral_date, status, file_attachment, e_signature)
+       VALUES (?, ?, ?, NOW(), 'Pending', ?, ?)`,
+      [diagnosis_id, referring_doctor_id || null, assigned_doctor_id, file_attachment, e_signature || null]
     );
 
     await db.query(
@@ -55,6 +59,26 @@ const createReferral = async (req, res) => {
             `🔄 You have a new referral assigned: ${detail.patient_name ?? `Patient #`}${condPart}. Referral ID: ${result.insertId}.`,
             result.insertId,
           ]
+        );
+      }
+
+      // Also notify all active admins for oversight of referral activity
+      const [admins] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
+      );
+      const adminMsg =
+        `🔄 New referral created: ${detail?.patient_name ?? 'a patient'} referred for ` +
+        `${detail?.medical_condition ?? 'an unspecified condition'}. Referral ID: ${result.insertId}.`;
+      const notifRows = [];
+      for (const admin of admins) {
+        if (admin.user_id !== req.user.user_id) {
+          notifRows.push([admin.user_id, adminMsg, result.insertId]);
+        }
+      }
+      if (notifRows.length > 0) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+          [notifRows]
         );
       }
     } catch (notifErr) {
@@ -199,10 +223,11 @@ const updateReferralStatus = async (req, res) => {
           [req.params.id]
         );
 
+        const statusEmoji = status === 'Accepted'  ? '✅'
+                          : status === 'Completed' ? '🏅'
+                          :                          '❌'; // Cancelled
+
         if (detail?.referring_user_id) {
-          const statusEmoji = status === 'Accepted'  ? '✅'
-                            : status === 'Completed' ? '🏅'
-                            :                          '❌'; // Cancelled
           const condPart = detail.medical_condition ? ` for ${detail.medical_condition}` : '';
           await db.query(
             'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
@@ -211,6 +236,24 @@ const updateReferralStatus = async (req, res) => {
               `${statusEmoji} Your referral${condPart} for ${detail.patient_name ?? 'a patient'} has been marked ${status}. Referral ID: ${req.params.id}.`,
               parseInt(req.params.id),
             ]
+          );
+        }
+
+        // Also notify all active admins for oversight of referral activity
+        const [admins] = await db.query(
+          "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
+        );
+        const adminMsg = `${statusEmoji} Referral #${req.params.id} for ${detail?.patient_name ?? 'a patient'} has been marked ${status}.`;
+        const notifRows = [];
+        for (const admin of admins) {
+          if (admin.user_id !== req.user.user_id) {
+            notifRows.push([admin.user_id, adminMsg, parseInt(req.params.id)]);
+          }
+        }
+        if (notifRows.length > 0) {
+          await db.query(
+            'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+            [notifRows]
           );
         }
       } catch (notifErr) {

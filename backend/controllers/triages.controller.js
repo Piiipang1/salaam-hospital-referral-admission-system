@@ -2,7 +2,13 @@ const db = require('../config/db');
 
 // POST /api/triages
 const createTriage = async (req, res) => {
-  const { patient_id, employee_id, visit_room_id, triage_level, notes } = req.body;
+  const { patient_id, visit_room_id, triage_level, notes } = req.body;
+
+  // A nurse/staff is always recorded as their own employee_id (cannot spoof another
+  // employee); an admin may record a triage on behalf of an employee via the body.
+  const employee_id = (req.user.role === 'nurse' || req.user.role === 'staff')
+    ? req.user.linked_id
+    : req.body.employee_id;
 
   if (!patient_id || !triage_level) {
     return res.status(400).json({ success: false, message: 'patient_id and triage_level are required.' });

@@ -3,7 +3,32 @@ const db = require('../config/db');
 // GET /api/rooms
 const getAllRooms = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM rooms ORDER BY room_type, bed_number');
+    const [rows] = await db.query(
+      `SELECT
+         r.*,
+         a.admission_id,
+         a.admission_type,
+         a.admission_date,
+         CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+         (
+           SELECT d.medical_condition
+           FROM diagnoses d
+           WHERE d.patient_id = a.patient_id
+           ORDER BY d.diagnosis_date DESC
+           LIMIT 1
+         ) AS patient_condition,
+         (
+           SELECT t.triage_level
+           FROM triages t
+           WHERE t.patient_id = a.patient_id
+           ORDER BY t.triage_datetime DESC
+           LIMIT 1
+         ) AS triage_level
+       FROM rooms r
+       LEFT JOIN admissions a ON a.room_id = r.room_id AND a.status = 'Active'
+       LEFT JOIN patients p ON p.patient_id = a.patient_id
+       ORDER BY r.room_type, r.bed_number`
+    );
     return res.status(200).json({ success: true, data: rows });
   } catch (err) {
     console.error('getAllRooms error:', err);

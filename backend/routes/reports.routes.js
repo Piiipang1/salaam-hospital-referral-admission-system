@@ -5,12 +5,12 @@ const auth = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
 
 // GET /api/reports/admissions
-router.get('/admissions', auth, requireRole('admin', 'doctor'), reportsController.admissionsReport);
+router.get('/admissions', auth, requireRole('admin'), reportsController.admissionsReport);
 
 // GET /api/reports/referrals
-router.get('/referrals', auth, requireRole('admin', 'doctor'), reportsController.referralsReport);
+router.get('/referrals', auth, requireRole('admin'), reportsController.referralsReport);
 
 // GET /api/reports/turnaround
-router.get('/turnaround', auth, requireRole('admin', 'doctor'), reportsController.turnaroundReport);
+router.get('/turnaround', auth, requireRole('admin'), reportsController.turnaroundReport);
 
 module.exports = router;
