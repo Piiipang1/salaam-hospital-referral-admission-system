@@ -544,6 +544,23 @@ hr {
   color: var(--color-text-disabled);
 }
 
+/* ── Signature Canvas (inside ReferralForm) ─────────────── */
+.signature-canvas {
+  display: block;
+  width: 100%;
+  max-width: 400px;
+  height: 150px;
+  background: #ffffff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  touch-action: none;
+}
+.signature-actions {
+  display: flex;
+  margin-top: var(--space-3);
+}
+
 /* ── Lab Results List (inside Diagnoses tab cards) ──────── */
 .lab-results-section {
   margin-top: var(--space-4);

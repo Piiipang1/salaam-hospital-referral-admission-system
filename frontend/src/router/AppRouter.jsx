@@ -67,11 +67,11 @@ const AppRouter = () => {
           <Route path="rooms"         element={<RoomsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
 
-          {/* admin + doctor only */}
+          {/* admin only */}
           <Route
             path="reports"
             element={
-              <RoleRoute roles={['admin', 'doctor']}>
+              <RoleRoute roles={['admin']}>
                 <ReportsPage />
               </RoleRoute>
             }
