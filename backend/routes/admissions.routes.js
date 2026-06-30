@@ -14,6 +14,6 @@ router.get('/:id', auth, admissionsController.getAdmissionById);
 router.post('/', auth, requireRole('admin', 'nurse', 'staff', 'doctor'), admissionsController.createAdmission);
 
 // PUT /api/admissions/:id/discharge
-router.put('/:id/discharge', auth, requireRole('admin', 'nurse', 'staff', 'doctor'), admissionsController.dischargePatient);
+router.put('/:id/discharge', auth, requireRole('admin', 'doctor'), admissionsController.dischargePatient);
 
 module.exports = router;

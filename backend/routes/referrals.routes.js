@@ -9,7 +9,7 @@ const { upload }  = require('../middleware/upload');
 router.post(
   '/',
   auth,
-  requireRole('admin', 'doctor', 'nurse', 'staff'),
+  requireRole('admin', 'doctor'),
   upload.single('file_attachment'),
   referralsController.createReferral
 );

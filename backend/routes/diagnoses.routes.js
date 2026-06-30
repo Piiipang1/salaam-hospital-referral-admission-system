@@ -17,6 +17,15 @@ router.put('/:id', auth, requireRole('admin', 'doctor'), diagnosesController.upd
 // POST /api/diagnoses/:id/treatments
 router.post('/:id/treatments', auth, requireRole('admin', 'doctor'), diagnosesController.addTreatment);
 
+// GET /api/diagnoses/:id/treatments
+router.get('/:id/treatments', auth, diagnosesController.getTreatments);
+
+// POST /api/diagnoses/:id/assessment
+router.post('/:id/assessment', auth, requireRole('admin', 'doctor'), diagnosesController.saveAssessment);
+
+// GET /api/diagnoses/:id/assessment
+router.get('/:id/assessment', auth, diagnosesController.getAssessment);
+
 // POST /api/diagnoses/:id/lab-results  (with file upload — clinical staff only)
 router.post('/:id/lab-results', auth, requireRole('admin', 'doctor', 'nurse'), upload.single('file_attachment'), diagnosesController.addLabResult);
 
