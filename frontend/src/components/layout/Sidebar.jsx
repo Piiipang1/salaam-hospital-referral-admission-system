@@ -1,20 +1,25 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  LayoutDashboard, Users, Siren, Repeat, BedDouble,
+  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canViewReports, canManageUsers } from '../../utils/roleGuard';
 import { ROLE_LABELS } from '../../utils/constants';
+import logo from '../../assets/logo.png';
 import './Sidebar.css';
 
 const NAV_ITEMS = [
-  { to: '/dashboard',     icon: '📊', label: 'Dashboard'       },
-  { to: '/patients',      icon: '🧑‍⚕️', label: 'Patients'        },
-  { to: '/triage',        icon: '🚨', label: 'Triage'           },
-  { to: '/referrals',     icon: '🔄', label: 'Referrals'        },
-  { to: '/admissions',    icon: '🏥', label: 'Admissions'       },
-  { to: '/rooms',         icon: '🛏️', label: 'Rooms'            },
-  { to: '/notifications', icon: '🔔', label: 'Notifications'    },
-  { to: '/reports',       icon: '📈', label: 'Reports',         roles: ['admin'] },
-  { to: '/users',         icon: '👤', label: 'User Management', roles: ['admin'] },
-  { to: '/audit',         icon: '🔍', label: 'Audit Trail',     roles: ['admin'] },
+  { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard'       },
+  { to: '/patients',      icon: Users,           label: 'Patients'        },
+  { to: '/triage',        icon: Siren,           label: 'Triage'           },
+  { to: '/referrals',     icon: Repeat,          label: 'Referrals'        },
+  { to: '/admissions',    icon: BedDouble,       label: 'Admissions'       },
+  { to: '/rooms',         icon: DoorOpen,        label: 'Rooms'            },
+  { to: '/notifications', icon: Bell,            label: 'Notifications'    },
+  { to: '/reports',       icon: BarChart3,       label: 'Reports',         roles: ['admin'] },
+  { to: '/users',         icon: UserCog,         label: 'User Management', roles: ['admin'] },
+  { to: '/audit',         icon: ScrollText,      label: 'Audit Trail',     roles: ['admin'] },
 ];
 
 const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
@@ -42,7 +47,7 @@ const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
       <aside className={`sidebar${collapsed ? ' sidebar--collapsed' : ''}${mobileOpen ? ' sidebar--mobile-open' : ''}`}>
         {/* Brand */}
         <div className="sidebar__brand">
-          <span className="sidebar__brand-icon">🏥</span>
+          <img src={logo} alt="Salaam Hospital" className="sidebar__brand-logo" />
           {!collapsed && (
             <div className="sidebar__brand-text">
               <span className="sidebar__brand-name">Salaam</span>
@@ -53,20 +58,23 @@ const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
 
         {/* Navigation */}
         <nav className="sidebar__nav" aria-label="Main navigation">
-          {visibleItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `sidebar__link${isActive ? ' sidebar__link--active' : ''}`
-              }
-              onClick={onClose}
-              title={collapsed ? item.label : undefined}
-            >
-              <span className="sidebar__link-icon">{item.icon}</span>
-              {!collapsed && <span className="sidebar__link-label">{item.label}</span>}
-            </NavLink>
-          ))}
+          {visibleItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `sidebar__link${isActive ? ' sidebar__link--active' : ''}`
+                }
+                onClick={onClose}
+                title={collapsed ? item.label : undefined}
+              >
+                <span className="sidebar__link-icon"><Icon size={18} /></span>
+                {!collapsed && <span className="sidebar__link-label">{item.label}</span>}
+              </NavLink>
+            );
+          })}
         </nav>
 
         {/* User + Logout */}
@@ -88,7 +96,7 @@ const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
             title="Logout"
             aria-label="Logout"
           >
-            <span>🚪</span>
+            <span><LogOut size={16} /></span>
             {!collapsed && <span>Logout</span>}
           </button>
         </div>
