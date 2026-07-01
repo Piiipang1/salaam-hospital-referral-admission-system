@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Alert from '../../components/ui/Alert';
 import Button from '../../components/ui/Button';
+import logo from '../../assets/logo.png';
 import './LoginPage.css';
 
 const LoginPage = () => {
@@ -47,7 +48,9 @@ const LoginPage = () => {
       <div className="login-card">
         {/* Brand */}
         <div className="login-card__brand">
-          <div className="login-card__brand-icon">🏥</div>
+          <div className="login-card__brand-icon">
+            <img src={logo} alt="Salaam Hospital" className="login-card__brand-logo" />
+          </div>
           <div>
             <h1 className="login-card__brand-name">Salaam Hospital</h1>
             <p className="login-card__brand-sub">Referral &amp; Admission System</p>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { Download } from 'lucide-react';
 import { getActivityLogs, getActivityLogsMeta } from '../../api/audit.api';
 import Table  from '../../components/ui/Table';
 import Alert  from '../../components/ui/Alert';
@@ -176,7 +177,7 @@ const AuditPage = () => {
           onClick={() => exportCSV(rows)}
           disabled={rows.length === 0}
         >
-          ⬇ Export CSV
+          <Download size={14} /> Export CSV
         </Button>
       </div>
 
