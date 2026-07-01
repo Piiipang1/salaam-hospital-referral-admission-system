@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import {
+  Stethoscope, Building2, ClipboardList, FlaskConical,
+  Siren, BedDouble, Users, Repeat,
+} from 'lucide-react';
 import { getDashboardStats, getDashboardRecentActivity, getDashboardMyStats } from '../../api/dashboard.api';
 import { useAuth } from '../../context/AuthContext';
 import StatCard from '../../components/ui/StatCard';
@@ -61,7 +65,7 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
   return (
     <section className="role-section">
       <div className="role-section__header">
-        <span className="role-section__badge role-section__badge--doctor">🩺 My Dashboard</span>
+        <span className="role-section__badge role-section__badge--doctor"><Stethoscope size={16} /> My Dashboard</span>
         <h3 className="role-section__title">Doctor Overview</h3>
       </div>
 
@@ -85,7 +89,7 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
       <div className="activity-grid">
         <ActivityPanel
           title="My Pending Referrals"
-          icon="📋"
+          icon={<ClipboardList size={18} />}
           loading={loading}
           items={pendingRefs}
           emptyMsg="No pending referrals assigned to you."
@@ -96,7 +100,7 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
               className="activity-item"
               onClick={() => navigate('/referrals')}
             >
-              <div className="activity-item__avatar activity-item__avatar--referral">📋</div>
+              <div className="activity-item__avatar activity-item__avatar--referral"><ClipboardList size={18} /></div>
               <div className="activity-item__body">
                 <p className="activity-item__name">{r.patient_name || `Patient #${r.patient_id}`}</p>
                 <p className="activity-item__meta">
@@ -114,7 +118,7 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
 
         <ActivityPanel
           title="Today's Diagnoses"
-          icon="🔬"
+          icon={<FlaskConical size={18} />}
           loading={loading}
           items={todayDiag}
           emptyMsg="No diagnoses recorded today."
@@ -125,7 +129,7 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
               className="activity-item"
               onClick={() => navigate(`/patients/${d.patient_id}`)}
             >
-              <div className="activity-item__avatar activity-item__avatar--diagnosis">🔬</div>
+              <div className="activity-item__avatar activity-item__avatar--diagnosis"><FlaskConical size={18} /></div>
               <div className="activity-item__body">
                 <p className="activity-item__name">{d.patient_name || `Patient #${d.patient_id}`}</p>
                 <p className="activity-item__meta">{d.medical_condition || '—'}</p>
@@ -151,7 +155,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
   return (
     <section className="role-section">
       <div className="role-section__header">
-        <span className="role-section__badge role-section__badge--nurse">🏥 My Dashboard</span>
+        <span className="role-section__badge role-section__badge--nurse"><Building2 size={16} /> My Dashboard</span>
         <h3 className="role-section__title">Today's Workload</h3>
       </div>
 
@@ -175,7 +179,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
       <div className="activity-grid">
         <ActivityPanel
           title="Today's Triages"
-          icon="🚨"
+          icon={<Siren size={18} />}
           loading={loading}
           items={triages}
           emptyMsg="No triages recorded today."
@@ -186,7 +190,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
               className="activity-item"
               onClick={() => navigate(`/patients/${t.patient_id}`)}
             >
-              <div className="activity-item__avatar activity-item__avatar--triage">🚨</div>
+              <div className="activity-item__avatar activity-item__avatar--triage"><Siren size={18} /></div>
               <div className="activity-item__body">
                 <p className="activity-item__name">{t.patient_name || `Patient #${t.patient_id}`}</p>
                 <p className="activity-item__meta">{t.notes ? t.notes.substring(0, 60) + (t.notes.length > 60 ? '…' : '') : 'No notes'}</p>
@@ -201,7 +205,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
 
         <ActivityPanel
           title="Pending Admissions"
-          icon="🛏️"
+          icon={<BedDouble size={18} />}
           loading={loading}
           items={admissions}
           emptyMsg="No pending admissions."
@@ -212,7 +216,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
               className="activity-item"
               onClick={() => navigate('/admissions')}
             >
-              <div className="activity-item__avatar activity-item__avatar--admission">🛏️</div>
+              <div className="activity-item__avatar activity-item__avatar--admission"><BedDouble size={18} /></div>
               <div className="activity-item__body">
                 <p className="activity-item__name">{a.patient_name || `Patient #${a.patient_id}`}</p>
                 <p className="activity-item__meta">
@@ -294,24 +298,24 @@ const DashboardPage = () => {
       {/* ── Stat cards — admin sees all 6; others see summary ── */}
       <div className="dashboard-grid">
         {role === 'admin' && <>
-          <StatCard icon="🧑‍⚕️" label="Total Patients"    value={stats?.total_patients    ?? 0} color="info"    onClick={() => navigate('/patients')}   />
-          <StatCard icon="🏥"   label="Active Admissions" value={stats?.active_admissions  ?? 0} color="primary" onClick={() => navigate('/admissions')}  />
-          <StatCard icon="🛏️"  label="Available Rooms"   value={stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')}       />
-          <StatCard icon="🔄"   label="Pending Referrals" value={stats?.pending_referrals  ?? 0} color="warning" onClick={() => navigate('/referrals')}   />
-          <StatCard icon="🚨"   label="Today's Triages"   value={stats?.todays_triages     ?? 0} color="danger"  onClick={() => navigate('/triage')}      />
-          <StatCard icon="👨‍⚕️" label="Active Doctors"   value={stats?.total_doctors      ?? 0} color="info"                                            />
+          <StatCard icon={Users}      label="Total Patients"    value={stats?.total_patients    ?? 0} color="info"    onClick={() => navigate('/patients')}   />
+          <StatCard icon={Building2}  label="Active Admissions" value={stats?.active_admissions  ?? 0} color="primary" onClick={() => navigate('/admissions')}  />
+          <StatCard icon={BedDouble}  label="Available Rooms"   value={stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')}       />
+          <StatCard icon={Repeat}     label="Pending Referrals" value={stats?.pending_referrals  ?? 0} color="warning" onClick={() => navigate('/referrals')}   />
+          <StatCard icon={Siren}      label="Today's Triages"   value={stats?.todays_triages     ?? 0} color="danger"  onClick={() => navigate('/triage')}      />
+          <StatCard icon={Users}      label="Active Doctors"   value={stats?.total_doctors      ?? 0} color="info"                                            />
         </>}
 
         {role === 'doctor' && <>
-          <StatCard icon="📋" label="Pending Referrals" value={myData?.stats?.my_pending_referrals ?? 0} color="warning" onClick={() => navigate('/referrals')} />
-          <StatCard icon="🧑‍⚕️" label="My Active Patients" value={myData?.stats?.my_active_patients ?? 0} color="primary" onClick={() => navigate('/patients')} />
-          <StatCard icon="🔬" label="Today's Diagnoses"  value={myData?.stats?.my_todays_diagnoses  ?? 0} color="info"    onClick={() => navigate('/triage')}   />
+          <StatCard icon={ClipboardList} label="Pending Referrals" value={myData?.stats?.my_pending_referrals ?? 0} color="warning" onClick={() => navigate('/referrals')} />
+          <StatCard icon={Users}         label="My Active Patients" value={myData?.stats?.my_active_patients ?? 0} color="primary" onClick={() => navigate('/patients')} />
+          <StatCard icon={FlaskConical}  label="Today's Diagnoses"  value={myData?.stats?.my_todays_diagnoses  ?? 0} color="info"    onClick={() => navigate('/triage')}   />
         </>}
 
         {(role === 'nurse' || role === 'staff') && <>
-          <StatCard icon="🚨" label="Today's Triages"     value={myData?.stats?.todays_triages     ?? 0} color="danger"  onClick={() => navigate('/triage')}      />
-          <StatCard icon="🛏️" label="Available Rooms"    value={myData?.stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')}       />
-          <StatCard icon="🏥" label="Pending Admissions"  value={myData?.stats?.pending_admissions ?? 0} color="warning" onClick={() => navigate('/admissions')}  />
+          <StatCard icon={Siren}     label="Today's Triages"     value={myData?.stats?.todays_triages     ?? 0} color="danger"  onClick={() => navigate('/triage')}      />
+          <StatCard icon={BedDouble} label="Available Rooms"    value={myData?.stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')}       />
+          <StatCard icon={Building2} label="Pending Admissions"  value={myData?.stats?.pending_admissions ?? 0} color="warning" onClick={() => navigate('/admissions')}  />
         </>}
       </div>
 
@@ -328,11 +332,11 @@ const DashboardPage = () => {
         <h3 className="activity-section__heading">Recent Activity</h3>
         <div className="activity-grid">
           <ActivityPanel
-            title="Recent Admissions" icon="🏥" loading={loadAct}
+            title="Recent Admissions" icon={<Building2 size={18} />} loading={loadAct}
             items={recentAdmissions} emptyMsg="No admissions recorded yet."
             renderItem={(a) => (
               <button key={a.admission_id} className="activity-item" onClick={() => navigate('/admissions')}>
-                <div className="activity-item__avatar activity-item__avatar--admission">🛏️</div>
+                <div className="activity-item__avatar activity-item__avatar--admission"><BedDouble size={18} /></div>
                 <div className="activity-item__body">
                   <p className="activity-item__name">{a.patient_name || `Patient #${a.patient_id}`}</p>
                   <p className="activity-item__meta">
@@ -348,11 +352,11 @@ const DashboardPage = () => {
             )}
           />
           <ActivityPanel
-            title="Recent Referrals" icon="🔄" loading={loadAct}
+            title="Recent Referrals" icon={<Repeat size={18} />} loading={loadAct}
             items={recentReferrals} emptyMsg="No referrals recorded yet."
             renderItem={(r) => (
               <button key={r.referral_id} className="activity-item" onClick={() => navigate('/referrals')}>
-                <div className="activity-item__avatar activity-item__avatar--referral">🔄</div>
+                <div className="activity-item__avatar activity-item__avatar--referral"><Repeat size={18} /></div>
                 <div className="activity-item__body">
                   <p className="activity-item__name">{r.patient_name || `Patient #${r.patient_id}`}</p>
                   <p className="activity-item__meta">
