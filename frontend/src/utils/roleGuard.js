@@ -31,3 +31,6 @@ export const canManageUsers = (role) => hasRole(role, ['admin']);
 
 /** Returns true if user can access reports */
 export const canViewReports = (role) => hasRole(role, ['admin']);
+
+/** Returns true if user can initiate an emergency triage for an unidentified patient */
+export const canEmergencyTriage = (role) => hasRole(role, ['admin', 'doctor', 'nurse', 'staff']);

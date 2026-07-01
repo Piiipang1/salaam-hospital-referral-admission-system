@@ -118,7 +118,19 @@ const PatientsPage = () => {
   // ── Table columns ─────────────────────────────────────────────
   const columns = [
     { key: 'patient_id',     label: 'ID',       width: '60px' },
-    { key: 'full_name',      label: 'Full Name', render: (r) => `${r.first_name} ${r.last_name}` },
+    { key: 'full_name', label: 'Full Name', render: (r) => (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        {r.first_name} {r.last_name}
+        {r.is_unidentified ? (
+          <span style={{
+            fontSize: 'var(--font-size-xs)', padding: '2px 8px',
+            borderRadius: 'var(--radius-full)',
+            background: 'var(--color-danger-muted)', color: 'var(--color-danger)',
+            border: '1px solid var(--color-danger)', fontWeight: 600, whiteSpace: 'nowrap',
+          }}>⚠ Unidentified</span>
+        ) : null}
+      </span>
+    )},
     { key: 'sex',            label: 'Sex',       width: '80px' },
     { key: 'age',            label: 'Age',       width: '70px', render: (r) => calcAge(r.date_of_birth) },
     { key: 'contact_number', label: 'Contact' },

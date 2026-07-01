@@ -28,6 +28,16 @@ import './PatientDetailPage.css';
 
 const TABS = ['Triage', 'Diagnoses', 'Treatment Plan', 'Referrals', 'Admissions', 'Documents'];
 
+const UnidentifiedBadge = () => (
+  <span style={{
+    fontSize: 'var(--font-size-xs)', padding: '2px 8px',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--color-danger-muted)', color: 'var(--color-danger)',
+    border: '1px solid var(--color-danger)', fontWeight: 600, whiteSpace: 'nowrap',
+    flexShrink: 0,
+  }}>⚠ Unidentified</span>
+);
+
 // Build the public URL for an uploaded file
 const fileUrl = (filename) =>
   `${import.meta.env.VITE_API_URL || ''}/uploads/${filename}`;
@@ -158,6 +168,16 @@ const PatientDetailPage = () => {
   if (loading) return <Spinner />;
   if (!patient) return <Alert type="error" message="Patient not found." />;
 
+  // Placeholder sentinel values used by createEmergencyTriage — clear them so
+  // the Complete Registration form opens with empty fields for real input.
+  const cleanedForRegistration = {
+    ...patient,
+    first_name:    patient.first_name === 'Unknown' ? '' : patient.first_name,
+    last_name:     /^Patient-\d/.test(patient.last_name ?? '') ? '' : patient.last_name,
+    sex:           patient.sex === 'Other' ? '' : patient.sex,
+    date_of_birth: String(patient.date_of_birth ?? '').startsWith('1900') ? '' : patient.date_of_birth,
+  };
+
   const triages   = history.triages   ?? [];
   const diagnoses = history.diagnoses ?? [];
   const referrals = history.referrals ?? [];
@@ -176,9 +196,34 @@ const PatientDetailPage = () => {
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
+      {/* Unidentified patient banner */}
+      {patient.is_unidentified ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 'var(--space-4)', padding: 'var(--space-4) var(--space-5)',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--color-danger-muted)', border: '1px solid var(--color-danger)',
+          color: 'var(--color-danger)',
+        }}>
+          <span style={{ fontWeight: 500 }}>
+            ⚠ This is an unidentified emergency patient. Complete registration when identity is known.
+          </span>
+          {canManagePatients(user?.role) && (
+            <Button size="sm" variant="danger" onClick={() => setModal('complete-registration')}>
+              Complete Registration
+            </Button>
+          )}
+        </div>
+      ) : null}
+
       {/* Patient info card */}
       <Card
-        title={`${patient.first_name} ${patient.last_name}`}
+        title={
+          <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+            {patient.first_name} {patient.last_name}
+            {patient.is_unidentified ? <UnidentifiedBadge /> : null}
+          </span>
+        }
         action={
           canManagePatients(user?.role) && (
             <Button size="sm" variant="outline" onClick={() => setModal('edit')}>Edit Info</Button>
@@ -501,6 +546,9 @@ const PatientDetailPage = () => {
 
       {/* Modals */}
       <Modal isOpen={modal === 'edit'}      onClose={() => setModal(null)} title="Edit Patient"     size="lg"><PatientForm  initial={patient} onSubmit={act((d) => updatePatient(id, d))} loading={saving} /></Modal>
+      <Modal isOpen={modal === 'complete-registration'} onClose={() => setModal(null)} title="Complete Patient Registration" size="lg">
+        <PatientForm initial={cleanedForRegistration} onSubmit={act((d) => updatePatient(id, { ...d, is_unidentified: 0 }))} loading={saving} />
+      </Modal>
       <Modal isOpen={modal === 'triage'}    onClose={() => setModal(null)} title="Record Triage"    size="md"><TriageForm    patientId={id}    onSubmit={act(createTriage)}    loading={saving} /></Modal>
       <Modal isOpen={modal === 'diagnosis'} onClose={() => setModal(null)} title="Record Diagnosis" size="md"><DiagnosisForm patientId={id}    onSubmit={act(createDiagnosis)} loading={saving} /></Modal>
       {/* Referral modal — ReferralForm builds FormData; act() passes it straight through */}

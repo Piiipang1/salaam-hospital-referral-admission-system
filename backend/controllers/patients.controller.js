@@ -51,7 +51,7 @@ const getAllPatients = async (req, res) => {
 
     const [rows] = await db.query(
       `SELECT patient_id, first_name, last_name, sex, date_of_birth,
-              contact_number, address, created_at
+              contact_number, address, is_unidentified, created_at
        FROM patients
        ${where}
        ORDER BY created_at DESC LIMIT ? OFFSET ?`,
@@ -262,7 +262,25 @@ const updatePatient = async (req, res) => {
     first_name, last_name, sex, date_of_birth,
     contact_number, address,
     emergency_contact_name, emergency_contact_number,
+    is_unidentified,
   } = req.body;
+
+  // When completing registration of an unidentified patient, the real identity
+  // fields must be present and must not still be the placeholder sentinel values.
+  const completingRegistration = is_unidentified === 0 || is_unidentified === '0';
+  if (completingRegistration) {
+    const placeholderFirstName  = !first_name  || first_name.trim()  === 'Unknown';
+    const placeholderLastName   = !last_name   || /^Patient-\d/.test(last_name.trim());
+    const placeholderSex        = !sex         || sex === 'Other';
+    const placeholderDob        = !date_of_birth || date_of_birth === '1900-01-01';
+
+    if (placeholderFirstName || placeholderLastName || placeholderSex || placeholderDob) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide the patient's real identity details to complete registration.",
+      });
+    }
+  }
 
   try {
     await db.query(
@@ -274,10 +292,12 @@ const updatePatient = async (req, res) => {
         contact_number = COALESCE(?, contact_number),
         address = COALESCE(?, address),
         emergency_contact_name = COALESCE(?, emergency_contact_name),
-        emergency_contact_number = COALESCE(?, emergency_contact_number)
+        emergency_contact_number = COALESCE(?, emergency_contact_number),
+        is_unidentified = COALESCE(?, is_unidentified)
        WHERE patient_id = ?`,
       [first_name, last_name, sex, date_of_birth, contact_number, address,
-       emergency_contact_name, emergency_contact_number, req.params.id]
+       emergency_contact_name, emergency_contact_number,
+       is_unidentified ?? null, req.params.id]
     );
 
     await db.query(

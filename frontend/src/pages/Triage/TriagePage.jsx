@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllTriages, createTriage } from '../../api/triages.api';
+import { Siren } from 'lucide-react';
+import { getAllTriages, createTriage, createEmergencyTriage } from '../../api/triages.api';
 import { useAuth } from '../../context/AuthContext';
-import { canManageTriage } from '../../utils/roleGuard';
+import { canManageTriage, canEmergencyTriage } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -39,6 +40,11 @@ const TriagePage = () => {
   const [modal,   setModal]   = useState(false);
   const [saving,  setSaving]  = useState(false);
 
+  // ── Emergency triage modal state ─────────────────────────────
+  const [emergencyModal,  setEmergencyModal]  = useState(false);
+  const [emergencyForm,   setEmergencyForm]   = useState({ triage_level: 'Critical', notes: '' });
+  const [emergencySaving, setEmergencySaving] = useState(false);
+
   // ── Data fetching ─────────────────────────────────────────────
   const load = useCallback(() => {
     setLoading(true);
@@ -70,6 +76,19 @@ const TriagePage = () => {
       load();
     } catch (err) { setError(err.response?.data?.message || 'Failed to save triage.'); }
     finally { setSaving(false); }
+  };
+
+  const handleEmergencyTriage = async () => {
+    setEmergencySaving(true);
+    try {
+      const result = await createEmergencyTriage(emergencyForm);
+      setEmergencyModal(false);
+      navigate(`/patients/${result.patient_id}`);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Emergency triage failed.');
+    } finally {
+      setEmergencySaving(false);
+    }
   };
 
   const clearFilters = () => { setLevel(''); setFromDate(''); setToDate(''); };
@@ -109,11 +128,22 @@ const TriagePage = () => {
             {hasActiveFilters ? ' (filtered)' : ''}
           </p>
         </div>
-        {canManageTriage(user?.role) && (
-          <Button id="create-triage-btn" variant="primary" onClick={() => setModal(true)}>
-            + Record Triage
-          </Button>
-        )}
+        <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+          {canEmergencyTriage(user?.role) && (
+            <Button
+              variant="danger"
+              onClick={() => { setEmergencyForm({ triage_level: 'Critical', notes: '' }); setEmergencyModal(true); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
+            >
+              <Siren size={16} /> Emergency Triage
+            </Button>
+          )}
+          {canManageTriage(user?.role) && (
+            <Button id="create-triage-btn" variant="primary" onClick={() => setModal(true)}>
+              + Record Triage
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* ── Alerts ── */}
@@ -194,6 +224,36 @@ const TriagePage = () => {
       {/* ── Create triage modal ── */}
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Record Triage" size="md">
         <TriageForm onSubmit={handleCreate} loading={saving} />
+      </Modal>
+
+      {/* ── Emergency triage modal ── */}
+      <Modal isOpen={emergencyModal} onClose={() => setEmergencyModal(false)} title="Emergency Triage" size="sm">
+        <div className="form-group">
+          <label htmlFor="et-level">Triage Level</label>
+          <select
+            id="et-level"
+            value={emergencyForm.triage_level}
+            onChange={(e) => setEmergencyForm((f) => ({ ...f, triage_level: e.target.value }))}
+          >
+            {TRIAGE_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </div>
+        <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
+          <label htmlFor="et-notes">Chief Complaint / Notes</label>
+          <textarea
+            id="et-notes"
+            rows={3}
+            value={emergencyForm.notes}
+            onChange={(e) => setEmergencyForm((f) => ({ ...f, notes: e.target.value }))}
+            placeholder="Describe presenting complaint or condition…"
+          />
+        </div>
+        <div className="form-actions">
+          <Button type="button" variant="secondary" onClick={() => setEmergencyModal(false)}>Cancel</Button>
+          <Button type="button" variant="danger" loading={emergencySaving} onClick={handleEmergencyTriage}>
+            Start Emergency Triage
+          </Button>
+        </div>
       </Modal>
 
     </div>

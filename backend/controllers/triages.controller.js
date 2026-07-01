@@ -235,4 +235,102 @@ const addVitalSigns = async (req, res) => {
   }
 };
 
-module.exports = { createTriage, getAllTriages, getTriageById, updateTriage, addVitalSigns };
+// POST /api/triages/emergency
+const createEmergencyTriage = async (req, res) => {
+  const triage_level = req.body.triage_level || 'Critical';
+  const notes        = req.body.notes || null;
+
+  const validLevels = ['Critical', 'Urgent', 'Non-Urgent'];
+  if (!validLevels.includes(triage_level)) {
+    return res.status(400).json({ success: false, message: `triage_level must be one of: ${validLevels.join(', ')}.` });
+  }
+
+  const employee_id = (req.user.role === 'nurse' || req.user.role === 'staff')
+    ? req.user.linked_id
+    : null;
+
+  const connection = await db.getConnection();
+  await connection.beginTransaction();
+
+  let newPatientId, triageId;
+  try {
+    // 1. Placeholder patient — last_name uses timestamp+random for uniqueness
+    const [patientResult] = await connection.query(
+      `INSERT INTO patients (first_name, last_name, sex, date_of_birth, is_unidentified)
+       VALUES ('Unknown', CONCAT('Patient-', UNIX_TIMESTAMP(), '-', FLOOR(RAND()*1000)), 'Other', '1900-01-01', 1)`
+    );
+    newPatientId = patientResult.insertId;
+
+    await connection.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'patients', ?)",
+      [req.user.user_id, newPatientId]
+    );
+
+    // 2. Triage record against the placeholder patient
+    const [triageResult] = await connection.query(
+      `INSERT INTO triages (patient_id, employee_id, triage_level, notes, triage_datetime)
+       VALUES (?, ?, ?, ?, NOW())`,
+      [newPatientId, employee_id, triage_level, notes]
+    );
+    triageId = triageResult.insertId;
+
+    await connection.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'triages', ?)",
+      [req.user.user_id, triageId]
+    );
+
+    await connection.commit();
+    connection.release();
+  } catch (txErr) {
+    await connection.rollback();
+    connection.release();
+    console.error('createEmergencyTriage transaction error:', txErr);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+
+  // ── Respond immediately ────────────────────────────────────────────────────
+  res.status(201).json({
+    success: true,
+    patient_id: newPatientId,
+    triage_id: triageId,
+    message: 'Emergency triage recorded. Patient marked unidentified.',
+  });
+
+  // ── Post-commit notifications (best-effort, non-blocking) ─────────────────
+  try {
+    const notifMsg = `🚨 EMERGENCY: An unidentified patient has been triaged as ${triage_level}. Immediate attention required. Patient ID: ${newPatientId}.`;
+    const notifRows = [];
+
+    const [admins] = await db.query(
+      "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
+    );
+    for (const a of admins) {
+      if (a.user_id !== req.user.user_id) notifRows.push([a.user_id, notifMsg, null]);
+    }
+
+    const [doctors] = await db.query(
+      "SELECT user_id FROM users WHERE role = 'doctor' AND is_active = 1"
+    );
+    for (const d of doctors) {
+      if (d.user_id !== req.user.user_id) notifRows.push([d.user_id, notifMsg, null]);
+    }
+
+    const [staff] = await db.query(
+      "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
+    );
+    for (const s of staff) {
+      if (s.user_id !== req.user.user_id) notifRows.push([s.user_id, notifMsg, null]);
+    }
+
+    if (notifRows.length > 0) {
+      await db.query(
+        'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+        [notifRows]
+      );
+    }
+  } catch (notifErr) {
+    console.warn('createEmergencyTriage: notification insert failed (non-fatal):', notifErr.message);
+  }
+};
+
+module.exports = { createTriage, getAllTriages, getTriageById, updateTriage, addVitalSigns, createEmergencyTriage };

@@ -100,6 +100,7 @@ CREATE TABLE patients (
     address                   TEXT            DEFAULT NULL,
     emergency_contact_name    VARCHAR(200)    DEFAULT NULL,
     emergency_contact_number  VARCHAR(20)     DEFAULT NULL,
+    is_unidentified           TINYINT(1)      NOT NULL DEFAULT 0,
     created_at                DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (patient_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
