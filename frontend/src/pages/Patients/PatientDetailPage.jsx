@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { FileText, Image, Paperclip, FlaskConical, ClipboardList } from 'lucide-react';
 import { getPatientById, getPatientHistory, updatePatient } from '../../api/patients.api';
 import { createTriage } from '../../api/triages.api';
 import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessment } from '../../api/diagnoses.api';
@@ -33,11 +34,11 @@ const fileUrl = (filename) =>
 
 // Pick a readable icon based on file extension
 const fileIcon = (filename = '') => {
-  if (!filename) return '📎';
+  if (!filename) return Paperclip;
   const ext = filename.split('.').pop().toLowerCase();
-  if (ext === 'pdf') return '📄';
-  if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return '🖼️';
-  return '📎';
+  if (ext === 'pdf') return FileText;
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext)) return Image;
+  return Paperclip;
 };
 
 const PatientDetailPage = () => {
@@ -263,10 +264,12 @@ const PatientDetailPage = () => {
                 <div className="lab-results-section">
                   <p className="text-sm font-medium lab-results-heading">Lab Results:</p>
                   <div className="lab-results-list">
-                    {d.lab_results.map((lr) => (
+                    {d.lab_results.map((lr) => {
+                      const LrIcon = fileIcon(lr.file_attachment);
+                      return (
                       <div key={lr.lab_result_id} className="lab-result-item">
                         <span className="lab-result-icon">
-                          {lr.file_attachment?.match(/\.pdf$/i) ? '📄' : '🖼️'}
+                          <LrIcon size={16} />
                         </span>
                         <div className="lab-result-info">
                           <a
@@ -283,7 +286,8 @@ const PatientDetailPage = () => {
                           )}
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -340,7 +344,9 @@ const PatientDetailPage = () => {
 
       {tab === 'Referrals' && (
         <div className="detail-list">
-          {referrals.length === 0 ? <p className="text-muted">No referral history.</p> : referrals.map((r) => (
+          {referrals.length === 0 ? <p className="text-muted">No referral history.</p> : referrals.map((r) => {
+            const RefFileIcon = fileIcon(r.file_attachment);
+            return (
             <Card key={r.referral_id} className="detail-item">
               <div className="detail-item__header">
                 <span>Referral #{r.referral_id}</span>
@@ -357,7 +363,7 @@ const PatientDetailPage = () => {
               {r.file_attachment && (
                 <div className="lab-results-section" style={{ marginTop: 'var(--space-3)' }}>
                   <div className="lab-result-item">
-                    <span className="lab-result-icon">{fileIcon(r.file_attachment)}</span>
+                    <span className="lab-result-icon"><RefFileIcon size={16} /></span>
                     <div className="lab-result-info">
                       <a
                         href={fileUrl(r.file_attachment)}
@@ -382,7 +388,8 @@ const PatientDetailPage = () => {
                 )}
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -412,7 +419,7 @@ const PatientDetailPage = () => {
             filename:  lr.file_attachment,
             date:      lr.date_conducted,
             source:    `Diagnosis #${d.diagnosis_id} — ${d.medical_condition}`,
-            sourceTag: '🔬 Lab Result',
+            sourceTag: <><FlaskConical size={14} /> Lab Result</>,
           }))
         );
 
@@ -424,7 +431,7 @@ const PatientDetailPage = () => {
           filename:  r.file_attachment,
           date:      r.referral_date,
           source:    `Referral #${r.referral_id}${r.assigned_doctor_name ? ` → ${r.assigned_doctor_name}` : ''}`,
-          sourceTag: '📋 Referral',
+          sourceTag: <><ClipboardList size={14} /> Referral</>,
         }));
 
         const allDocs = [...labDocs, ...refDocs].sort(
@@ -439,7 +446,7 @@ const PatientDetailPage = () => {
           <div className="lab-results-list">
             {allDocs.map((doc) => (
               <div key={doc.key} className="lab-result-item">
-                <span className="lab-result-icon">{doc.icon}</span>
+                <span className="lab-result-icon"><doc.icon size={16} /></span>
                 <div className="lab-result-info" style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                     <a

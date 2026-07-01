@@ -410,7 +410,9 @@ const ReportsPage = () => {
             <p className="report-chart-panel__title">
               Turnaround per Patient
               <span style={{ fontWeight:400, marginLeft:'var(--space-3)', fontSize:'var(--font-size-xs)' }}>
-                🟢 ≤30 min &nbsp; 🟡 ≤120 min &nbsp; 🔴 &gt;120 min
+                <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#10b981', verticalAlign:'middle' }} /> ≤30 min &nbsp;
+                <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#f59e0b', verticalAlign:'middle' }} /> ≤120 min &nbsp;
+                <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#ef4444', verticalAlign:'middle' }} /> &gt;120 min
               </span>
             </p>
             <div className="report-chart-panel__canvas-wrap">
