@@ -23,6 +23,9 @@ export const canCreateReferral = (role) => hasRole(role, ['admin', 'doctor']);
 /** Returns true if user can manage rooms */
 export const canManageRooms = (role) => hasRole(role, ['admin']);
 
+/** Returns true if user can assign a room to a pending admission */
+export const canAssignRoom = (role) => hasRole(role, ['admin', 'nurse', 'staff']);
+
 /** Returns true if user can manage user accounts */
 export const canManageUsers = (role) => hasRole(role, ['admin']);
 

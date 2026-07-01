@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Database, Download, RotateCcw, Trash2 } from 'lucide-react';
 import { getAllUsers, createUser, updateUser, deactivateUser } from '../../api/users.api';
 import { createBackup, listBackups, getBackupDownloadUrl, restoreBackup, deleteBackup } from '../../api/backup.api';
 import { formatDate } from '../../utils/formatDate';
@@ -192,7 +193,7 @@ const UserManagementPage = () => {
             onClick={handleCreateBackup}
             loading={backupRunning}
           >
-            {backupRunning ? 'Running backup…' : '⬇ Create Backup'}
+            {backupRunning ? 'Running backup…' : <><Download size={14} /> Create Backup</>}
           </Button>
         }
       >
@@ -245,7 +246,7 @@ const UserManagementPage = () => {
               }}>
                 {/* Filename + download link */}
                 <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)',minWidth:0}}>
-                  <span style={{fontSize:'1.1rem'}}>🗄️</span>
+                  <span style={{fontSize:'1.1rem'}}><Database size={18} /></span>
                   <a
                     href={getBackupDownloadUrl(b.filename)}
                     download={b.filename}
@@ -287,7 +288,7 @@ const UserManagementPage = () => {
                 {/* Actions: Download + Restore + Delete */}
                 <div style={{display:'flex',alignItems:'center',gap:'var(--space-2)',justifyContent:'flex-end'}}>
                   <a href={getBackupDownloadUrl(b.filename)} download={b.filename}>
-                    <Button size="sm" variant="outline" as="span">⬇ Download</Button>
+                    <Button size="sm" variant="outline" as="span"><Download size={14} /> Download</Button>
                   </a>
                   <Button
                     size="sm"
@@ -295,7 +296,7 @@ const UserManagementPage = () => {
                     onClick={() => setRestoreTarget(b.filename)}
                     title="Restore database from this backup"
                   >
-                    ♻ Restore
+                    <RotateCcw size={14} /> Restore
                   </Button>
                   <Button
                     size="sm"
@@ -303,7 +304,7 @@ const UserManagementPage = () => {
                     onClick={() => setDeleteTarget(b.filename)}
                     title="Permanently delete this backup file"
                   >
-                    🗑 Delete
+                    <Trash2 size={14} /> Delete
                   </Button>
                 </div>
               </div>
@@ -332,7 +333,7 @@ const UserManagementPage = () => {
         isOpen={!!restoreTarget}
         onClose={() => setRestoreTarget(null)}
         onConfirm={handleRestore}
-        title="⚠️ Restore Database"
+        title="Restore Database"
         message={
           `Are you sure you want to restore from:\n\n` +
           `"${restoreTarget}"\n\n` +
@@ -348,7 +349,7 @@ const UserManagementPage = () => {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDeleteBackup}
-        title="🗑️ Delete Backup"
+        title="Delete Backup"
         message={
           `Permanently delete this backup file?\n\n` +
           `"${deleteTarget}"\n\n` +

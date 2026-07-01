@@ -8,17 +8,17 @@
 
 /* ── Design Tokens ─────────────────────────────────────────── */
 :root {
-  /* Backgrounds */
-  --color-bg:           #0f1623;
-  --color-surface:      #1a2235;
-  --color-surface-2:    #212e45;
-  --color-border:       #2a3a55;
-  --color-border-light: #334466;
+  /* Backgrounds — now light */
+  --color-bg:           #ffffff;
+  --color-surface:      #f5f8f6;
+  --color-surface-2:    #e9f0ec;
+  --color-border:       #d8e3dc;
+  --color-border-light: #e8efe9;
 
-  /* Brand */
-  --color-primary:        #10b981;
-  --color-primary-hover:  #059669;
-  --color-primary-muted:  rgba(16, 185, 129, 0.12);
+  /* Brand — deeper medical green for contrast on white */
+  --color-primary:        #0e7a5f;
+  --color-primary-hover:  #0b5e49;
+  --color-primary-muted:  rgba(14, 122, 95, 0.10);
 
   /* Semantics */
   --color-danger:         #ef4444;
@@ -28,13 +28,13 @@
   --color-warning-muted:  rgba(245, 158, 11, 0.12);
   --color-info:           #3b82f6;
   --color-info-muted:     rgba(59, 130, 246, 0.12);
-  --color-success:        #10b981;
-  --color-success-muted:  rgba(16, 185, 129, 0.12);
+  --color-success:        #0e7a5f;
+  --color-success-muted:  rgba(14, 122, 95, 0.10);
 
-  /* Text */
-  --color-text:           #e2e8f0;
-  --color-text-muted:     #94a3b8;
-  --color-text-disabled:  #4a5568;
+  /* Text — now dark on light */
+  --color-text:           #1a2e28;
+  --color-text-muted:     #5b6b64;
+  --color-text-disabled:  #9aa8a1;
 
   /* Typography */
   --font-family:  'Inter', system-ui, -apple-system, sans-serif;

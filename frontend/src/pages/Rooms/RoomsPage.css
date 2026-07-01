@@ -1,5 +1,109 @@
 /* ── RoomsPage.css ──────────────────────────────────────────── */
 
+/* ── Level 1 — Ward overview ─────────────────────────────────── */
+.wards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+.ward-card {
+  position: relative;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition-base), transform var(--transition-base);
+}
+.ward-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+}
+.ward-card__icon { color: var(--color-primary); }
+.ward-card__info { display: flex; flex-direction: column; gap: 4px; }
+.ward-card__name {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-text);
+}
+.ward-card__counts {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+.ward-card__chevron {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Level 2 — Back to wards ─────────────────────────────────── */
+.ward-back-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-primary);
+}
+.ward-back-btn:hover { text-decoration: underline; }
+
+.room-card--clickable { cursor: pointer; }
+
+/* ── Bed patient info modal ──────────────────────────────────── */
+.bed-modal__empty {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--space-4) 0;
+}
+.bed-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.bed-modal__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.bed-modal__patient-name {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-text);
+}
+.bed-modal__field { display: flex; flex-direction: column; gap: 4px; }
+.bed-modal__label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+.bed-modal__value {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+.bed-modal__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
 /* Desktop: auto-fill from 180px min */
 .rooms-grid {
   display: grid;
