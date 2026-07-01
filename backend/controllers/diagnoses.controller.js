@@ -2,7 +2,11 @@ const db = require('../config/db');
 
 // POST /api/diagnoses
 const createDiagnosis = async (req, res) => {
-  const { patient_id, triage_id, doctor_id, medical_condition } = req.body;
+  const { patient_id, triage_id, medical_condition } = req.body;
+
+  // A doctor always records the diagnosis as themselves (cannot spoof another
+  // doctor); an admin may record one on behalf of a doctor via doctor_id in the body.
+  const doctor_id = req.user.role === 'doctor' ? req.user.linked_id : req.body.doctor_id;
 
   if (!patient_id || !doctor_id || !medical_condition) {
     return res.status(400).json({ success: false, message: 'patient_id, doctor_id, and medical_condition are required.' });

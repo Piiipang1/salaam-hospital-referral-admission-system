@@ -31,6 +31,22 @@ const getAllPatients = async (req, res) => {
       params.push(to_date);
     }
 
+    // Doctors only see patients they are/were assigned to (doctor_in_charge,
+    // referrals assigned to them, or admissions under their care) — for
+    // continuity of care this includes past as well as active assignments.
+    if (req.user.role === 'doctor') {
+      conditions.push(`patient_id IN (
+        SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ?
+        UNION
+        SELECT d.patient_id FROM referrals r
+          JOIN diagnoses d ON d.diagnosis_id = r.diagnosis_id
+          WHERE r.assigned_doctor_id = ?
+        UNION
+        SELECT patient_id FROM admissions WHERE doctor_id = ?
+      )`);
+      params.push(req.user.linked_id, req.user.linked_id, req.user.linked_id);
+    }
+
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const [rows] = await db.query(
@@ -67,6 +83,25 @@ const getPatientById = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Patient not found.' });
     }
+
+    if (req.user.role === 'doctor') {
+      const [[access]] = await db.query(
+        `SELECT 1 AS allowed FROM (
+          SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ?
+          UNION
+          SELECT d.patient_id FROM referrals r
+            JOIN diagnoses d ON d.diagnosis_id = r.diagnosis_id
+            WHERE r.assigned_doctor_id = ? AND d.patient_id = ?
+          UNION
+          SELECT patient_id FROM admissions WHERE doctor_id = ? AND patient_id = ?
+        ) AS t LIMIT 1`,
+        [req.user.linked_id, req.params.id, req.user.linked_id, req.params.id, req.user.linked_id, req.params.id]
+      );
+      if (!access) {
+        return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
+      }
+    }
+
     return res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
     console.error('getPatientById error:', err);
@@ -78,6 +113,24 @@ const getPatientById = async (req, res) => {
 const getPatientHistory = async (req, res) => {
   const { id } = req.params;
   try {
+    if (req.user.role === 'doctor') {
+      const [[access]] = await db.query(
+        `SELECT 1 AS allowed FROM (
+          SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ?
+          UNION
+          SELECT d.patient_id FROM referrals r
+            JOIN diagnoses d ON d.diagnosis_id = r.diagnosis_id
+            WHERE r.assigned_doctor_id = ? AND d.patient_id = ?
+          UNION
+          SELECT patient_id FROM admissions WHERE doctor_id = ? AND patient_id = ?
+        ) AS t LIMIT 1`,
+        [req.user.linked_id, id, req.user.linked_id, id, req.user.linked_id, id]
+      );
+      if (!access) {
+        return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
+      }
+    }
+
     const [triages] = await db.query(
       `SELECT t.*, vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate
        FROM triages t

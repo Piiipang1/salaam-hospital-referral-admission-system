@@ -5,23 +5,40 @@ import { USER_ROLES } from '../../utils/constants';
 
 const UserForm = ({ initial = {}, onSubmit, loading }) => {
   const [form, setForm] = useState({
-    username:   initial.username  ?? '',
-    password:   '',
-    role:       initial.role      ?? '',
-    linked_id:  initial.linked_id ?? '',
+    username:        initial.username        ?? '',
+    password:        '',
+    role:            initial.role            ?? '',
+    first_name:      initial.first_name      ?? '',
+    last_name:       initial.last_name       ?? '',
+    specialization:  initial.specialization  ?? '',
+    contact_details: initial.contact_details ?? '',
   });
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const isEdit = !!initial.user_id;
 
+  // Person fields (first/last name, contact, specialization) only apply when
+  // creating a new doctor/nurse/staff account — editing a person record is out
+  // of scope for this form, and admins have no person record at all.
+  const showPersonFields = !isEdit && form.role !== 'admin' && form.role !== '';
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.username || !form.role) { setError('Username and role are required.'); return; }
     if (!isEdit && !form.password) { setError('Password is required for new users.'); return; }
+    if (showPersonFields && (!form.first_name || !form.last_name)) {
+      setError('First name and last name are required.');
+      return;
+    }
     setError('');
     const payload = { username: form.username, role: form.role };
-    if (form.linked_id) payload.linked_id = Number(form.linked_id);
-    if (form.password)  payload.password  = form.password;
+    if (form.password) payload.password = form.password;
+    if (showPersonFields) {
+      payload.first_name      = form.first_name;
+      payload.last_name       = form.last_name;
+      payload.contact_details = form.contact_details;
+      if (form.role === 'doctor') payload.specialization = form.specialization;
+    }
     onSubmit(payload);
   };
 
@@ -46,13 +63,35 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
           <label htmlFor="uf-pwd">Password {isEdit ? '(leave blank to keep current)' : '*'}</label>
           <input id="uf-pwd" type="password" value={form.password} onChange={set('password')} placeholder={isEdit ? 'New password (optional)' : 'Set password'} />
         </div>
-        {form.role !== 'admin' && (
-          <div className="form-group">
-            <label htmlFor="uf-linked">Linked ID (Doctor / Employee)</label>
-            <input id="uf-linked" type="number" value={form.linked_id} onChange={set('linked_id')} placeholder="doctor_id or employee_id" />
-          </div>
-        )}
       </div>
+
+      {showPersonFields && (
+        <>
+          <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
+            <div className="form-group">
+              <label htmlFor="uf-fname">First Name *</label>
+              <input id="uf-fname" value={form.first_name} onChange={set('first_name')} placeholder="First name" required />
+            </div>
+            <div className="form-group">
+              <label htmlFor="uf-lname">Last Name *</label>
+              <input id="uf-lname" value={form.last_name} onChange={set('last_name')} placeholder="Last name" required />
+            </div>
+          </div>
+          <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
+            <div className="form-group">
+              <label htmlFor="uf-contact">Contact Details</label>
+              <input id="uf-contact" value={form.contact_details} onChange={set('contact_details')} placeholder="Phone or email" />
+            </div>
+            {form.role === 'doctor' && (
+              <div className="form-group">
+                <label htmlFor="uf-spec">Specialization</label>
+                <input id="uf-spec" value={form.specialization} onChange={set('specialization')} placeholder="e.g. Internal Medicine" />
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <div className="form-actions">
         <Button type="submit" variant="primary" loading={loading}>
           {isEdit ? 'Update User' : 'Create User'}

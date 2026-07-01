@@ -71,29 +71,22 @@ const getAdmissionById = async (req, res) => {
 
 // POST /api/admissions
 const createAdmission = async (req, res) => {
-  const { patient_id, diagnosis_id, doctor_id, room_id, admission_type, admission_date } = req.body;
+  const { patient_id, diagnosis_id, doctor_id, admission_type, admission_date } = req.body;
 
-  if (!patient_id || !doctor_id || !room_id || !admission_type) {
+  // A doctor always admits as themselves (cannot spoof another doctor); an
+  // admin may admit on behalf of a doctor via doctor_id in the body.
+  const admittingDoctorId = req.user.role === 'doctor' ? req.user.linked_id : doctor_id;
+
+  if (!patient_id || !admission_type || (req.user.role !== 'doctor' && !admittingDoctorId)) {
     return res.status(400).json({
       success: false,
-      message: 'patient_id, doctor_id, room_id, and admission_type are required.',
+      message: 'patient_id, doctor_id, and admission_type are required.',
     });
   }
 
   try {
-    // Check room availability
-    const [room] = await db.query(
-      'SELECT availability_status FROM rooms WHERE room_id = ?',
-      [room_id]
-    );
-    if (room.length === 0) {
-      return res.status(404).json({ success: false, message: 'Room not found.' });
-    }
-    if (room[0].availability_status === 'occupied') {
-      return res.status(409).json({ success: false, message: 'Room is currently occupied. Please select another room.' });
-    }
-
-    // ── Transaction: insert admission + mark room occupied + log ──────────────
+    // ── Transaction: insert admission (no room yet) + log ─────────────────────
+    // Room assignment happens later via the dedicated assign-room endpoint.
     const connection = await db.getConnection();
     await connection.beginTransaction();
 
@@ -101,16 +94,11 @@ const createAdmission = async (req, res) => {
     try {
       const [result] = await connection.query(
         `INSERT INTO admissions (patient_id, diagnosis_id, doctor_id, room_id, admission_type, admission_date, status)
-         VALUES (?, ?, ?, ?, ?, ?, 'Active')`,
-        [patient_id, diagnosis_id || null, doctor_id, room_id,
+         VALUES (?, ?, ?, NULL, ?, ?, 'Pending Room')`,
+        [patient_id, diagnosis_id || null, admittingDoctorId,
          admission_type, admission_date || new Date()]
       );
       admissionId = result.insertId;
-
-      await connection.query(
-        "UPDATE rooms SET availability_status = 'occupied' WHERE room_id = ?",
-        [room_id]
-      );
 
       await connection.query(
         "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'admissions', ?)",
@@ -126,24 +114,22 @@ const createAdmission = async (req, res) => {
     }
 
     // ── Respond immediately — notifications are best-effort ──────────────────
-    res.status(201).json({ success: true, message: 'Patient admitted.', admission_id: admissionId });
+    res.status(201).json({ success: true, message: 'Patient admitted. Awaiting room assignment.', admission_id: admissionId });
 
     // ── Post-commit notifications (outside transaction, non-blocking) ─────────
     // Any failure here is logged but does NOT affect the completed admission.
     try {
-      // 1. Resolve patient name, room details, and the doctor's user account id
-      //    in a single query so we have everything needed for the message text.
+      // 1. Resolve patient name and the admitting doctor's user account id
       const [[detail]] = await db.query(
         `SELECT CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-                r.room_type,
-                r.bed_number,
                 u.user_id AS doctor_user_id
          FROM   patients  p
-         JOIN   rooms     r ON r.room_id    = ?
          LEFT JOIN users  u ON u.linked_id  = ? AND u.role = 'doctor' AND u.is_active = 1
          WHERE  p.patient_id = ?`,
-        [room_id, doctor_id, patient_id]
+        [admittingDoctorId, patient_id]
       );
+
+      const patientName = detail?.patient_name ?? `Patient #${patient_id}`;
 
       // 2. Fetch all active admin user ids
       const [admins] = await db.query(
@@ -156,17 +142,14 @@ const createAdmission = async (req, res) => {
       if (detail?.doctor_user_id) {
         notifRows.push([
           detail.doctor_user_id,
-          `Your patient ${detail.patient_name} has been admitted ` +
-          `(${req.body.admission_type}) and assigned to ` +
-          `${detail.room_type} — Bed ${detail.bed_number}. ` +
+          `Your patient ${patientName} has been admitted (${admission_type}) and is awaiting room assignment. ` +
           `Admission ID: ${admissionId}.`,
           null, // referral_id — not applicable here
         ]);
       }
 
       const adminMsg =
-        `New admission: ${detail?.patient_name ?? `Patient #${patient_id}`} ` +
-        `admitted to ${detail?.room_type ?? 'Room'} — Bed ${detail?.bed_number ?? room_id}. ` +
+        `New admission: ${patientName} has been admitted and is awaiting room assignment. ` +
         `Admission ID: ${admissionId}.`;
 
       for (const admin of admins) {
@@ -190,10 +173,21 @@ const createAdmission = async (req, res) => {
       if (referral?.referring_user_id && referral.referring_user_id !== detail?.doctor_user_id) {
         notifRows.push([
           referral.referring_user_id,
-          `🛏️ Your referred patient ${detail?.patient_name ?? `Patient #${patient_id}`} has been admitted to ` +
-          `${detail?.room_type ?? 'Room'} — Bed ${detail?.bed_number ?? room_id}. Admission ID: ${admissionId}.`,
+          `🛏️ Your referred patient ${patientName} has been admitted and is awaiting room assignment. ` +
+          `Admission ID: ${admissionId}.`,
           null,
         ]);
+      }
+
+      // 3c. Notify all active nurses/staff that a room needs to be assigned
+      const [staffUsers] = await db.query(
+        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
+      );
+      const staffMsg = `🛏️ ${patientName} has been admitted and is awaiting room assignment.`;
+      for (const su of staffUsers) {
+        if (su.user_id !== req.user.user_id) {
+          notifRows.push([su.user_id, staffMsg, null]);
+        }
       }
 
       // 4. Bulk insert all notifications in one round-trip
@@ -214,6 +208,111 @@ const createAdmission = async (req, res) => {
   }
 };
 
+
+// PUT /api/admissions/:id/assign-room
+const assignRoom = async (req, res) => {
+  const { room_id } = req.body;
+
+  if (!room_id) {
+    return res.status(400).json({ success: false, message: 'room_id is required.' });
+  }
+
+  try {
+    const [admRows] = await db.query(
+      `SELECT a.status, a.doctor_id, a.patient_id,
+              CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+       FROM admissions a
+       LEFT JOIN patients p ON a.patient_id = p.patient_id
+       WHERE a.admission_id = ?`,
+      [req.params.id]
+    );
+    if (admRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Admission not found.' });
+    }
+    const adm = admRows[0];
+    if (adm.status !== 'Pending Room') {
+      return res.status(409).json({ success: false, message: 'This admission already has a room assigned.' });
+    }
+
+    const [room] = await db.query(
+      'SELECT room_type, bed_number, availability_status FROM rooms WHERE room_id = ?',
+      [room_id]
+    );
+    if (room.length === 0) {
+      return res.status(404).json({ success: false, message: 'Room not found.' });
+    }
+    if (room[0].availability_status === 'occupied') {
+      return res.status(409).json({ success: false, message: 'Room is currently occupied.' });
+    }
+
+    // ── Transaction: assign room + mark occupied + log ────────────────────────
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
+    try {
+      await connection.query(
+        "UPDATE admissions SET room_id = ?, status = 'Active' WHERE admission_id = ?",
+        [room_id, req.params.id]
+      );
+      await connection.query(
+        "UPDATE rooms SET availability_status = 'occupied' WHERE room_id = ?",
+        [room_id]
+      );
+      await connection.query(
+        "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'admissions', ?)",
+        [req.user.user_id, req.params.id]
+      );
+      await connection.commit();
+      connection.release();
+    } catch (txErr) {
+      await connection.rollback();
+      connection.release();
+      throw txErr;
+    }
+
+    // ── Respond immediately — notifications are best-effort ───────────────────
+    res.status(200).json({ success: true, message: 'Room assigned.' });
+
+    // ── Post-commit notifications ──────────────────────────────────────────────
+    try {
+      const patientName = adm.patient_name ?? `Patient #${adm.patient_id}`;
+      const message =
+        `🛏️ Room ${room[0].room_type} Bed ${room[0].bed_number} has been assigned to your patient ${patientName}.`;
+
+      const [[doctorUser]] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'doctor' AND linked_id = ? AND is_active = 1",
+        [adm.doctor_id]
+      );
+      const [admins] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
+      );
+
+      const notifRows = [];
+
+      if (doctorUser) {
+        notifRows.push([doctorUser.user_id, message, null]);
+      }
+
+      for (const admin of admins) {
+        if (admin.user_id !== req.user.user_id) {
+          notifRows.push([admin.user_id, message, null]);
+        }
+      }
+
+      if (notifRows.length > 0) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+          [notifRows]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('assignRoom: notification insert failed (non-fatal):', notifErr.message);
+    }
+
+  } catch (err) {
+    console.error('assignRoom error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
 
 // PUT /api/admissions/:id/discharge
 const dischargePatient = async (req, res) => {
@@ -315,4 +414,4 @@ const dischargePatient = async (req, res) => {
   }
 };
 
-module.exports = { getAllAdmissions, getAdmissionById, createAdmission, dischargePatient };
+module.exports = { getAllAdmissions, getAdmissionById, createAdmission, assignRoom, dischargePatient };
