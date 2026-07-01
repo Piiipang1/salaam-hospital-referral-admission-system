@@ -1,16 +1,23 @@
 import { useRef, useState, useEffect } from 'react';
+import { Paperclip } from 'lucide-react';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
 import Spinner from '../ui/Spinner';
 import { toInputDate } from '../../utils/formatDate';
 import { addLabResult } from '../../api/diagnoses.api';
 import { getActiveDoctors } from '../../api/doctors.api';
+import { useAuth } from '../../context/AuthContext';
 
 const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading }) => {
+  const { user } = useAuth();
+  const isDoctor = user?.role === 'doctor';
+
   const [form, setForm] = useState({
     patient_id:        initial.patient_id        ?? patientId ?? '',
     triage_id:         initial.triage_id         ?? triageId  ?? '',
-    doctor_id:         initial.doctor_id         ?? '',
+    // For a doctor, pre-fill with their own linked_id — the backend is the
+    // source of truth regardless, but this keeps the field non-empty.
+    doctor_id:         initial.doctor_id         ?? (isDoctor ? user?.linked_id ?? '' : ''),
     medical_condition: initial.medical_condition ?? '',
     diagnosis_date:    initial.diagnosis_date ? toInputDate(initial.diagnosis_date) : toInputDate(new Date()),
   });
@@ -24,6 +31,8 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
   const fileInputRef = useRef(null);
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const selfDoctor = doctors.find((d) => d.doctor_id === user?.linked_id);
 
   // Load active doctors on mount
   useEffect(() => {
@@ -54,7 +63,7 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.doctor_id || !form.medical_condition || !form.diagnosis_date) {
+    if ((!isDoctor && !form.doctor_id) || !form.medical_condition || !form.diagnosis_date) {
       setError('Doctor, medical condition, and diagnosis date are required.');
       return;
     }
@@ -67,6 +76,8 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
     // 1. Create / update the diagnosis (onSubmit returns the response)
     let diagnosisId = initial.diagnosis_id ?? null;
     try {
+      // For a doctor, form.doctor_id is pre-filled with their own linked_id,
+      // but the backend always derives it from the JWT for doctor-role requests.
       const result = await Promise.resolve(onSubmit(form));
       // If the parent returned the new diagnosis_id, capture it
       if (result?.diagnosis_id) diagnosisId = result.diagnosis_id;
@@ -102,19 +113,42 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
       {/* ── Core diagnosis fields ── */}
       <div className="form-row">
         <div className="form-group">
-          <label htmlFor="df-doc">Doctor *</label>
-          <select id="df-doc" value={form.doctor_id} onChange={set('doctor_id')} required>
-            <option value="">— Select doctor —</option>
-            {doctors.map((d) => (
-              <option key={d.doctor_id} value={d.doctor_id}>
-                Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
-              </option>
-            ))}
-          </select>
-          {doctors.length === 0 && (
-            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-              No active doctors found.
-            </span>
+          {isDoctor ? (
+            <>
+              <label htmlFor="df-doc">Doctor</label>
+              <div
+                id="df-doc"
+                style={{
+                  padding: 'var(--space-2) var(--space-3)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--color-surface-2)',
+                  color: 'var(--color-text-muted)',
+                  minHeight: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {selfDoctor ? `Dr. ${selfDoctor.first_name} ${selfDoctor.last_name} (You)` : 'Loading...'}
+              </div>
+            </>
+          ) : (
+            <>
+              <label htmlFor="df-doc">Doctor *</label>
+              <select id="df-doc" value={form.doctor_id} onChange={set('doctor_id')} required>
+                <option value="">— Select doctor —</option>
+                {doctors.map((d) => (
+                  <option key={d.doctor_id} value={d.doctor_id}>
+                    Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
+                  </option>
+                ))}
+              </select>
+              {doctors.length === 0 && (
+                <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                  No active doctors found.
+                </span>
+              )}
+            </>
           )}
         </div>
         <div className="form-group">
@@ -151,7 +185,7 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
                 onClick={() => fileInputRef.current?.click()}
                 aria-describedby="df-lab-file-name"
               >
-                📎 Choose File
+                <Paperclip size={14} /> Choose File
               </button>
               <span id="df-lab-file-name" className="file-input-name">
                 {labFileName || 'No file chosen'}

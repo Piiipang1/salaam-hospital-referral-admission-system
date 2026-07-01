@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
+import { Paperclip } from 'lucide-react';
 import Button from '../ui/Button';
 import Alert  from '../ui/Alert';
 import Spinner from '../ui/Spinner';
@@ -297,7 +298,7 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
             className="file-input-btn"
             onClick={() => fileRef.current?.click()}
           >
-            📎 {file ? 'Change File' : 'Attach Document'}
+            <Paperclip size={14} /> {file ? 'Change File' : 'Attach Document'}
           </button>
           <span className="file-input-name">{fileName || 'No file chosen'}</span>
           {file && (
