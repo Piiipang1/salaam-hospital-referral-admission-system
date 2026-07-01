@@ -4,8 +4,8 @@ import Alert from '../ui/Alert';
 import Spinner from '../ui/Spinner';
 import { ADMISSION_TYPES } from '../../utils/constants';
 import { getActiveDoctors } from '../../api/doctors.api';
-import { getAllRooms } from '../../api/rooms.api';
-import { getPatientHistory } from '../../api/patients.api';
+import { getPatientHistory, getAllPatients } from '../../api/patients.api';
+import { useAuth } from '../../context/AuthContext';
 
 // medical_condition can be a long clinical paragraph — keep dropdown options readable
 const truncate = (str, n) => str?.length > n ? str.slice(0, n) + '…' : (str ?? '');
@@ -13,18 +13,31 @@ const truncate = (str, n) => str?.length > n ? str.slice(0, n) + '…' : (str ??
 // Build the dropdown label for a diagnosis option — diagnosis ID is already unique, so skip the date
 const diagnosisLabel = (d) => `Dx#${d.diagnosis_id} — ${truncate(d.medical_condition, 35)}`;
 
+// Build the searchable combobox label for a patient option
+const patientLabel = (p) => `${p.first_name} ${p.last_name} (ID: ${p.patient_id})`;
+
 const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading }) => {
+  const { user } = useAuth();
+  const isDoctor = user?.role === 'doctor';
+
   const [form, setForm] = useState({
     patient_id:     initial.patient_id   ?? patientId   ?? '',
     diagnosis_id:   initial.diagnosis_id ?? diagnosisId ?? '',
-    doctor_id:      initial.doctor_id    ?? '',
-    room_id:        initial.room_id      ?? '',
+    // For a doctor, pre-fill with their own linked_id — the backend is the
+    // source of truth regardless, but this keeps the field non-empty.
+    doctor_id:      initial.doctor_id    ?? (isDoctor ? user?.linked_id ?? '' : ''),
     admission_type: initial.admission_type ?? '',
   });
   const [error,   setError]   = useState('');
   const [doctors, setDoctors] = useState([]);
-  const [rooms,   setRooms]   = useState([]);
+  const [patients, setPatients] = useState([]);
   const [fetching, setFetching] = useState(true);
+
+  const selfDoctor = doctors.find((d) => d.doctor_id === user?.linked_id);
+
+  // Visible text of the standalone patient search combobox — separate from
+  // form.patient_id since the box displays "Name (ID: n)", not the bare id.
+  const [patientSearchText, setPatientSearchText] = useState('');
 
   // Diagnosis dropdown — looked up by patient ID (known up front or typed in by the user)
   const [diagnosisOptions, setDiagnosisOptions] = useState([]);
@@ -51,24 +64,45 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
 
   const handlePatientIdBlur = () => fetchDiagnosesForPatient(form.patient_id);
 
-  // Load doctors and available rooms when form mounts; also look up diagnoses
-  // for the patient if one was already supplied (e.g. from PatientDetailPage)
+  // Standalone mode (no patientId prop): selecting a suggestion from the
+  // patient combobox resolves the typed label back to a patient_id.
+  const handlePatientSelect = (e) => {
+    const value = e.target.value;
+    setPatientSearchText(value);
+    const match = patients.find((p) => patientLabel(p) === value);
+    if (match) {
+      setForm((f) => ({ ...f, patient_id: match.patient_id, diagnosis_id: '' }));
+      setDiagnosisOptions([]);
+      setDiagFetched(false);
+      fetchDiagnosesForPatient(match.patient_id);
+    } else {
+      setForm((f) => ({ ...f, patient_id: '', diagnosis_id: '' }));
+      setDiagnosisOptions([]);
+      setDiagFetched(false);
+    }
+  };
+
+  // Load doctors when form mounts; also look up diagnoses for the patient
+  // if one was already supplied (e.g. from PatientDetailPage)
   useEffect(() => {
-    Promise.all([getActiveDoctors(), getAllRooms()])
-      .then(([docRes, roomRes]) => {
-        if (docRes.success)  setDoctors(docRes.data);
-        if (roomRes.success) setRooms(roomRes.data.filter(r => r.availability_status === 'available'));
-      })
-      .catch(() => setError('Failed to load doctors or rooms.'))
+    getActiveDoctors()
+      .then((docRes) => { if (docRes.success) setDoctors(docRes.data); })
+      .catch(() => setError('Failed to load doctors.'))
       .finally(() => setFetching(false));
+
+    // Only standalone mode (opened from the Admissions page) needs the full
+    // patient list — when patientId is passed, that patient is already fixed.
+    if (!patientId) {
+      getAllPatients({ limit: 1000 }).then((res) => { if (res.success) setPatients(res.data); });
+    }
 
     if (form.patient_id) fetchDiagnosesForPatient(form.patient_id);
   }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.patient_id || !form.doctor_id || !form.room_id || !form.admission_type) {
-      setError('Patient ID, doctor, room, and admission type are required.');
+    if (!form.patient_id || (!isDoctor && !form.doctor_id) || !form.admission_type) {
+      setError('Patient ID, doctor, and admission type are required.');
       return;
     }
     setError('');
@@ -83,16 +117,38 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
 
       <div className="form-row">
         <div className="form-group">
-          <label htmlFor="af-pat">Patient ID *</label>
-          <input
-            id="af-pat"
-            type="number"
-            value={form.patient_id}
-            onChange={handlePatientIdChange}
-            onBlur={handlePatientIdBlur}
-            placeholder="Patient ID"
-            required
-          />
+          {patientId ? (
+            <>
+              <label htmlFor="af-pat">Patient ID *</label>
+              <input
+                id="af-pat"
+                type="number"
+                value={form.patient_id}
+                onChange={handlePatientIdChange}
+                onBlur={handlePatientIdBlur}
+                placeholder="Patient ID"
+                required
+              />
+            </>
+          ) : (
+            <>
+              <label htmlFor="af-pat">Patient *</label>
+              <input
+                id="af-pat"
+                list="af-patient-options"
+                value={patientSearchText}
+                onChange={handlePatientSelect}
+                placeholder="Search patient by name"
+                autoComplete="off"
+                required
+              />
+              <datalist id="af-patient-options">
+                {patients.map((p) => (
+                  <option key={p.patient_id} value={patientLabel(p)} />
+                ))}
+              </datalist>
+            </>
+          )}
         </div>
         <div className="form-group">
           <label htmlFor="af-diag">Diagnosis</label>
@@ -127,37 +183,42 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
 
       {/* Doctor dropdown — populated from /api/doctors/active */}
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-        <label htmlFor="af-doc">Admitting Doctor *</label>
-        <select id="af-doc" value={form.doctor_id} onChange={set('doctor_id')} required>
-          <option value="">— Select doctor —</option>
-          {doctors.map((d) => (
-            <option key={d.doctor_id} value={d.doctor_id}>
-              Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
-            </option>
-          ))}
-        </select>
-        {doctors.length === 0 && (
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
-            No active doctors found.
-          </span>
-        )}
-      </div>
-
-      {/* Available room dropdown — populated from /api/rooms filtered to available */}
-      <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-        <label htmlFor="af-room">Available Room *</label>
-        <select id="af-room" value={form.room_id} onChange={set('room_id')} required>
-          <option value="">— Select room —</option>
-          {rooms.map((r) => (
-            <option key={r.room_id} value={r.room_id}>
-              {r.room_type} — Bed {r.bed_number}
-            </option>
-          ))}
-        </select>
-        {rooms.length === 0 && (
-          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-warning)' }}>
-            No available rooms. Discharge a patient first.
-          </span>
+        {isDoctor ? (
+          <>
+            <label htmlFor="af-doc">Admitting Doctor</label>
+            <div
+              id="af-doc"
+              style={{
+                padding: 'var(--space-2) var(--space-3)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--color-surface-2)',
+                color: 'var(--color-text-muted)',
+                minHeight: '38px',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              {selfDoctor ? `Dr. ${selfDoctor.first_name} ${selfDoctor.last_name} (You)` : 'Loading...'}
+            </div>
+          </>
+        ) : (
+          <>
+            <label htmlFor="af-doc">Admitting Doctor *</label>
+            <select id="af-doc" value={form.doctor_id} onChange={set('doctor_id')} required>
+              <option value="">— Select doctor —</option>
+              {doctors.map((d) => (
+                <option key={d.doctor_id} value={d.doctor_id}>
+                  Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
+                </option>
+              ))}
+            </select>
+            {doctors.length === 0 && (
+              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+                No active doctors found.
+              </span>
+            )}
+          </>
         )}
       </div>
 
@@ -172,7 +233,7 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
       </div>
 
       <div className="form-actions">
-        <Button type="submit" variant="primary" loading={loading} disabled={rooms.length === 0}>
+        <Button type="submit" variant="primary" loading={loading}>
           Admit Patient
         </Button>
       </div>
