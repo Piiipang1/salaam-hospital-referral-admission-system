@@ -13,6 +13,9 @@ router.get('/:id', auth, admissionsController.getAdmissionById);
 // POST /api/admissions
 router.post('/', auth, requireRole('admin', 'nurse', 'staff', 'doctor'), admissionsController.createAdmission);
 
+// PUT /api/admissions/:id/assign-room
+router.put('/:id/assign-room', auth, requireRole('admin', 'nurse', 'staff'), admissionsController.assignRoom);
+
 // PUT /api/admissions/:id/discharge
 router.put('/:id/discharge', auth, requireRole('admin', 'doctor'), admissionsController.dischargePatient);
 

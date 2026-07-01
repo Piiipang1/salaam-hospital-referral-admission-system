@@ -13,7 +13,7 @@
 --   rooms.availability_status : available, occupied
 --   triages.triage_level : Critical, Urgent, Non-Urgent
 --   referrals.status     : Pending, Accepted, Completed, Cancelled
---   admissions.status    : Active, Discharged
+--   admissions.status    : Pending Room, Active, Discharged
 --   doctor_assessments.disposition : Admit, Discharge, Refer, Observe
 -- =============================================================================
 
@@ -368,7 +368,7 @@ CREATE TABLE doctor_assessments (
 -- Columns from code: admission_id, patient_id, diagnosis_id, doctor_id,
 --                    room_id, admission_type, admission_date,
 --                    discharge_date, status
--- ENUM from admissions.controller: Active, Discharged
+-- ENUM from admissions.controller: Pending Room, Active, Discharged
 -- Uses DB transaction (getConnection + beginTransaction) in createAdmission
 -- and dischargePatient — pool must support getConnection() ✅ (mysql2 pool)
 -- -----------------------------------------------------------------------------
@@ -377,11 +377,11 @@ CREATE TABLE admissions (
     patient_id      INT UNSIGNED    NOT NULL,
     diagnosis_id    INT UNSIGNED    DEFAULT NULL,
     doctor_id       INT UNSIGNED    NOT NULL,
-    room_id         INT UNSIGNED    NOT NULL,
+    room_id         INT UNSIGNED    DEFAULT NULL,
     admission_type  VARCHAR(100)    NOT NULL,
     admission_date  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     discharge_date  DATETIME        DEFAULT NULL,
-    status          ENUM('Active','Discharged') NOT NULL DEFAULT 'Active',
+    status          ENUM('Pending Room','Active','Discharged') NOT NULL DEFAULT 'Pending Room',
     PRIMARY KEY (admission_id),
     CONSTRAINT fk_admissions_patient
         FOREIGN KEY (patient_id)   REFERENCES patients  (patient_id)
