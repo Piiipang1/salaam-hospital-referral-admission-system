@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import PageWrapper from './PageWrapper';
+import BottomNav from './BottomNav';
 
 const PAGE_TITLES = {
   '/dashboard':     'Dashboard',
@@ -25,25 +25,15 @@ const getTitle = (pathname) => {
 
 const AppLayout = () => {
   const location = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Close mobile sidebar on route change
-  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
   return (
     <>
-      <Sidebar
-        collapsed={false}
-        onClose={() => setMobileOpen(false)}
-        mobileOpen={mobileOpen}
-      />
-      <TopBar
-        title={getTitle(location.pathname)}
-        onMenuToggle={() => setMobileOpen((v) => !v)}
-      />
+      <Sidebar collapsed={false} />
+      <TopBar title={getTitle(location.pathname)} />
       <PageWrapper>
         <Outlet />
       </PageWrapper>
+      <BottomNav />
     </>
   );
 };

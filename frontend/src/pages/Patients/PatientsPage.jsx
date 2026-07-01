@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllPatients, createPatient, updatePatient } from '../../api/patients.api';
+import { getAllPatients, createPatient, updatePatient, getUnassignedPatients, claimPatient } from '../../api/patients.api';
 import { useAuth } from '../../context/AuthContext';
-import { canManagePatients } from '../../utils/roleGuard';
+import { canManagePatients, canClaimPatient } from '../../utils/roleGuard';
 import { formatDate, calcAge } from '../../utils/formatDate';
+import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
 import SearchBar from '../../components/ui/SearchBar';
 import Button from '../../components/ui/Button';
@@ -38,9 +39,23 @@ const PillBtn = ({ onClick, disabled, children }) => (
   </button>
 );
 
+// Shared inline badge for unidentified patients
+const UnidentifiedBadge = () => (
+  <span style={{
+    fontSize: 'var(--font-size-xs)', padding: '2px 8px',
+    borderRadius: 'var(--radius-full)',
+    background: 'var(--color-danger-muted)', color: 'var(--color-danger)',
+    border: '1px solid var(--color-danger)', fontWeight: 600, whiteSpace: 'nowrap',
+  }}>⚠ Unidentified</span>
+);
+
 const PatientsPage = () => {
   const { user }   = useAuth();
   const navigate   = useNavigate();
+
+  // ── View toggle (My Patients vs Unassigned Pool) ──────────────
+  const canSeePool = user?.role === 'admin' || user?.role === 'doctor';
+  const [poolView, setPoolView] = useState(false);
 
   // ── Filter state ─────────────────────────────────────────────
   const [search,    setSearch]    = useState('');
@@ -53,13 +68,18 @@ const PatientsPage = () => {
   const [total, setTotal] = useState(0);
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
-  // ── Data / UI state ──────────────────────────────────────────
-  const [patients, setPatients] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState('');
-  const [success,  setSuccess]  = useState('');
-  const [modal,    setModal]    = useState({ open: false, patient: null });
-  const [saving,   setSaving]   = useState(false);
+  // ── Patient list state ────────────────────────────────────────
+  const [patients,  setPatients]  = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState('');
+  const [success,   setSuccess]   = useState('');
+  const [modal,     setModal]     = useState({ open: false, patient: null });
+  const [saving,    setSaving]    = useState(false);
+
+  // ── Unassigned pool state ─────────────────────────────────────
+  const [pool,        setPool]        = useState([]);
+  const [poolLoading, setPoolLoading] = useState(false);
+  const [claimingId,  setClaimingId]  = useState(null);
 
   // Reset to page 1 whenever any filter changes
   useEffect(() => { setPage(1); }, [search, sex, fromDate, toDate]);
@@ -68,7 +88,6 @@ const PatientsPage = () => {
   const load = useCallback(() => {
     setLoading(true);
 
-    // Build params object — omit empty strings so they don't appear in the URL
     const params = { page, limit: LIMIT };
     if (search)   params.search    = search;
     if (sex)      params.sex       = sex;
@@ -88,6 +107,17 @@ const PatientsPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  const loadPool = useCallback(() => {
+    setPoolLoading(true);
+    getUnassignedPatients()
+      .then((r) => { if (r.success) setPool(r.data); })
+      .catch(() => setError('Failed to load unassigned patients.'))
+      .finally(() => setPoolLoading(false));
+  }, []);
+
+  // Load pool when the tab becomes active
+  useEffect(() => { if (poolView) loadPool(); }, [poolView, loadPool]);
+
   // ── Handlers ──────────────────────────────────────────────────
   const handleSave = async (data) => {
     setSaving(true);
@@ -106,6 +136,19 @@ const PatientsPage = () => {
     } finally { setSaving(false); }
   };
 
+  const handleClaim = async (patientId) => {
+    setClaimingId(patientId);
+    try {
+      await claimPatient(patientId);
+      setSuccess('Patient added to your list.');
+      setPool((prev) => prev.filter((p) => p.patient_id !== patientId));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to claim patient.');
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
   const clearFilters = () => {
     setSearch('');
     setSex('');
@@ -115,20 +158,13 @@ const PatientsPage = () => {
 
   const hasActiveFilters = search || sex || fromDate || toDate;
 
-  // ── Table columns ─────────────────────────────────────────────
+  // ── Table columns (My Patients view) ─────────────────────────
   const columns = [
-    { key: 'patient_id',     label: 'ID',       width: '60px' },
+    { key: 'patient_id', label: 'ID', width: '60px' },
     { key: 'full_name', label: 'Full Name', render: (r) => (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         {r.first_name} {r.last_name}
-        {r.is_unidentified ? (
-          <span style={{
-            fontSize: 'var(--font-size-xs)', padding: '2px 8px',
-            borderRadius: 'var(--radius-full)',
-            background: 'var(--color-danger-muted)', color: 'var(--color-danger)',
-            border: '1px solid var(--color-danger)', fontWeight: 600, whiteSpace: 'nowrap',
-          }}>⚠ Unidentified</span>
-        ) : null}
+        {r.is_unidentified ? <UnidentifiedBadge /> : null}
       </span>
     )},
     { key: 'sex',            label: 'Sex',       width: '80px' },
@@ -154,6 +190,40 @@ const PatientsPage = () => {
     },
   ];
 
+  // ── Table columns (Unassigned Pool view) ─────────────────────
+  const poolColumns = [
+    { key: 'patient_name', label: 'Patient', render: (r) => (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        {r.patient_name}
+        {r.is_unidentified ? <UnidentifiedBadge /> : null}
+      </span>
+    )},
+    { key: 'triage_level',    label: 'Triage Level', render: (r) => <Badge status={r.triage_level} /> },
+    { key: 'triage_datetime', label: 'Triaged',      render: (r) => formatDate(r.triage_datetime, true) },
+    {
+      key: 'actions', label: '', width: '160px', align: 'right',
+      render: (r) => (
+        <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+          <Button size="sm" variant="ghost"
+            onClick={(e) => { e.stopPropagation(); navigate(`/patients/${r.patient_id}`); }}>
+            View
+          </Button>
+          {canClaimPatient(user?.role) && (
+            <Button
+              size="sm"
+              variant="primary"
+              loading={claimingId === r.patient_id}
+              disabled={claimingId !== null && claimingId !== r.patient_id}
+              onClick={(e) => { e.stopPropagation(); handleClaim(r.patient_id); }}
+            >
+              Take Patient
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="patients-page">
 
@@ -162,7 +232,9 @@ const PatientsPage = () => {
         <div>
           <h2 className="page-title">Patients</h2>
           <p className="page-subtitle">
-            {total} patient{total !== 1 ? 's' : ''} found
+            {poolView
+              ? `${pool.length} patient${pool.length !== 1 ? 's' : ''} awaiting assignment`
+              : `${total} patient${total !== 1 ? 's' : ''} found`}
           </p>
         </div>
         {canManagePatients(user?.role) && (
@@ -177,90 +249,118 @@ const PatientsPage = () => {
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
-      {/* ── Filter toolbar ── */}
-      <div className="patients-toolbar">
-
-        {/* Text search */}
-        <SearchBar
-          id="patient-search"
-          value={search}
-          onChange={setSearch}
-          placeholder="Search by name or ID…"
-        />
-
-        {/* Sex filter */}
-        <select
-          id="patient-sex-filter"
-          className="filter-select"
-          value={sex}
-          onChange={(e) => setSex(e.target.value)}
-          aria-label="Filter by sex"
-        >
-          <option value="">All Sexes</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-          <option value="Other">Other</option>
-        </select>
-
-        {/* Registered from */}
-        <input
-          id="patient-from-date"
-          type="date"
-          className="filter-date"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          title="Registered from"
-          aria-label="Registered from date"
-        />
-
-        {/* Registered to */}
-        <input
-          id="patient-to-date"
-          type="date"
-          className="filter-date"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          title="Registered to"
-          aria-label="Registered to date"
-        />
-
-        {/* Clear all filters (shown when any filter is active) */}
-        {hasActiveFilters && (
-          <button
-            className="filter-clear-btn"
-            onClick={clearFilters}
-            title="Clear all filters"
-          >
-            ✕ Clear
-          </button>
-        )}
-      </div>
-
-      {/* ── Data table ── */}
-      <Table
-        columns={columns}
-        data={patients}
-        loading={loading}
-        emptyMessage="No patients match the current filters."
-        onRowClick={(r) => navigate(`/patients/${r.patient_id}`)}
-      />
-
-      {/* ── Pagination ── */}
-      {totalPages > 1 && (
-        <div className="patients-pagination">
-          <span className="patients-pagination__info">
-            Page <strong>{page}</strong> of <strong>{totalPages}</strong>
-            &nbsp;·&nbsp;{total} total
-          </span>
-          <div className="patients-pagination__controls">
-            <PillBtn onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>
-              ← Previous
-            </PillBtn>
-            <PillBtn onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
-              Next →
-            </PillBtn>
-          </div>
+      {/* ── View toggle (admin and doctor only) ── */}
+      {canSeePool && (
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--space-5)' }}>
+          {[['My Patients', false], ['Unassigned Pool', true]].map(([label, isPool]) => {
+            const active = poolView === isPool;
+            return (
+              <button
+                key={label}
+                onClick={() => setPoolView(isPool)}
+                style={{
+                  padding: 'var(--space-2) var(--space-5)',
+                  border: 'none',
+                  borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
+                  background: 'transparent',
+                  color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                  fontWeight: active ? 600 : 400,
+                  cursor: 'pointer',
+                  fontSize: 'var(--font-size-sm)',
+                  transition: 'color 0.15s, border-color 0.15s',
+                  marginBottom: '-1px',
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
+      )}
+
+      {poolView ? (
+        /* ── Unassigned Pool ── */
+        <Table
+          columns={poolColumns}
+          data={pool}
+          loading={poolLoading}
+          emptyMessage="No unassigned patients in the pool."
+          onRowClick={(r) => navigate(`/patients/${r.patient_id}`)}
+        />
+      ) : (
+        <>
+          {/* ── Filter toolbar ── */}
+          <div className="patients-toolbar">
+            <SearchBar
+              id="patient-search"
+              value={search}
+              onChange={setSearch}
+              placeholder="Search by name or ID…"
+            />
+            <select
+              id="patient-sex-filter"
+              className="filter-select"
+              value={sex}
+              onChange={(e) => setSex(e.target.value)}
+              aria-label="Filter by sex"
+            >
+              <option value="">All Sexes</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+            <input
+              id="patient-from-date"
+              type="date"
+              className="filter-date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              title="Registered from"
+              aria-label="Registered from date"
+            />
+            <input
+              id="patient-to-date"
+              type="date"
+              className="filter-date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              title="Registered to"
+              aria-label="Registered to date"
+            />
+            {hasActiveFilters && (
+              <button className="filter-clear-btn" onClick={clearFilters} title="Clear all filters">
+                ✕ Clear
+              </button>
+            )}
+          </div>
+
+          {/* ── Patient list table ── */}
+          <Table
+            columns={columns}
+            data={patients}
+            loading={loading}
+            emptyMessage="No patients match the current filters."
+            onRowClick={(r) => navigate(`/patients/${r.patient_id}`)}
+          />
+
+          {/* ── Pagination ── */}
+          {totalPages > 1 && (
+            <div className="patients-pagination">
+              <span className="patients-pagination__info">
+                Page <strong>{page}</strong> of <strong>{totalPages}</strong>
+                &nbsp;·&nbsp;{total} total
+              </span>
+              <div className="patients-pagination__controls">
+                <PillBtn onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>
+                  ← Previous
+                </PillBtn>
+                <PillBtn onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>
+                  Next →
+                </PillBtn>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* ── Register / Edit modal ── */}

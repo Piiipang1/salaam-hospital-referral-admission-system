@@ -34,3 +34,6 @@ export const canViewReports = (role) => hasRole(role, ['admin']);
 
 /** Returns true if user can initiate an emergency triage for an unidentified patient */
 export const canEmergencyTriage = (role) => hasRole(role, ['admin', 'doctor', 'nurse', 'staff']);
+
+/** Returns true if user can claim an unassigned patient from the pool */
+export const canClaimPatient = (role) => hasRole(role, ['doctor']);

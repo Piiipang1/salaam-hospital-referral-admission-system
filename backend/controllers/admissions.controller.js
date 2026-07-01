@@ -85,6 +85,20 @@ const createAdmission = async (req, res) => {
   }
 
   try {
+    // ── Guard: reject if the patient already has an ongoing admission ──────────
+    const [[ongoing]] = await db.query(
+      `SELECT admission_id FROM admissions
+       WHERE patient_id = ? AND status IN ('Pending Room', 'Active')
+       LIMIT 1`,
+      [patient_id]
+    );
+    if (ongoing) {
+      return res.status(409).json({
+        success: false,
+        message: 'This patient already has an ongoing admission. Discharge the current admission before admitting again.',
+      });
+    }
+
     // ── Transaction: insert admission (no room yet) + log ─────────────────────
     // Room assignment happens later via the dedicated assign-room endpoint.
     const connection = await db.getConnection();

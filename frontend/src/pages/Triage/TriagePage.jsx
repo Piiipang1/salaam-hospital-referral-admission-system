@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Siren } from 'lucide-react';
 import { getAllTriages, createTriage, createEmergencyTriage } from '../../api/triages.api';
+import { getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManageTriage, canEmergencyTriage } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
@@ -42,8 +43,18 @@ const TriagePage = () => {
 
   // ── Emergency triage modal state ─────────────────────────────
   const [emergencyModal,  setEmergencyModal]  = useState(false);
-  const [emergencyForm,   setEmergencyForm]   = useState({ triage_level: 'Critical', notes: '' });
+  const [emergencyForm,   setEmergencyForm]   = useState({ triage_level: 'Critical', notes: '', assigned_doctor_id: '' });
   const [emergencySaving, setEmergencySaving] = useState(false);
+  const [etDoctors,       setEtDoctors]       = useState([]);
+  const [etDoctorsFetching, setEtDoctorsFetching] = useState(true);
+
+  // Fetch active doctors once for the emergency modal doctor dropdown
+  useEffect(() => {
+    getActiveDoctors()
+      .then((r) => { if (r.success) setEtDoctors(r.data); })
+      .catch(() => {})
+      .finally(() => setEtDoctorsFetching(false));
+  }, []);
 
   // ── Data fetching ─────────────────────────────────────────────
   const load = useCallback(() => {
@@ -132,7 +143,7 @@ const TriagePage = () => {
           {canEmergencyTriage(user?.role) && (
             <Button
               variant="danger"
-              onClick={() => { setEmergencyForm({ triage_level: 'Critical', notes: '' }); setEmergencyModal(true); }}
+              onClick={() => { setEmergencyForm({ triage_level: 'Critical', notes: '', assigned_doctor_id: '' }); setEmergencyModal(true); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
             >
               <Siren size={16} /> Emergency Triage
@@ -247,6 +258,22 @@ const TriagePage = () => {
             onChange={(e) => setEmergencyForm((f) => ({ ...f, notes: e.target.value }))}
             placeholder="Describe presenting complaint or condition…"
           />
+        </div>
+        <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
+          <label htmlFor="et-doctor">Assign to Doctor</label>
+          <select
+            id="et-doctor"
+            value={emergencyForm.assigned_doctor_id}
+            onChange={(e) => setEmergencyForm((f) => ({ ...f, assigned_doctor_id: e.target.value }))}
+            disabled={etDoctorsFetching}
+          >
+            <option value="">— Leave unassigned (add to pool) —</option>
+            {etDoctors.map((d) => (
+              <option key={d.doctor_id} value={d.doctor_id}>
+                Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="form-actions">
           <Button type="button" variant="secondary" onClick={() => setEmergencyModal(false)}>Cancel</Button>

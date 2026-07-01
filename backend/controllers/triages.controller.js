@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 // POST /api/triages
 const createTriage = async (req, res) => {
-  const { patient_id, visit_room_id, triage_level, notes } = req.body;
+  const { patient_id, visit_room_id, triage_level, notes, assigned_doctor_id } = req.body;
 
   // A nurse/staff is always recorded as their own employee_id (cannot spoof another
   // employee); an admin may record a triage on behalf of an employee via the body.
@@ -30,6 +30,21 @@ const createTriage = async (req, res) => {
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'triages', ?)",
       [req.user.user_id, result.insertId]
     );
+
+    // Optional: assign a doctor to this patient at triage time.
+    // Guard with SELECT to avoid duplicate rows (no unique constraint on doctor_in_charge).
+    if (assigned_doctor_id) {
+      const [[existing]] = await db.query(
+        'SELECT dic_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ? LIMIT 1',
+        [assigned_doctor_id, patient_id]
+      );
+      if (!existing) {
+        await db.query(
+          'INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at) VALUES (?, ?, NOW())',
+          [assigned_doctor_id, patient_id]
+        );
+      }
+    }
 
     // ── Respond immediately ───────────────────────────────────────────────────
     res.status(201).json({ success: true, message: 'Triage created.', triage_id: result.insertId });
@@ -80,6 +95,21 @@ const createTriage = async (req, res) => {
               null,
             ]);
           }
+        }
+      }
+
+      // 3. Notify the doctor assigned at triage (if any)
+      if (assigned_doctor_id) {
+        const [[docUser]] = await db.query(
+          "SELECT user_id FROM users WHERE linked_id = ? AND role = 'doctor' AND is_active = 1 LIMIT 1",
+          [assigned_doctor_id]
+        );
+        if (docUser && docUser.user_id !== req.user.user_id) {
+          notifRows.push([
+            docUser.user_id,
+            `🩺 You have been assigned a new patient at triage: ${patientName} (${triage_level}).`,
+            null,
+          ]);
         }
       }
 
@@ -237,8 +267,9 @@ const addVitalSigns = async (req, res) => {
 
 // POST /api/triages/emergency
 const createEmergencyTriage = async (req, res) => {
-  const triage_level = req.body.triage_level || 'Critical';
-  const notes        = req.body.notes || null;
+  const triage_level       = req.body.triage_level || 'Critical';
+  const notes              = req.body.notes || null;
+  const assigned_doctor_id = req.body.assigned_doctor_id || null;
 
   const validLevels = ['Critical', 'Urgent', 'Non-Urgent'];
   if (!validLevels.includes(triage_level)) {
@@ -279,6 +310,20 @@ const createEmergencyTriage = async (req, res) => {
       [req.user.user_id, triageId]
     );
 
+    // Optional doctor assignment — inside the transaction so it rolls back with the rest
+    if (assigned_doctor_id) {
+      const [[existing]] = await connection.query(
+        'SELECT dic_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ? LIMIT 1',
+        [assigned_doctor_id, newPatientId]
+      );
+      if (!existing) {
+        await connection.query(
+          'INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at) VALUES (?, ?, NOW())',
+          [assigned_doctor_id, newPatientId]
+        );
+      }
+    }
+
     await connection.commit();
     connection.release();
   } catch (txErr) {
@@ -301,6 +346,16 @@ const createEmergencyTriage = async (req, res) => {
     const notifMsg = `🚨 EMERGENCY: An unidentified patient has been triaged as ${triage_level}. Immediate attention required. Patient ID: ${newPatientId}.`;
     const notifRows = [];
 
+    // Resolve the assigned doctor's user_id so we can personalise their notification
+    let assignedDoctorUserId = null;
+    if (assigned_doctor_id) {
+      const [[docUser]] = await db.query(
+        "SELECT user_id FROM users WHERE linked_id = ? AND role = 'doctor' AND is_active = 1 LIMIT 1",
+        [assigned_doctor_id]
+      );
+      assignedDoctorUserId = docUser?.user_id ?? null;
+    }
+
     const [admins] = await db.query(
       "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
     );
@@ -308,11 +363,21 @@ const createEmergencyTriage = async (req, res) => {
       if (a.user_id !== req.user.user_id) notifRows.push([a.user_id, notifMsg, null]);
     }
 
+    // Doctors: assigned doctor gets a personal assignment message; all others get the broadcast
     const [doctors] = await db.query(
       "SELECT user_id FROM users WHERE role = 'doctor' AND is_active = 1"
     );
     for (const d of doctors) {
-      if (d.user_id !== req.user.user_id) notifRows.push([d.user_id, notifMsg, null]);
+      if (d.user_id === req.user.user_id) continue;
+      if (d.user_id === assignedDoctorUserId) {
+        notifRows.push([
+          d.user_id,
+          `🩺 You have been assigned a new patient at triage: Patient #${newPatientId} (${triage_level}).`,
+          null,
+        ]);
+      } else {
+        notifRows.push([d.user_id, notifMsg, null]);
+      }
     }
 
     const [staff] = await db.query(

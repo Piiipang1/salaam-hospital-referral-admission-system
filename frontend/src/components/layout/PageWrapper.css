@@ -9,5 +9,9 @@
   .page-wrapper { margin-left: var(--sidebar-collapsed-width); }
 }
 @media (max-width: 767px) {
-  .page-wrapper { margin-left: 0; padding: var(--space-4); }
+  .page-wrapper {
+    margin-left: 0;
+    padding: var(--space-4);
+    padding-bottom: calc(58px + env(safe-area-inset-bottom) + var(--space-4));
+  }
 }

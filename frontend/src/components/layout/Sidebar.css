@@ -3,7 +3,7 @@
   top: 0; left: 0;
   height: 100vh;
   width: var(--sidebar-width);
-  background: #0b5e49;
+  background: var(--color-sidebar-bg);
   border-right: 1px solid rgba(255,255,255,0.1);
   display: flex;
   flex-direction: column;
@@ -62,7 +62,7 @@
   text-decoration: none;
 }
 .sidebar__link--active {
-  background: #0e7a5f;
+  background: var(--color-primary);
   color: #ffffff;
 }
 .sidebar__link--active:hover { color: #ffffff; }
@@ -138,21 +138,7 @@
 }
 
 @media (max-width: 767px) {
-  .sidebar {
-    transform: translateX(-100%);
-    width: var(--sidebar-width) !important;
-  }
-  .sidebar.sidebar--mobile-open {
-    transform: translateX(0);
-  }
-  .sidebar.sidebar--mobile-open + .sidebar-backdrop,
-  .sidebar-backdrop.active {
-    display: block;
-  }
-  /* Show labels on mobile open */
-  .sidebar.sidebar--mobile-open .sidebar__link-label,
-  .sidebar.sidebar--mobile-open .sidebar__brand-text,
-  .sidebar.sidebar--mobile-open .sidebar__user-info { display: flex; }
-  .sidebar.sidebar--mobile-open .sidebar__user { justify-content: flex-start; }
-  .sidebar.sidebar--mobile-open .sidebar__logout { justify-content: flex-start; }
+  /* Sidebar is replaced by BottomNav on mobile — hide it completely */
+  .sidebar { display: none !important; }
+  .sidebar-backdrop { display: none !important; }
 }
