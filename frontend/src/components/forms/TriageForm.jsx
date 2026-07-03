@@ -48,6 +48,7 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
     e.preventDefault();
     if (!patientId && !form.patient_id) { setError('Patient is required.'); return; }
     if (!form.triage_level) { setError('Triage level is required.'); return; }
+    if (!form.assigned_doctor_id) { setError('An attending doctor must be assigned.'); return; }
     setError('');
 
     if (user?.role === 'nurse' || user?.role === 'staff') {
@@ -126,9 +127,9 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
       </div>
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-        <label htmlFor="tf-doctor">Assign to Doctor</label>
-        <select id="tf-doctor" value={form.assigned_doctor_id} onChange={set('assigned_doctor_id')} disabled={doctorsFetching}>
-          <option value="">— Leave unassigned (add to pool) —</option>
+        <label htmlFor="tf-doctor">Attending Doctor *</label>
+        <select id="tf-doctor" value={form.assigned_doctor_id} onChange={set('assigned_doctor_id')} disabled={doctorsFetching} required>
+          <option value="">— Select doctor —</option>
           {doctors.map((d) => (
             <option key={d.doctor_id} value={d.doctor_id}>
               Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}

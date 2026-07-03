@@ -19,10 +19,16 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
+  const today = new Date().toISOString().split('T')[0];
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.first_name || !form.last_name || !form.sex || !form.date_of_birth) {
       setError('First name, last name, sex, and date of birth are required.');
+      return;
+    }
+    if (form.date_of_birth > today) {
+      setError('Date of birth cannot be in the future.');
       return;
     }
     setError('');
@@ -54,7 +60,7 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
         </div>
         <div className="form-group">
           <label htmlFor="pf-dob">Date of Birth *</label>
-          <input id="pf-dob" type="date" value={form.date_of_birth} onChange={set('date_of_birth')} required />
+          <input id="pf-dob" type="date" value={form.date_of_birth} onChange={set('date_of_birth')} max={today} required />
         </div>
       </div>
 

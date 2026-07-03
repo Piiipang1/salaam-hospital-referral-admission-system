@@ -87,6 +87,7 @@
     max-width: 100% !important;
     max-height: 92vh;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    padding-bottom: env(safe-area-inset-bottom);
   }
   .modal__header {
     padding: var(--space-4) var(--space-5);
