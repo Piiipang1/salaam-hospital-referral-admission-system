@@ -11,12 +11,12 @@ router.get('/', auth, admissionsController.getAllAdmissions);
 router.get('/:id', auth, admissionsController.getAdmissionById);
 
 // POST /api/admissions
-router.post('/', auth, requireRole('admin', 'nurse', 'staff', 'doctor'), admissionsController.createAdmission);
+router.post('/', auth, requireRole('doctor'), admissionsController.createAdmission);
 
 // PUT /api/admissions/:id/assign-room
-router.put('/:id/assign-room', auth, requireRole('admin', 'nurse', 'staff'), admissionsController.assignRoom);
+router.put('/:id/assign-room', auth, requireRole('nurse', 'staff'), admissionsController.assignRoom);
 
 // PUT /api/admissions/:id/discharge
-router.put('/:id/discharge', auth, requireRole('admin', 'doctor'), admissionsController.dischargePatient);
+router.put('/:id/discharge', auth, requireRole('doctor'), admissionsController.dischargePatient);
 
 module.exports = router;
