@@ -13,6 +13,9 @@ const createTriage = async (req, res) => {
   if (!patient_id || !triage_level) {
     return res.status(400).json({ success: false, message: 'patient_id and triage_level are required.' });
   }
+  if (!assigned_doctor_id) {
+    return res.status(400).json({ success: false, message: 'An attending doctor must be assigned at triage.' });
+  }
 
   const validLevels = ['Critical', 'Urgent', 'Non-Urgent'];
   if (!validLevels.includes(triage_level)) {
@@ -58,12 +61,7 @@ const createTriage = async (req, res) => {
       );
       const patientName = patient?.patient_name ?? `Patient #${patient_id}`;
 
-      // Triage level emoji prefix for visual scanning
-      const levelEmoji = triage_level === 'Critical'   ? '🚨'
-                       : triage_level === 'Urgent'     ? '⚠️'
-                       :                                  '🟢';
-
-      const baseMsg = `${levelEmoji} New ${triage_level} triage recorded for ${patientName}. Triage ID: ${result.insertId}.`;
+      const baseMsg = `New ${triage_level} triage recorded for ${patientName}. Triage ID: ${result.insertId}.`;
 
       const notifRows = [];
 
@@ -91,7 +89,7 @@ const createTriage = async (req, res) => {
           if (doc.user_id !== req.user.user_id) {
             notifRows.push([
               doc.user_id,
-              `${levelEmoji} Your patient ${patientName} has a new ${triage_level} triage. Triage ID: ${result.insertId}.`,
+              `Your patient ${patientName} has a new ${triage_level} triage. Triage ID: ${result.insertId}.`,
               null,
             ]);
           }
@@ -107,7 +105,7 @@ const createTriage = async (req, res) => {
         if (docUser && docUser.user_id !== req.user.user_id) {
           notifRows.push([
             docUser.user_id,
-            `🩺 You have been assigned a new patient at triage: ${patientName} (${triage_level}).`,
+            `You have been assigned a new patient at triage: ${patientName} (${triage_level}).`,
             null,
           ]);
         }
@@ -271,6 +269,10 @@ const createEmergencyTriage = async (req, res) => {
   const notes              = req.body.notes || null;
   const assigned_doctor_id = req.body.assigned_doctor_id || null;
 
+  if (!assigned_doctor_id) {
+    return res.status(400).json({ success: false, message: 'An attending doctor must be assigned at triage.' });
+  }
+
   const validLevels = ['Critical', 'Urgent', 'Non-Urgent'];
   if (!validLevels.includes(triage_level)) {
     return res.status(400).json({ success: false, message: `triage_level must be one of: ${validLevels.join(', ')}.` });
@@ -343,7 +345,7 @@ const createEmergencyTriage = async (req, res) => {
 
   // ── Post-commit notifications (best-effort, non-blocking) ─────────────────
   try {
-    const notifMsg = `🚨 EMERGENCY: An unidentified patient has been triaged as ${triage_level}. Immediate attention required. Patient ID: ${newPatientId}.`;
+    const notifMsg = `EMERGENCY: An unidentified patient has been triaged as ${triage_level}. Immediate attention required. Patient ID: ${newPatientId}.`;
     const notifRows = [];
 
     // Resolve the assigned doctor's user_id so we can personalise their notification
@@ -372,7 +374,7 @@ const createEmergencyTriage = async (req, res) => {
       if (d.user_id === assignedDoctorUserId) {
         notifRows.push([
           d.user_id,
-          `🩺 You have been assigned a new patient at triage: Patient #${newPatientId} (${triage_level}).`,
+          `You have been assigned a new patient at triage: Patient #${newPatientId} (${triage_level}).`,
           null,
         ]);
       } else {

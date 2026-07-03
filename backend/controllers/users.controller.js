@@ -157,4 +157,19 @@ const deactivateUser = async (req, res) => {
   }
 };
 
-module.exports = { createUser, getAllUsers, getUserById, updateUser, deactivateUser };
+// PUT /api/users/:id/reactivate
+const reactivateUser = async (req, res) => {
+  try {
+    await db.query('UPDATE users SET is_active = 1 WHERE user_id = ?', [req.params.id]);
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'RESTORE', 'users', ?)",
+      [req.user.user_id, req.params.id]
+    );
+    return res.status(200).json({ success: true, message: 'User reactivated.' });
+  } catch (err) {
+    console.error('reactivateUser error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { createUser, getAllUsers, getUserById, updateUser, deactivateUser, reactivateUser };

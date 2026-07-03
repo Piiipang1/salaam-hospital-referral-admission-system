@@ -56,7 +56,7 @@ const createReferral = async (req, res) => {
           'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
           [
             detail.assigned_user_id,
-            `🔄 You have a new referral assigned: ${detail.patient_name ?? `Patient #`}${condPart}. Referral ID: ${result.insertId}.`,
+            `You have a new referral assigned: ${detail.patient_name ?? `Patient #`}${condPart}. Referral ID: ${result.insertId}.`,
             result.insertId,
           ]
         );
@@ -67,7 +67,7 @@ const createReferral = async (req, res) => {
         "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
       );
       const adminMsg =
-        `🔄 New referral created: ${detail?.patient_name ?? 'a patient'} referred for ` +
+        `New referral created: ${detail?.patient_name ?? 'a patient'} referred for ` +
         `${detail?.medical_condition ?? 'an unspecified condition'}. Referral ID: ${result.insertId}.`;
       const notifRows = [];
       for (const admin of admins) {
@@ -223,17 +223,13 @@ const updateReferralStatus = async (req, res) => {
           [req.params.id]
         );
 
-        const statusEmoji = status === 'Accepted'  ? '✅'
-                          : status === 'Completed' ? '🏅'
-                          :                          '❌'; // Cancelled
-
         if (detail?.referring_user_id) {
           const condPart = detail.medical_condition ? ` for ${detail.medical_condition}` : '';
           await db.query(
             'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
             [
               detail.referring_user_id,
-              `${statusEmoji} Your referral${condPart} for ${detail.patient_name ?? 'a patient'} has been marked ${status}. Referral ID: ${req.params.id}.`,
+              `Your referral${condPart} for ${detail.patient_name ?? 'a patient'} has been marked ${status}. Referral ID: ${req.params.id}.`,
               parseInt(req.params.id),
             ]
           );
@@ -243,7 +239,7 @@ const updateReferralStatus = async (req, res) => {
         const [admins] = await db.query(
           "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
         );
-        const adminMsg = `${statusEmoji} Referral #${req.params.id} for ${detail?.patient_name ?? 'a patient'} has been marked ${status}.`;
+        const adminMsg = `Referral #${req.params.id} for ${detail?.patient_name ?? 'a patient'} has been marked ${status}.`;
         const notifRows = [];
         for (const admin of admins) {
           if (admin.user_id !== req.user.user_id) {
