@@ -20,4 +20,7 @@ router.put('/:id', auth, requireRole('admin'), usersController.updateUser);
 // DELETE /api/users/:id  (deactivate)
 router.delete('/:id', auth, requireRole('admin'), usersController.deactivateUser);
 
+// PUT /api/users/:id/reactivate
+router.put('/:id/reactivate', auth, requireRole('admin'), usersController.reactivateUser);
+
 module.exports = router;

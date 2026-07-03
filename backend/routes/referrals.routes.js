@@ -9,7 +9,7 @@ const { upload }  = require('../middleware/upload');
 router.post(
   '/',
   auth,
-  requireRole('admin', 'doctor'),
+  requireRole('doctor'),
   upload.single('file_attachment'),
   referralsController.createReferral
 );
@@ -24,6 +24,6 @@ router.get('/history/:patient_id', auth, referralsController.getReferralHistory)
 router.get('/:id', auth, referralsController.getReferralById);
 
 // PUT /api/referrals/:id/status
-router.put('/:id/status', auth, requireRole('admin', 'doctor'), referralsController.updateReferralStatus);
+router.put('/:id/status', auth, requireRole('doctor'), referralsController.updateReferralStatus);
 
 module.exports = router;
