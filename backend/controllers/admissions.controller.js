@@ -187,7 +187,7 @@ const createAdmission = async (req, res) => {
       if (referral?.referring_user_id && referral.referring_user_id !== detail?.doctor_user_id) {
         notifRows.push([
           referral.referring_user_id,
-          `🛏️ Your referred patient ${patientName} has been admitted and is awaiting room assignment. ` +
+          `Your referred patient ${patientName} has been admitted and is awaiting room assignment. ` +
           `Admission ID: ${admissionId}.`,
           null,
         ]);
@@ -197,7 +197,7 @@ const createAdmission = async (req, res) => {
       const [staffUsers] = await db.query(
         "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
       );
-      const staffMsg = `🛏️ ${patientName} has been admitted and is awaiting room assignment.`;
+      const staffMsg = `${patientName} has been admitted and is awaiting room assignment.`;
       for (const su of staffUsers) {
         if (su.user_id !== req.user.user_id) {
           notifRows.push([su.user_id, staffMsg, null]);
@@ -290,7 +290,7 @@ const assignRoom = async (req, res) => {
     try {
       const patientName = adm.patient_name ?? `Patient #${adm.patient_id}`;
       const message =
-        `🛏️ Room ${room[0].room_type} Bed ${room[0].bed_number} has been assigned to your patient ${patientName}.`;
+        `Room ${room[0].room_type} Bed ${room[0].bed_number} has been assigned to your patient ${patientName}.`;
 
       const [[doctorUser]] = await db.query(
         "SELECT user_id FROM users WHERE role = 'doctor' AND linked_id = ? AND is_active = 1",
@@ -398,13 +398,13 @@ const dischargePatient = async (req, res) => {
       if (doctorUser) {
         notifRows.push([
           doctorUser.user_id,
-          `🏥 Your patient ${adm.patient_name} has been discharged on ${dischargeDate}. Admission ID: ${req.params.id}.`,
+          `Your patient ${adm.patient_name} has been discharged on ${dischargeDate}. Admission ID: ${req.params.id}.`,
           null,
         ]);
       }
 
       const adminMsg =
-        `🏥 Patient ${adm.patient_name} has been discharged. Admission ID: ${req.params.id}.`;
+        `Patient ${adm.patient_name} has been discharged. Admission ID: ${req.params.id}.`;
 
       for (const admin of admins) {
         if (admin.user_id !== req.user.user_id) {

@@ -134,7 +134,7 @@ const addTreatment = async (req, res) => {
       );
 
       const patientName = diag?.patient_name ?? 'a patient';
-      const message = `💊 New treatment prescribed for ${patientName}: ${prescribed_medications}. Please prepare for administration.`;
+      const message = `New treatment prescribed for ${patientName}: ${prescribed_medications}. Please prepare for administration.`;
 
       const notifRows = [];
       for (const su of staffUsers) {
@@ -242,10 +242,10 @@ const saveAssessment = async (req, res) => {
 
       const patientName = diag?.patient_name ?? 'a patient';
       const dispositionMessages = {
-        Admit:     `🛏️ Doctor has ordered ADMISSION for ${patientName}. Please prepare bed assignment.`,
-        Discharge: `🏥 Doctor has ordered DISCHARGE for ${patientName}. Please prepare discharge documents.`,
-        Refer:     `🔄 Doctor has ordered REFERRAL for ${patientName}. Referral will be created.`,
-        Observe:   `👁️ Doctor has ordered OBSERVATION for ${patientName}. Please monitor the patient.`,
+        Admit:     `Doctor has ordered ADMISSION for ${patientName}. Please prepare bed assignment.`,
+        Discharge: `Doctor has ordered DISCHARGE for ${patientName}. Please prepare discharge documents.`,
+        Refer:     `Doctor has ordered REFERRAL for ${patientName}. Referral will be created.`,
+        Observe:   `Doctor has ordered OBSERVATION for ${patientName}. Please monitor the patient.`,
       };
       const notifMessage = dispositionMessages[disposition];
 

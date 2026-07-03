@@ -51,7 +51,9 @@ const getAllPatients = async (req, res) => {
 
     const [rows] = await db.query(
       `SELECT patient_id, first_name, last_name, sex, date_of_birth,
-              contact_number, address, is_unidentified, created_at
+              contact_number, address,
+              emergency_contact_name, emergency_contact_number,
+              is_unidentified, created_at
        FROM patients
        ${where}
        ORDER BY created_at DESC LIMIT ? OFFSET ?`,
@@ -214,6 +216,14 @@ const createPatient = async (req, res) => {
     return res.status(400).json({ success: false, message: 'First name, last name, sex, and date of birth are required.' });
   }
 
+  if (date_of_birth) {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (date_of_birth > todayStr) {
+      return res.status(400).json({ success: false, message: 'Date of birth cannot be in the future.' });
+    }
+  }
+
   try {
     const [result] = await db.query(
       `INSERT INTO patients
@@ -236,7 +246,7 @@ const createPatient = async (req, res) => {
         "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
       );
 
-      const message = `🧑‍⚕️ New patient registered: ${first_name} ${last_name}. Patient ID: ${result.insertId}.`;
+      const message = `New patient registered: ${first_name} ${last_name}. Patient ID: ${result.insertId}.`;
 
       for (const admin of admins) {
         if (admin.user_id !== req.user.user_id) {
@@ -264,6 +274,14 @@ const updatePatient = async (req, res) => {
     emergency_contact_name, emergency_contact_number,
     is_unidentified,
   } = req.body;
+
+  if (date_of_birth) {
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (date_of_birth > todayStr) {
+      return res.status(400).json({ success: false, message: 'Date of birth cannot be in the future.' });
+    }
+  }
 
   // When completing registration of an unidentified patient, the real identity
   // fields must be present and must not still be the placeholder sentinel values.
@@ -312,91 +330,4 @@ const updatePatient = async (req, res) => {
   }
 };
 
-// GET /api/patients/unassigned
-// Returns triaged patients with no doctor connection (no doctor_in_charge, no admission, no referral).
-// Ordered by urgency (Critical → Urgent → Non-Urgent) then newest triage first.
-const getUnassignedPatients = async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      `SELECT
-         p.patient_id,
-         CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-         p.is_unidentified,
-         t.triage_level,
-         t.triage_datetime
-       FROM patients p
-       -- Latest triage for this patient (excludes patients with no triages)
-       JOIN triages t ON t.triage_id = (
-         SELECT triage_id FROM triages
-         WHERE patient_id = p.patient_id
-         ORDER BY triage_datetime DESC
-         LIMIT 1
-       )
-       -- No doctor_in_charge row
-       WHERE NOT EXISTS (
-         SELECT 1 FROM doctor_in_charge dic WHERE dic.patient_id = p.patient_id
-       )
-       -- No admission (admissions always carry a doctor_id)
-       AND NOT EXISTS (
-         SELECT 1 FROM admissions a WHERE a.patient_id = p.patient_id
-       )
-       -- No referral linked to this patient (referrals always have an assigned_doctor_id)
-       AND NOT EXISTS (
-         SELECT 1 FROM diagnoses d
-         JOIN referrals r ON r.diagnosis_id = d.diagnosis_id
-         WHERE d.patient_id = p.patient_id
-       )
-       ORDER BY
-         FIELD(t.triage_level, 'Critical', 'Urgent', 'Non-Urgent'),
-         t.triage_datetime DESC`
-    );
-
-    return res.status(200).json({ success: true, data: rows });
-  } catch (err) {
-    console.error('getUnassignedPatients error:', err);
-    return res.status(500).json({ success: false, message: 'Server error.' });
-  }
-};
-
-// POST /api/patients/:id/claim  (doctor only)
-// The calling doctor claims this patient, creating a doctor_in_charge link so they
-// can access and diagnose the patient. Idempotent — silently succeeds if already claimed.
-const claimPatient = async (req, res) => {
-  const patientId = req.params.id;
-  const doctorId  = req.user.linked_id;
-
-  try {
-    const [[patient]] = await db.query(
-      'SELECT patient_id FROM patients WHERE patient_id = ?',
-      [patientId]
-    );
-    if (!patient) {
-      return res.status(404).json({ success: false, message: 'Patient not found.' });
-    }
-
-    const [[existing]] = await db.query(
-      'SELECT dic_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ? LIMIT 1',
-      [doctorId, patientId]
-    );
-    if (existing) {
-      return res.status(200).json({ success: true, message: 'Already assigned to this patient.' });
-    }
-
-    const [result] = await db.query(
-      'INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at) VALUES (?, ?, NOW())',
-      [doctorId, patientId]
-    );
-
-    await db.query(
-      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'doctor_in_charge', ?)",
-      [req.user.user_id, result.insertId]
-    );
-
-    return res.status(201).json({ success: true, message: 'Patient claimed successfully.' });
-  } catch (err) {
-    console.error('claimPatient error:', err);
-    return res.status(500).json({ success: false, message: 'Server error.' });
-  }
-};
-
-module.exports = { getAllPatients, getPatientById, getPatientHistory, createPatient, updatePatient, getUnassignedPatients, claimPatient };
+module.exports = { getAllPatients, getPatientById, getPatientHistory, createPatient, updatePatient };
