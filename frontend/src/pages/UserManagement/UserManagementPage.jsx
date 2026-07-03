@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Database, Download, RotateCcw, Trash2 } from 'lucide-react';
-import { getAllUsers, createUser, updateUser, deactivateUser } from '../../api/users.api';
+import { getAllUsers, createUser, updateUser, deactivateUser, reactivateUser } from '../../api/users.api';
 import { createBackup, listBackups, getBackupDownloadUrl, restoreBackup, deleteBackup } from '../../api/backup.api';
 import { formatDate } from '../../utils/formatDate';
 import { ROLE_LABELS } from '../../utils/constants';
@@ -27,13 +27,16 @@ const relativeDate = (iso) => {
 };
 
 const UserManagementPage = () => {
+  const BACKUPS_ENABLED = import.meta.env.VITE_ENABLE_BACKUPS === 'true';
+
   // ── User management state ──────────────────────────────────────────────────
   const [users,   setUsers]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
   const [modal,   setModal]   = useState(null); // null | 'new' | user object
-  const [confirm, setConfirm] = useState(null); // user row to deactivate
+  const [confirm,          setConfirm]          = useState(null); // user row to deactivate
+  const [reactivateConfirm, setReactivateConfirm] = useState(null); // user row to reactivate
   const [saving,  setSaving]  = useState(false);
 
   // ── Backup state ───────────────────────────────────────────────────────────
@@ -65,7 +68,7 @@ const UserManagementPage = () => {
       .catch(() => setBackupError('Could not load backup list.'))
       .finally(() => setBackupsLoading(false));
   }, []);
-  useEffect(() => { loadBackups(); }, [loadBackups]);
+  useEffect(() => { if (BACKUPS_ENABLED) loadBackups(); }, [loadBackups, BACKUPS_ENABLED]);
 
   // ── User handlers ──────────────────────────────────────────────────────────
   const handleSave = async (data) => {
@@ -87,6 +90,17 @@ const UserManagementPage = () => {
       setSuccess(`${confirm.username} deactivated.`);
       setConfirm(null); load();
     } catch (err) { setError(err.response?.data?.message || 'Deactivation failed.'); }
+    finally { setSaving(false); }
+  };
+
+  const handleReactivate = async () => {
+    if (!reactivateConfirm) return;
+    setSaving(true);
+    try {
+      await reactivateUser(reactivateConfirm.user_id);
+      setSuccess(`${reactivateConfirm.username} reactivated.`);
+      setReactivateConfirm(null); load();
+    } catch (err) { setError(err.response?.data?.message || 'Reactivation failed.'); }
     finally { setSaving(false); }
   };
 
@@ -149,18 +163,21 @@ const UserManagementPage = () => {
 
   // ── Table columns ──────────────────────────────────────────────────────────
   const userColumns = [
-    { key:'user_id',   label:'ID',      width:'60px' },
+    { key:'user_id',   label:'ID',      width:'60px', hideMobile: true },
     { key:'username',  label:'Username',render:(r)=><span style={{fontWeight:600}}>{r.username}</span> },
     { key:'role',      label:'Role',    render:(r)=><Badge status={r.role} label={ROLE_LABELS[r.role]??r.role} /> },
-    { key:'linked_id', label:'Linked ID',render:(r)=>r.linked_id??'—' },
+    { key:'linked_id', label:'Linked ID',render:(r)=>r.linked_id??'—', hideMobile: true },
     { key:'is_active', label:'Status',  render:(r)=>r.is_active ? <Badge status="Completed" label="Active" /> : <Badge status="Cancelled" label="Inactive" /> },
-    { key:'created_at',label:'Created', render:(r)=>formatDate(r.created_at) },
+    { key:'created_at',label:'Created', render:(r)=>formatDate(r.created_at), hideMobile: true },
     {
       key:'actions', label:'', width:'140px', align:'right',
       render:(r)=>(
         <div style={{display:'flex',gap:'var(--space-2)',justifyContent:'flex-end'}}>
           <Button size="sm" variant="outline" onClick={(e)=>{e.stopPropagation();setModal(r);}}>Edit</Button>
-          {r.is_active && <Button size="sm" variant="danger" onClick={(e)=>{e.stopPropagation();setConfirm(r);}}>Deactivate</Button>}
+          {r.is_active
+            ? <Button size="sm" variant="danger"   onClick={(e)=>{e.stopPropagation();setConfirm(r);}}>Deactivate</Button>
+            : <Button size="sm" variant="primary"  onClick={(e)=>{e.stopPropagation();setReactivateConfirm(r);}}>Reactivate</Button>
+          }
         </div>
       ),
     },
@@ -183,8 +200,8 @@ const UserManagementPage = () => {
         <Table columns={userColumns} data={users} loading={loading} emptyMessage="No users found." />
       </div>
 
-      {/* ── Database Backup Section ─────────────────────────────────────────── */}
-      <Card
+      {/* ── Database Backup Section (local dev only — requires mysqldump) ──────── */}
+      {BACKUPS_ENABLED && <Card
         title="Database Backup"
         action={
           <Button
@@ -311,7 +328,7 @@ const UserManagementPage = () => {
             ))}
           </div>
         )}
-      </Card>
+      </Card>}
 
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <Modal isOpen={!!modal} onClose={()=>setModal(null)} title={modal==='new'?'Create User':'Edit User'} size="md">
@@ -328,36 +345,47 @@ const UserManagementPage = () => {
         loading={saving}
       />
 
-      {/* ── Restore confirmation dialog ─────────────────────────────────────── */}
       <ConfirmDialog
-        isOpen={!!restoreTarget}
-        onClose={() => setRestoreTarget(null)}
-        onConfirm={handleRestore}
-        title="Restore Database"
-        message={
-          `Are you sure you want to restore from:\n\n` +
-          `"${restoreTarget}"\n\n` +
-          `This will OVERWRITE ALL current data with the backup. ` +
-          `This action cannot be undone.`
-        }
-        confirmLabel="Yes, Restore"
-        loading={restoreRunning}
+        isOpen={!!reactivateConfirm}
+        onClose={() => setReactivateConfirm(null)}
+        onConfirm={handleReactivate}
+        title="Reactivate User"
+        message={`Reactivate account "${reactivateConfirm?.username}"? They will be able to log in again.`}
+        confirmLabel="Reactivate"
+        loading={saving}
       />
 
-      {/* ── Delete confirmation dialog ───────────────────────────────────────── */}
-      <ConfirmDialog
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDeleteBackup}
-        title="Delete Backup"
-        message={
-          `Permanently delete this backup file?\n\n` +
-          `"${deleteTarget}"\n\n` +
-          `This cannot be undone. Download a local copy first if you need to keep it.`
-        }
-        confirmLabel="Yes, Delete"
-        loading={deleteRunning}
-      />
+      {/* ── Restore / Delete dialogs (backup-only) ─────────────────────────── */}
+      {BACKUPS_ENABLED && <>
+        <ConfirmDialog
+          isOpen={!!restoreTarget}
+          onClose={() => setRestoreTarget(null)}
+          onConfirm={handleRestore}
+          title="Restore Database"
+          message={
+            `Are you sure you want to restore from:\n\n` +
+            `"${restoreTarget}"\n\n` +
+            `This will OVERWRITE ALL current data with the backup. ` +
+            `This action cannot be undone.`
+          }
+          confirmLabel="Yes, Restore"
+          loading={restoreRunning}
+        />
+
+        <ConfirmDialog
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteBackup}
+          title="Delete Backup"
+          message={
+            `Permanently delete this backup file?\n\n` +
+            `"${deleteTarget}"\n\n` +
+            `This cannot be undone. Download a local copy first if you need to keep it.`
+          }
+          confirmLabel="Yes, Delete"
+          loading={deleteRunning}
+        />
+      </>}
     </div>
   );
 };

@@ -90,6 +90,10 @@ const TriagePage = () => {
   };
 
   const handleEmergencyTriage = async () => {
+    if (!emergencyForm.assigned_doctor_id) {
+      setError('An attending doctor must be assigned.');
+      return;
+    }
     setEmergencySaving(true);
     try {
       const result = await createEmergencyTriage(emergencyForm);
@@ -107,11 +111,11 @@ const TriagePage = () => {
 
   // ── Table columns ─────────────────────────────────────────────
   const columns = [
-    { key: 'triage_id',       label: 'ID',        width: '60px' },
+    { key: 'triage_id',       label: 'ID',        width: '60px', hideMobile: true },
     { key: 'patient_name',    label: 'Patient',   render: (r) => r.patient_name || `Patient #${r.patient_id}` },
     { key: 'triage_level',    label: 'Level',     render: (r) => <Badge status={r.triage_level} /> },
     { key: 'triage_datetime', label: 'Date/Time', render: (r) => formatDate(r.triage_datetime, true) },
-    { key: 'notes',           label: 'Notes',     render: (r) => (
+    { key: 'notes',           label: 'Notes',     hideMobile: true, render: (r) => (
         <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
           {r.notes ? r.notes.substring(0, 60) + (r.notes.length > 60 ? '…' : '') : '—'}
         </span>
@@ -194,25 +198,28 @@ const TriagePage = () => {
 
         {/* Date range */}
         <div className="triage-date-range">
-          <input
-            id="triage-from-date"
-            type="date"
-            className="filter-date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            title="From date"
-            aria-label="Triage from date"
-          />
-          <span className="filter-date-sep">—</span>
-          <input
-            id="triage-to-date"
-            type="date"
-            className="filter-date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            title="To date"
-            aria-label="Triage to date"
-          />
+          <div className="filter-date-group">
+            <span className="filter-date-label">From</span>
+            <input
+              id="triage-from-date"
+              type="date"
+              className="filter-date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              aria-label="Triage from date"
+            />
+          </div>
+          <div className="filter-date-group">
+            <span className="filter-date-label">To</span>
+            <input
+              id="triage-to-date"
+              type="date"
+              className="filter-date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              aria-label="Triage to date"
+            />
+          </div>
         </div>
 
         {/* Clear button */}
@@ -260,14 +267,15 @@ const TriagePage = () => {
           />
         </div>
         <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-          <label htmlFor="et-doctor">Assign to Doctor</label>
+          <label htmlFor="et-doctor">Attending Doctor *</label>
           <select
             id="et-doctor"
             value={emergencyForm.assigned_doctor_id}
             onChange={(e) => setEmergencyForm((f) => ({ ...f, assigned_doctor_id: e.target.value }))}
             disabled={etDoctorsFetching}
+            required
           >
-            <option value="">— Leave unassigned (add to pool) —</option>
+            <option value="">— Select doctor —</option>
             {etDoctors.map((d) => (
               <option key={d.doctor_id} value={d.doctor_id}>
                 Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}

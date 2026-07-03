@@ -83,12 +83,12 @@
   --transition-base: 0.2s ease;
   --transition-slow: 0.3s ease;
 
-  /* Z-Index */
+  /* Z-Index — ladder: page content < sidebar/topbar (90-100) < bottom-nav (1000-1002) < modal (1100-1110) < tooltip (1200) */
   --z-sidebar:  100;
   --z-topbar:   90;
-  --z-modal:    200;
-  --z-overlay:  190;
-  --z-tooltip:  300;
+  --z-overlay:  1100;
+  --z-modal:    1110;
+  --z-tooltip:  1200;
 }
 
 /* ── Design Tokens — Dark Theme Override ─────────────────────── */
@@ -124,6 +124,9 @@
   /* Sidebar — stays dark green/near-black, not bright */
   --color-sidebar-bg:     #0a120f;
 }
+
+/* Date input needs dark color-scheme in dark mode so the calendar icon stays visible */
+[data-theme="dark"] .filter-date { color-scheme: dark; }
 
 /* ── Reset ──────────────────────────────────────────────────── */
 *, *::before, *::after {
@@ -333,7 +336,7 @@ hr {
   height: 38px;
   cursor: pointer;
   transition: border-color var(--transition-fast);
-  color-scheme: dark; /* makes the browser chrome dark on Chromium */
+  color-scheme: light; /* keeps browser calendar icon/text visible on light bg */
 }
 .filter-date:focus {
   outline: none;
@@ -341,13 +344,9 @@ hr {
   box-shadow: 0 0 0 3px var(--color-primary-muted);
 }
 
-/* Small "—" separator between from/to date inputs */
-.filter-date-sep {
-  color: var(--color-text-disabled);
-  font-size: var(--font-size-sm);
-  flex-shrink: 0;
-  user-select: none;
-}
+/* Labeled date input group — From / To */
+.filter-date-group { display: flex; flex-direction: column; gap: 2px; }
+.filter-date-label { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: 500; }
 
 /* Clear-filters button — appears only when filters are active */
 .filter-clear-btn {
