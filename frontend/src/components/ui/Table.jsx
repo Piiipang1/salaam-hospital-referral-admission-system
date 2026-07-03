@@ -2,7 +2,7 @@ import Spinner from './Spinner';
 import './Table.css';
 
 const Table = ({
-  columns = [],    // [{ key, label, render?, width?, align? }]
+  columns = [],    // [{ key, label, render?, width?, align?, hideMobile? }]
   data = [],
   loading = false,
   emptyMessage = 'No records found.',
@@ -26,6 +26,7 @@ const Table = ({
               <th
                 key={col.key}
                 style={{ width: col.width, textAlign: col.align ?? 'left' }}
+                className={col.hideMobile ? 'col-hide-mobile' : undefined}
               >
                 {col.label}
               </th>
@@ -47,7 +48,11 @@ const Table = ({
                 className={onRowClick ? 'table-row--clickable' : ''}
               >
                 {columns.map((col) => (
-                  <td key={col.key} style={{ textAlign: col.align ?? 'left' }}>
+                  <td
+                    key={col.key}
+                    style={{ textAlign: col.align ?? 'left' }}
+                    className={col.hideMobile ? 'col-hide-mobile' : undefined}
+                  >
                     {col.render ? col.render(row) : (row[col.key] ?? '—')}
                   </td>
                 ))}

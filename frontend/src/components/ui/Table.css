@@ -58,8 +58,8 @@
 @media (max-width: 767px) {
   .data-table {
     font-size: var(--font-size-xs);
-    /* Ensure table doesn't shrink below content; scroll kicks in */
-    min-width: 380px;
+    /* Hidden columns reduce width enough that no side-scroll is needed */
+    min-width: 0;
   }
   .data-table th,
   .data-table td {
@@ -67,5 +67,8 @@
   }
   .table-empty {
     padding: var(--space-8) !important;
+  }
+  .col-hide-mobile {
+    display: none;
   }
 }

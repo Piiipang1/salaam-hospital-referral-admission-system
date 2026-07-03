@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getAllAdmissions, createAdmission, assignRoom, dischargePatient } from '../../api/admissions.api';
 import { getAllRooms } from '../../api/rooms.api';
 import { useAuth } from '../../context/AuthContext';
-import { canAssignRoom } from '../../utils/roleGuard';
+import { canAssignRoom, canAdmitPatient } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -70,13 +70,13 @@ const AdmissionsPage = () => {
   };
 
   const columns = [
-    { key: 'admission_id',   label: 'ID',      width: '60px' },
+    { key: 'admission_id',   label: 'ID',      width: '60px', hideMobile: true },
     { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? `Patient #${r.patient_id}` },
-    { key: 'doctor_name',    label: 'Doctor',  render: (r) => r.doctor_name  ?? `Doctor #${r.doctor_id}` },
+    { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name  ?? `Doctor #${r.doctor_id}` },
     { key: 'room_type',      label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : '—' },
-    { key: 'admission_type', label: 'Type'     },
-    { key: 'admission_date', label: 'Admitted', render: (r) => formatDate(r.admission_date) },
-    { key: 'discharge_date', label: 'Discharged', render: (r) => formatDate(r.discharge_date) },
+    { key: 'admission_type', label: 'Type',    hideMobile: true },
+    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
+    { key: 'discharge_date', label: 'Discharged', hideMobile: true, render: (r) => formatDate(r.discharge_date) },
     { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
     {
       key: 'actions', label: '', width: '140px', align: 'right',
@@ -85,7 +85,7 @@ const AdmissionsPage = () => {
           {r.status === 'Pending Room' && canAssignRoom(user?.role) && (
             <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); openAssignRoom(r); }}>Assign Room</Button>
           )}
-          {r.status === 'Active' && (user?.role === 'admin' || (user?.role === 'doctor' && user?.linked_id === r.doctor_id)) && (
+          {r.status === 'Active' && user?.role === 'doctor' && user?.linked_id === r.doctor_id && (
             <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); setConfirm(r); }}>Discharge</Button>
           )}
         </>
@@ -97,7 +97,9 @@ const AdmissionsPage = () => {
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
       <div className="page-header">
         <div><h2 className="page-title">Admissions</h2><p className="page-subtitle">{data.filter(d=>d.status==='Active').length} active admission{data.filter(d=>d.status==='Active').length !== 1?'s':''}</p></div>
-        <Button id="admit-patient-btn" variant="primary" onClick={() => setModal(true)}>+ Admit Patient</Button>
+        {canAdmitPatient(user?.role) && (
+          <Button id="admit-patient-btn" variant="primary" onClick={() => setModal(true)}>+ Admit Patient</Button>
+        )}
       </div>
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
