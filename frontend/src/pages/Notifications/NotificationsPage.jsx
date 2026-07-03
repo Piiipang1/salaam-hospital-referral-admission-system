@@ -6,6 +6,8 @@ import {
 import { getMyNotifications, markAsRead, markAllAsRead } from '../../api/notifications.api';
 import { useNotif } from '../../context/NotifContext';
 import { timeAgo } from '../../utils/formatDate';
+
+const cleanMsg = (s = '') => s.replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]+\s*/gu, '');
 import Button  from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
 import Alert   from '../../components/ui/Alert';
@@ -118,7 +120,7 @@ const NotificationsPage = () => {
 
               {/* Body */}
               <div className="notif-item__body">
-                <p className="notif-item__message">{n.message}</p>
+                <p className="notif-item__message">{cleanMsg(n.message)}</p>
                 <span className="notif-item__time">{timeAgo(n.created_at)}</span>
               </div>
 

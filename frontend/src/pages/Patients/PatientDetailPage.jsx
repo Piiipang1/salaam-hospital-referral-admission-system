@@ -7,7 +7,7 @@ import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessm
 import { createReferral } from '../../api/referrals.api';
 import { createAdmission } from '../../api/admissions.api';
 import { useAuth } from '../../context/AuthContext';
-import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral } from '../../utils/roleGuard';
+import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral, canAdmitPatient, canUploadLabResult } from '../../utils/roleGuard';
 import { formatDate, calcAge } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -233,7 +233,7 @@ const PatientDetailPage = () => {
         <div className="patient-info-grid">
           <div><span className="info-label">Patient ID</span><span>#{patient.patient_id}</span></div>
           <div><span className="info-label">Sex</span><span>{patient.sex}</span></div>
-          <div><span className="info-label">Age</span><span>{calcAge(patient.date_of_birth)} yrs</span></div>
+          <div><span className="info-label">Age</span><span>{(() => { const a = calcAge(patient.date_of_birth); return /^\d+$/.test(a) ? `${a} yrs` : a; })()}</span></div>
           <div><span className="info-label">Date of Birth</span><span>{formatDate(patient.date_of_birth)}</span></div>
           <div><span className="info-label">Contact</span><span>{patient.contact_number || '—'}</span></div>
           <div><span className="info-label">Address</span><span>{patient.address || '—'}</span></div>
@@ -248,7 +248,7 @@ const PatientDetailPage = () => {
         {canManageTriage(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('triage')}>+ Triage</Button>}
         {canDiagnose(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('diagnosis')}>+ Diagnosis</Button>}
         {canCreateReferral(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('referral')}>+ Referral</Button>}
-        <Button size="sm" variant="secondary" onClick={() => setModal('admission')}>+ Admission</Button>
+        {canAdmitPatient(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('admission')}>+ Admission</Button>}
       </div>
 
       {/* Tabs */}
@@ -292,7 +292,9 @@ const PatientDetailPage = () => {
             <Card key={d.diagnosis_id} className="detail-item">
               <div className="detail-item__header">
                 <p className="font-semibold">{d.medical_condition}</p>
-                <Button size="sm" variant="ghost" onClick={() => openLabModal(d.diagnosis_id)}>+ Lab Result</Button>
+                {canUploadLabResult(user?.role) && (
+                  <Button size="sm" variant="ghost" onClick={() => openLabModal(d.diagnosis_id)}>+ Lab Result</Button>
+                )}
               </div>
               <p className="text-sm text-muted">Date: {formatDate(d.diagnosis_date)}</p>
               {d.treatments?.length > 0 && (

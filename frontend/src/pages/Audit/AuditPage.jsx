@@ -143,13 +143,13 @@ const AuditPage = () => {
       render: (r) => <ActionPill action={r.action} />,
     },
     {
-      key: 'target_table', label: 'Table', width: '130px',
+      key: 'target_table', label: 'Table', width: '130px', hideMobile: true,
       render: (r) => (
         <code className="audit-table-name">{r.target_table ?? '—'}</code>
       ),
     },
     {
-      key: 'target_id', label: 'Record ID', width: '90px', align: 'center',
+      key: 'target_id', label: 'Record ID', width: '90px', align: 'center', hideMobile: true,
       render: (r) => (
         <span className="audit-record-id">
           {r.target_id != null ? `#${r.target_id}` : '—'}
@@ -231,25 +231,28 @@ const AuditPage = () => {
         </select>
 
         {/* Date range */}
-        <input
-          id="audit-from-date"
-          type="date"
-          className="filter-date"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          aria-label="From date"
-          title="From date"
-        />
-        <span className="filter-date-sep">—</span>
-        <input
-          id="audit-to-date"
-          type="date"
-          className="filter-date"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          aria-label="To date"
-          title="To date"
-        />
+        <div className="filter-date-group">
+          <span className="filter-date-label">From</span>
+          <input
+            id="audit-from-date"
+            type="date"
+            className="filter-date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            aria-label="From date"
+          />
+        </div>
+        <div className="filter-date-group">
+          <span className="filter-date-label">To</span>
+          <input
+            id="audit-to-date"
+            type="date"
+            className="filter-date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            aria-label="To date"
+          />
+        </div>
 
         {/* Clear */}
         {hasActiveFilters && (
