@@ -137,7 +137,7 @@ const buildTurnaroundChartData = (rows) => {
   return {
     labels,
     datasets: [{
-      label: 'Turnaround (min)',
+      label: 'Triage-to-Admission Time (min)',
       data:            rows.map((r) => r.turnaround_minutes ?? 0),
       backgroundColor: rows.map((r) => {
         const m = r.turnaround_minutes ?? 0;
@@ -186,7 +186,7 @@ const turnaColumns = [
   { key:'triage_level',       label:'Level',            render:(r)=><Badge status={r.triage_level} /> },
   { key:'triage_datetime',    label:'Triaged',          render:(r)=>formatDate(r.triage_datetime, true) },
   { key:'admission_date',     label:'Admitted',         render:(r)=>formatDate(r.admission_date,  true) },
-  { key:'turnaround_minutes', label:'Turnaround (min)', align:'right' },
+  { key:'turnaround_minutes', label:'Time (min)', align:'right' },
 ];
 
 // ─── CSV export helpers ────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ const toCsv = (columns, rows) => {
 const TAB_FILE_PREFIX = {
   Admissions: 'admissions',
   Referrals:  'referrals',
-  Turnaround: 'turnaround',
+  Turnaround: 'triage-to-admission',
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -333,7 +333,7 @@ const ReportsPage = () => {
             className={`detail-tab${tab === t ? ' detail-tab--active' : ''}`}
             onClick={() => { setTab(t); setData([]); setMeta({}); }}
           >
-            {t}
+            {t === 'Turnaround' ? 'Triage-to-Admission Time' : t}
           </button>
         ))}
       </div>
@@ -402,18 +402,21 @@ const ReportsPage = () => {
               <span className="report-summary-card__icon">⏱️</span>
               <div>
                 <span className="report-summary-card__value">{meta.average} min</span>
-                <span className="report-summary-card__label">Average Triage → Admission Turnaround</span>
+                <span className="report-summary-card__label">Average Triage-to-Admission Time</span>
               </div>
             </div>
           )}
           <div className="report-chart-panel">
             <p className="report-chart-panel__title">
-              Turnaround per Patient
+              Triage-to-Admission Time per Patient
               <span style={{ fontWeight:400, marginLeft:'var(--space-3)', fontSize:'var(--font-size-xs)' }}>
                 <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#10b981', verticalAlign:'middle' }} /> ≤30 min &nbsp;
                 <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#f59e0b', verticalAlign:'middle' }} /> ≤120 min &nbsp;
                 <span style={{ display:'inline-block', width:10, height:10, borderRadius:'50%', background:'#ef4444', verticalAlign:'middle' }} /> &gt;120 min
               </span>
+            </p>
+            <p style={{ fontSize:'var(--font-size-sm)', color:'var(--color-text-muted)', marginBottom:'var(--space-3)' }}>
+              Measures how long each patient took from triage to admission — lower is better.
             </p>
             <div className="report-chart-panel__canvas-wrap">
               <Bar data={turnaChart} options={turnaChartOptions} />

@@ -75,12 +75,12 @@ const ReferralsPage = () => {
 
   // ── Table columns ───────────────────────────────────────────────────────────
   const columns = [
-    { key: 'referral_id',    label: 'ID',       width: '60px' },
+    { key: 'referral_id',    label: 'ID',       width: '60px', hideMobile: true },
     { key: 'patient_name',   label: 'Patient'   },
-    { key: 'medical_condition', label: 'Condition', render: (r) => <span className="truncate" style={{ maxWidth:'200px', display:'block' }}>{r.medical_condition ?? '—'}</span> },
+    { key: 'medical_condition', label: 'Condition', hideMobile: true, render: (r) => <span className="truncate" style={{ maxWidth:'200px', display:'block' }}>{r.medical_condition ?? '—'}</span> },
     { key: 'assigned_doctor_name', label: 'Assigned To', render: (r) => r.assigned_doctor_name ?? '—' },
-    { key: 'specialization', label: 'Specialty' },
-    { key: 'referral_date',  label: 'Date',     render: (r) => formatDate(r.referral_date) },
+    { key: 'specialization', label: 'Specialty', hideMobile: true },
+    { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date) },
     { key: 'status',         label: 'Status',   render: (r) => <Badge status={r.status} /> },
     {
       key: 'actions', label: '', width: '120px', align: 'right',
@@ -151,25 +151,28 @@ const ReferralsPage = () => {
         ))}
 
         {/* Date range pickers */}
-        <input
-          id="referral-from-date"
-          type="date"
-          className="filter-date"
-          value={fromDate}
-          onChange={(e) => setFromDate(e.target.value)}
-          title="Referral date from"
-          aria-label="Referral from date"
-        />
-        <span style={{ color:'var(--color-text-disabled)', fontSize:'var(--font-size-sm)' }}>—</span>
-        <input
-          id="referral-to-date"
-          type="date"
-          className="filter-date"
-          value={toDate}
-          onChange={(e) => setToDate(e.target.value)}
-          title="Referral date to"
-          aria-label="Referral to date"
-        />
+        <div className="filter-date-group">
+          <span className="filter-date-label">From</span>
+          <input
+            id="referral-from-date"
+            type="date"
+            className="filter-date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            aria-label="Referral from date"
+          />
+        </div>
+        <div className="filter-date-group">
+          <span className="filter-date-label">To</span>
+          <input
+            id="referral-to-date"
+            type="date"
+            className="filter-date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            aria-label="Referral to date"
+          />
+        </div>
 
         {/* Clear all filters */}
         {(filter || fromDate || toDate) && (

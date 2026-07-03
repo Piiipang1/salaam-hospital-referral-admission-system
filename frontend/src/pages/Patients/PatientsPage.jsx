@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllPatients, createPatient, updatePatient, getUnassignedPatients, claimPatient } from '../../api/patients.api';
+import { getAllPatients, createPatient, updatePatient } from '../../api/patients.api';
 import { useAuth } from '../../context/AuthContext';
-import { canManagePatients, canClaimPatient } from '../../utils/roleGuard';
+import { canManagePatients } from '../../utils/roleGuard';
 import { formatDate, calcAge } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -53,10 +53,6 @@ const PatientsPage = () => {
   const { user }   = useAuth();
   const navigate   = useNavigate();
 
-  // ── View toggle (My Patients vs Unassigned Pool) ──────────────
-  const canSeePool = user?.role === 'admin' || user?.role === 'doctor';
-  const [poolView, setPoolView] = useState(false);
-
   // ── Filter state ─────────────────────────────────────────────
   const [search,    setSearch]    = useState('');
   const [sex,       setSex]       = useState('');
@@ -75,11 +71,6 @@ const PatientsPage = () => {
   const [success,   setSuccess]   = useState('');
   const [modal,     setModal]     = useState({ open: false, patient: null });
   const [saving,    setSaving]    = useState(false);
-
-  // ── Unassigned pool state ─────────────────────────────────────
-  const [pool,        setPool]        = useState([]);
-  const [poolLoading, setPoolLoading] = useState(false);
-  const [claimingId,  setClaimingId]  = useState(null);
 
   // Reset to page 1 whenever any filter changes
   useEffect(() => { setPage(1); }, [search, sex, fromDate, toDate]);
@@ -107,17 +98,6 @@ const PatientsPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const loadPool = useCallback(() => {
-    setPoolLoading(true);
-    getUnassignedPatients()
-      .then((r) => { if (r.success) setPool(r.data); })
-      .catch(() => setError('Failed to load unassigned patients.'))
-      .finally(() => setPoolLoading(false));
-  }, []);
-
-  // Load pool when the tab becomes active
-  useEffect(() => { if (poolView) loadPool(); }, [poolView, loadPool]);
-
   // ── Handlers ──────────────────────────────────────────────────
   const handleSave = async (data) => {
     setSaving(true);
@@ -136,19 +116,6 @@ const PatientsPage = () => {
     } finally { setSaving(false); }
   };
 
-  const handleClaim = async (patientId) => {
-    setClaimingId(patientId);
-    try {
-      await claimPatient(patientId);
-      setSuccess('Patient added to your list.');
-      setPool((prev) => prev.filter((p) => p.patient_id !== patientId));
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to claim patient.');
-    } finally {
-      setClaimingId(null);
-    }
-  };
-
   const clearFilters = () => {
     setSearch('');
     setSex('');
@@ -160,7 +127,7 @@ const PatientsPage = () => {
 
   // ── Table columns (My Patients view) ─────────────────────────
   const columns = [
-    { key: 'patient_id', label: 'ID', width: '60px' },
+    { key: 'patient_id', label: 'ID', width: '60px', hideMobile: true },
     { key: 'full_name', label: 'Full Name', render: (r) => (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         {r.first_name} {r.last_name}
@@ -169,8 +136,8 @@ const PatientsPage = () => {
     )},
     { key: 'sex',            label: 'Sex',       width: '80px' },
     { key: 'age',            label: 'Age',       width: '70px', render: (r) => calcAge(r.date_of_birth) },
-    { key: 'contact_number', label: 'Contact' },
-    { key: 'created_at',     label: 'Registered', render: (r) => formatDate(r.created_at) },
+    { key: 'contact_number', label: 'Contact', hideMobile: true },
+    { key: 'created_at',     label: 'Registered', render: (r) => formatDate(r.created_at), hideMobile: true },
     {
       key: 'actions', label: '', width: '100px', align: 'right',
       render: (r) => (
@@ -190,39 +157,6 @@ const PatientsPage = () => {
     },
   ];
 
-  // ── Table columns (Unassigned Pool view) ─────────────────────
-  const poolColumns = [
-    { key: 'patient_name', label: 'Patient', render: (r) => (
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-        {r.patient_name}
-        {r.is_unidentified ? <UnidentifiedBadge /> : null}
-      </span>
-    )},
-    { key: 'triage_level',    label: 'Triage Level', render: (r) => <Badge status={r.triage_level} /> },
-    { key: 'triage_datetime', label: 'Triaged',      render: (r) => formatDate(r.triage_datetime, true) },
-    {
-      key: 'actions', label: '', width: '160px', align: 'right',
-      render: (r) => (
-        <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-          <Button size="sm" variant="ghost"
-            onClick={(e) => { e.stopPropagation(); navigate(`/patients/${r.patient_id}`); }}>
-            View
-          </Button>
-          {canClaimPatient(user?.role) && (
-            <Button
-              size="sm"
-              variant="primary"
-              loading={claimingId === r.patient_id}
-              disabled={claimingId !== null && claimingId !== r.patient_id}
-              onClick={(e) => { e.stopPropagation(); handleClaim(r.patient_id); }}
-            >
-              Take Patient
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
 
   return (
     <div className="patients-page">
@@ -231,11 +165,7 @@ const PatientsPage = () => {
       <div className="page-header">
         <div>
           <h2 className="page-title">Patients</h2>
-          <p className="page-subtitle">
-            {poolView
-              ? `${pool.length} patient${pool.length !== 1 ? 's' : ''} awaiting assignment`
-              : `${total} patient${total !== 1 ? 's' : ''} found`}
-          </p>
+          <p className="page-subtitle">{total} patient{total !== 1 ? 's' : ''} found</p>
         </div>
         {canManagePatients(user?.role) && (
           <Button id="register-patient-btn" variant="primary"
@@ -249,46 +179,7 @@ const PatientsPage = () => {
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
-      {/* ── View toggle (admin and doctor only) ── */}
-      {canSeePool && (
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 'var(--space-5)' }}>
-          {[['My Patients', false], ['Unassigned Pool', true]].map(([label, isPool]) => {
-            const active = poolView === isPool;
-            return (
-              <button
-                key={label}
-                onClick={() => setPoolView(isPool)}
-                style={{
-                  padding: 'var(--space-2) var(--space-5)',
-                  border: 'none',
-                  borderBottom: active ? '2px solid var(--color-primary)' : '2px solid transparent',
-                  background: 'transparent',
-                  color: active ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                  fontWeight: active ? 600 : 400,
-                  cursor: 'pointer',
-                  fontSize: 'var(--font-size-sm)',
-                  transition: 'color 0.15s, border-color 0.15s',
-                  marginBottom: '-1px',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {poolView ? (
-        /* ── Unassigned Pool ── */
-        <Table
-          columns={poolColumns}
-          data={pool}
-          loading={poolLoading}
-          emptyMessage="No unassigned patients in the pool."
-          onRowClick={(r) => navigate(`/patients/${r.patient_id}`)}
-        />
-      ) : (
-        <>
+      <>
           {/* ── Filter toolbar ── */}
           <div className="patients-toolbar">
             <SearchBar
@@ -309,24 +200,28 @@ const PatientsPage = () => {
               <option value="Female">Female</option>
               <option value="Other">Other</option>
             </select>
-            <input
-              id="patient-from-date"
-              type="date"
-              className="filter-date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              title="Registered from"
-              aria-label="Registered from date"
-            />
-            <input
-              id="patient-to-date"
-              type="date"
-              className="filter-date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              title="Registered to"
-              aria-label="Registered to date"
-            />
+            <div className="filter-date-group">
+              <span className="filter-date-label">From</span>
+              <input
+                id="patient-from-date"
+                type="date"
+                className="filter-date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                aria-label="Registered from date"
+              />
+            </div>
+            <div className="filter-date-group">
+              <span className="filter-date-label">To</span>
+              <input
+                id="patient-to-date"
+                type="date"
+                className="filter-date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                aria-label="Registered to date"
+              />
+            </div>
             {hasActiveFilters && (
               <button className="filter-clear-btn" onClick={clearFilters} title="Clear all filters">
                 ✕ Clear
@@ -360,8 +255,7 @@ const PatientsPage = () => {
               </div>
             </div>
           )}
-        </>
-      )}
+      </>
 
       {/* ── Register / Edit modal ── */}
       <Modal

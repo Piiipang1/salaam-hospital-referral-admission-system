@@ -50,7 +50,7 @@
 @media (max-width: 767px) {
   .triage-toolbar        { gap: var(--space-2); }
   .triage-date-range     { width: 100%; }
-  .triage-date-range .filter-date { flex: 1; }
+  .triage-date-range .filter-date-group { flex: 1; }
 }
 
 /* ── Small mobile ≤480px ────────────────────────────────────── */

@@ -130,7 +130,7 @@ const RoomsPage = () => {
         <>
           <div className="page-header">
             <div>
-              <button className="ward-back-btn" onClick={() => setSelectedWard(null)}>← Back to wards</button>
+              <button className="ward-back-btn" onClick={() => setSelectedWard(null)}>← Back to rooms</button>
               <h2 className="page-title" style={{ marginTop: 'var(--space-2)' }}>
                 {isRoomBased(selectedWard) ? `${selectedWard}s` : `${selectedWard} beds`}
               </h2>
