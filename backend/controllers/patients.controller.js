@@ -180,7 +180,8 @@ const getPatientHistory = async (req, res) => {
     }
 
     const [referrals] = await db.query(
-      `SELECT r.*, CONCAT(d.first_name, ' ', d.last_name) AS assigned_doctor_name
+      `SELECT r.*, CONCAT(d.first_name, ' ', d.last_name) AS assigned_doctor_name,
+              d.specialization
        FROM referrals r
        LEFT JOIN doctors d ON r.assigned_doctor_id = d.doctor_id
        WHERE r.diagnosis_id IN (SELECT diagnosis_id FROM diagnoses WHERE patient_id = ?)
