@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 // GET /api/admissions
 const getAllAdmissions = async (req, res) => {
-  const { status, page = 1, limit = 20 } = req.query;
+  const { status, from_date, to_date, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
@@ -12,6 +12,16 @@ const getAllAdmissions = async (req, res) => {
     if (status) {
       conditions.push('a.status = ?');
       params.push(status);
+    }
+
+    // Date range filter on admission_date
+    if (from_date) {
+      conditions.push('DATE(a.admission_date) >= ?');
+      params.push(from_date);
+    }
+    if (to_date) {
+      conditions.push('DATE(a.admission_date) <= ?');
+      params.push(to_date);
     }
 
     // Doctors only see admissions they are assigned to
