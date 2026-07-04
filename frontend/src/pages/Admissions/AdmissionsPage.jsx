@@ -22,6 +22,8 @@ const AdmissionsPage = () => {
   const [modal,   setModal]   = useState(false);
   const [confirm, setConfirm] = useState(null); // admission row
   const [saving,  setSaving]  = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate,   setToDate]   = useState('');
 
   // Assign-room modal: which admission row is being assigned, the available
   // rooms to choose from, and the currently selected room_id
@@ -32,8 +34,11 @@ const AdmissionsPage = () => {
 
   const load = useCallback(() => {
     setLoading(true);
-    getAllAdmissions().then((r) => { if (r.success) setData(r.data); }).catch(() => setError('Failed to load admissions.')).finally(() => setLoading(false));
-  }, []);
+    const params = {};
+    if (fromDate) params.from_date = fromDate;
+    if (toDate)   params.to_date   = toDate;
+    getAllAdmissions(params).then((r) => { if (r.success) setData(r.data); }).catch(() => setError('Failed to load admissions.')).finally(() => setLoading(false));
+  }, [fromDate, toDate]);
   useEffect(() => { load(); }, [load]);
 
   const handleAdmit = async (form) => {
@@ -103,6 +108,42 @@ const AdmissionsPage = () => {
       </div>
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
+
+      {/* Date range filter */}
+      <div style={{ display:'flex', gap:'var(--space-2)', flexWrap:'wrap', alignItems:'center' }}>
+        <div className="filter-date-group">
+          <span className="filter-date-label">From</span>
+          <input
+            id="admission-from-date"
+            type="date"
+            className="filter-date"
+            value={fromDate}
+            onChange={(e) => setFromDate(e.target.value)}
+            aria-label="Admission from date"
+          />
+        </div>
+        <div className="filter-date-group">
+          <span className="filter-date-label">To</span>
+          <input
+            id="admission-to-date"
+            type="date"
+            className="filter-date"
+            value={toDate}
+            onChange={(e) => setToDate(e.target.value)}
+            aria-label="Admission to date"
+          />
+        </div>
+        {(fromDate || toDate) && (
+          <button
+            className="filter-clear-btn"
+            onClick={() => { setFromDate(''); setToDate(''); }}
+            title="Clear all filters"
+          >
+            ✕ Clear
+          </button>
+        )}
+      </div>
+
       <Table columns={columns} data={data} loading={loading} emptyMessage="No admission records found." />
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Admit Patient" size="md">
         <AdmissionForm onSubmit={handleAdmit} loading={saving} />
