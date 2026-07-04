@@ -78,8 +78,12 @@ const ReferralsPage = () => {
     { key: 'referral_id',    label: 'ID',       width: '60px', hideMobile: true },
     { key: 'patient_name',   label: 'Patient'   },
     { key: 'medical_condition', label: 'Condition', hideMobile: true, render: (r) => <span className="truncate" style={{ maxWidth:'200px', display:'block' }}>{r.medical_condition ?? '—'}</span> },
-    { key: 'assigned_doctor_name', label: 'Assigned To', render: (r) => r.assigned_doctor_name ?? '—' },
-    { key: 'specialization', label: 'Specialty', hideMobile: true },
+    { key: 'assigned_doctor_name', label: 'Assigned To', render: (r) => r.assigned_doctor_name
+        ? <span style={{ display:'flex', flexDirection:'column' }}>
+            <span>{r.assigned_doctor_name}</span>
+            <span className="text-xs text-muted">{r.specialization || 'General'}</span>
+          </span>
+        : '—' },
     { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date) },
     { key: 'status',         label: 'Status',   render: (r) => <Badge status={r.status} /> },
     {
