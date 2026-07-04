@@ -125,8 +125,9 @@
   --color-sidebar-bg:     #0a120f;
 }
 
-/* Date input needs dark color-scheme in dark mode so the calendar icon stays visible */
-[data-theme="dark"] .filter-date { color-scheme: dark; }
+/* Date inputs follow the active theme so the browser calendar icon stays visible */
+input[type="date"] { color-scheme: light; }
+[data-theme="dark"] input[type="date"] { color-scheme: dark; }
 
 /* ── Reset ──────────────────────────────────────────────────── */
 *, *::before, *::after {
