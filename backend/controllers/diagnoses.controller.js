@@ -339,7 +339,7 @@ const addLabResult = async (req, res) => {
           'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
           [
             doctorUser.user_id,
-            `🔬 Lab result ready for review: ${test_type} for ${patientName}. Lab Result ID: ${result.insertId}.`,
+            `Lab result ready for review: ${test_type} for ${patientName}. Lab Result ID: ${result.insertId}.`,
             null,
           ]
         );
