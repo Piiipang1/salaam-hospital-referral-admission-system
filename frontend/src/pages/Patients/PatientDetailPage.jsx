@@ -401,7 +401,7 @@ const PatientDetailPage = () => {
               </div>
               <p className="text-sm text-muted">Date: {formatDate(r.referral_date, true)}</p>
               {r.assigned_doctor_name && (
-                <p className="text-sm text-muted">Assigned to: {r.assigned_doctor_name}</p>
+                <p className="text-sm text-muted">Assigned to: {r.assigned_doctor_name} ({r.specialization || 'General'})</p>
               )}
               {r.medical_condition && (
                 <p className="text-sm text-muted">Condition: {r.medical_condition}</p>
