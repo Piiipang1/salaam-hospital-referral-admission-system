@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --check backend\\\\controllers\\\\admissions.controller.js)",
+      "PowerShell(node --check backend\\\\controllers\\\\diagnoses.controller.js)",
+      "PowerShell(node --check backend\\\\controllers\\\\patients.controller.js)"
+    ]
+  }
+}
