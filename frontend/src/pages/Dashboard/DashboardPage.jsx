@@ -268,6 +268,20 @@ const DashboardPage = () => {
       .finally(() => setLoadMy(false));
   }, []);
 
+  // Re-fetch my-stats whenever a referral status changes (issue #12)
+  useEffect(() => {
+    const handleReferralUpdate = () => {
+      getDashboardMyStats()
+        .then((r) => { if (r.success) setMyData(r.data); })
+        .catch(() => {});
+      getDashboardStats()
+        .then((r) => { if (r.success) setStats(r.data); })
+        .catch(() => {});
+    };
+    window.addEventListener('referral-status-updated', handleReferralUpdate);
+    return () => window.removeEventListener('referral-status-updated', handleReferralUpdate);
+  }, []);
+
   if (loadStat && !stats) return <Spinner />;
 
   const recentAdmissions = activity?.recent_admissions ?? [];

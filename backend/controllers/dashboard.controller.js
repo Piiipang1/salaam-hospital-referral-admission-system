@@ -91,11 +91,17 @@ const getMyStats = async (req, res) => {
           [linked_id]
         ),
         db.query(
-          `SELECT COUNT(DISTINCT diag.patient_id) AS my_active_patients
-           FROM diagnoses diag
-           JOIN admissions a ON a.patient_id = diag.patient_id AND a.status = 'Active'
-           WHERE diag.doctor_id = ?`,
-          [linked_id]
+          `SELECT COUNT(DISTINCT patient_id) AS my_active_patients
+           FROM (
+             SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ?
+             UNION
+             SELECT d.patient_id FROM referrals r
+               JOIN diagnoses d ON d.diagnosis_id = r.diagnosis_id
+               WHERE r.assigned_doctor_id = ?
+             UNION
+             SELECT patient_id FROM admissions WHERE doctor_id = ?
+           ) AS t`,
+          [linked_id, linked_id, linked_id]
         ),
         db.query(
           "SELECT COUNT(*) AS my_todays_diagnoses FROM diagnoses WHERE doctor_id = ? AND DATE(diagnosis_date) = CURDATE()",

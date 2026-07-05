@@ -81,6 +81,14 @@ const getAdmissionById = async (req, res) => {
 
 // POST /api/admissions
 const createAdmission = async (req, res) => {
+  // ── Role guard: only doctors and admins may admit patients (issue #8) ────────
+  if (!['doctor', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      message: 'Only doctors may admit patients.',
+    });
+  }
+
   const { patient_id, diagnosis_id, doctor_id, admission_type, admission_date } = req.body;
 
   // A doctor always admits as themselves (cannot spoof another doctor); an

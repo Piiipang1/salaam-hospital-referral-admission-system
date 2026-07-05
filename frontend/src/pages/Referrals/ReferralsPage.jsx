@@ -68,7 +68,14 @@ const ReferralsPage = () => {
   const handleUpdateStatus = async () => {
     if (!newStatus || !modal?.referral) return;
     setSaving(true);
-    try { await updateReferralStatus(modal.referral.referral_id, newStatus); setSuccess('Status updated.'); setModal(null); load(); }
+    try {
+      await updateReferralStatus(modal.referral.referral_id, newStatus);
+      setSuccess('Status updated.');
+      setModal(null);
+      load();
+      // Notify other pages (Dashboard, Patients) to refresh their data (issue #12)
+      window.dispatchEvent(new CustomEvent('referral-status-updated', { detail: { newStatus } }));
+    }
     catch (err) { setError(err.response?.data?.message || 'Failed.'); }
     finally { setSaving(false); }
   };

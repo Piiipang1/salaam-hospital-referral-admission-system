@@ -47,6 +47,17 @@ const getAllPatients = async (req, res) => {
       params.push(req.user.linked_id, req.user.linked_id, req.user.linked_id);
     }
 
+    // Nurses only see patients they personally registered (issue #10)
+    if (req.user.role === 'nurse') {
+      conditions.push(
+        `patient_id IN (
+          SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
+          WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+        )`
+      );
+      params.push(req.user.user_id);
+    }
+
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const [rows] = await db.query(
@@ -104,6 +115,19 @@ const getPatientById = async (req, res) => {
       }
     }
 
+    // Nurses only see patients they personally registered (issue #10)
+    if (req.user.role === 'nurse') {
+      const [[nurseAccess]] = await db.query(
+        `SELECT 1 AS allowed FROM activity_logs
+         WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
+        [req.user.user_id, req.params.id]
+      );
+      if (!nurseAccess) {
+        return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
+      }
+    }
+
     return res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
     console.error('getPatientById error:', err);
@@ -130,6 +154,19 @@ const getPatientHistory = async (req, res) => {
       );
       if (!access) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
+      }
+    }
+
+    // Nurses only see history for patients they personally registered (issue #10)
+    if (req.user.role === 'nurse') {
+      const [[nurseAccess]] = await db.query(
+        `SELECT 1 AS allowed FROM activity_logs
+         WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
+        [req.user.user_id, id]
+      );
+      if (!nurseAccess) {
+        return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
       }
     }
 
