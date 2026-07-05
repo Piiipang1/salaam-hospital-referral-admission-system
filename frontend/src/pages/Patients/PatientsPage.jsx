@@ -98,6 +98,15 @@ const PatientsPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // Re-fetch patients list whenever a referral status changes (issue #12)
+  useEffect(() => {
+    const handleReferralUpdate = () => {
+      load();
+    };
+    window.addEventListener('referral-status-updated', handleReferralUpdate);
+    return () => window.removeEventListener('referral-status-updated', handleReferralUpdate);
+  }, [load]);
+
   // ── Handlers ──────────────────────────────────────────────────
   const handleSave = async (data) => {
     setSaving(true);
