@@ -133,7 +133,7 @@ const buildReferralsChartData = (rows) => {
 
 /** One bar per patient showing turnaround minutes */
 const buildTurnaroundChartData = (rows) => {
-  const labels = rows.map((r) => r.patient_name || `#${r.patient_id}`);
+  const labels = rows.map((r) => r.patient_name || 'Unknown');
   return {
     labels,
     datasets: [{
@@ -160,7 +160,6 @@ const buildTurnaroundChartData = (rows) => {
 
 // ─── Column definitions ────────────────────────────────────────────────────────
 const admColumns = [
-  { key:'admission_id',   label:'ID',       width:'60px' },
   { key:'patient_name',   label:'Patient'   },
   { key:'doctor_name',    label:'Doctor'    },
   { key:'room_type',      label:'Room Type' },
@@ -172,7 +171,6 @@ const admColumns = [
 ];
 
 const refColumns = [
-  { key:'referral_id',          label:'ID',        width:'60px' },
   { key:'patient_name',         label:'Patient'    },
   { key:'medical_condition',    label:'Condition'  },
   { key:'assigned_doctor_name', label:'Assigned To'},

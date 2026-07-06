@@ -111,8 +111,7 @@ const TriagePage = () => {
 
   // ── Table columns ─────────────────────────────────────────────
   const columns = [
-    { key: 'triage_id',       label: 'ID',        width: '60px', hideMobile: true },
-    { key: 'patient_name',    label: 'Patient',   render: (r) => r.patient_name || `Patient #${r.patient_id}` },
+    { key: 'patient_name',    label: 'Patient',   render: (r) => r.patient_name || 'Unknown Patient' },
     { key: 'triage_level',    label: 'Level',     render: (r) => <Badge status={r.triage_level} /> },
     { key: 'triage_datetime', label: 'Date/Time', render: (r) => formatDate(r.triage_datetime, true) },
     { key: 'notes',           label: 'Notes',     hideMobile: true, render: (r) => (

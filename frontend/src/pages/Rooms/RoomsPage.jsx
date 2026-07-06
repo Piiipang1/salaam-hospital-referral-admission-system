@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { BedDouble, DoorClosed, HeartPulse, Baby, Building2, Pencil, ChevronRight } from 'lucide-react';
-import { getAllRooms, createRoom, updateRoom } from '../../api/rooms.api';
+import { BedDouble, DoorClosed, HeartPulse, Baby, Building2, Pencil, Trash2, ChevronRight } from 'lucide-react';
+import { getAllRooms, createRoom, updateRoom, deleteRoom } from '../../api/rooms.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManageRooms } from '../../utils/roleGuard';
 import { ROOM_TYPES } from '../../utils/constants';
@@ -9,6 +9,7 @@ import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Alert from '../../components/ui/Alert';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import Spinner from '../../components/ui/Spinner';
 import './RoomsPage.css';
 
@@ -35,6 +36,8 @@ const RoomsPage = () => {
   const [saving,  setSaving]  = useState(false);
   const [selectedWard, setSelectedWard] = useState(null);
   const [selectedBed,  setSelectedBed]  = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null); // room object pending delete confirmation
+  const [deleting,     setDeleting]     = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -57,6 +60,20 @@ const RoomsPage = () => {
       setSuccess('Room saved.'); setModal(null); load();
     } catch (err) { setError(err.response?.data?.message || 'Save failed.'); }
     finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteRoom(deleteTarget.room_id);
+      setSuccess('Room deleted.');
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Delete failed.');
+      setDeleteTarget(null);
+    } finally { setDeleting(false); }
   };
 
   const available = rooms.filter(r => r.availability_status === 'available').length;
@@ -164,13 +181,23 @@ const RoomsPage = () => {
                   </div>
                   <Badge status={room.availability_status} />
                   {canManageRooms(user?.role) && (
-                    <button
-                      className="room-card__edit"
-                      onClick={(e) => { e.stopPropagation(); openEdit(room); }}
-                      title="Edit room"
-                    >
-                      <Pencil size={14} />
-                    </button>
+                    <>
+                      <button
+                        className="room-card__edit"
+                        onClick={(e) => { e.stopPropagation(); openEdit(room); }}
+                        title="Edit room"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        className="room-card__edit"
+                        style={{ right: '38px', color: 'var(--color-danger)' }}
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(room); }}
+                        title="Delete room"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </>
                   )}
                 </div>
               );
@@ -246,6 +273,16 @@ const RoomsPage = () => {
           )
         )}
       </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Room"
+        message={deleteTarget ? `Delete ${deleteTarget.room_type} — ${deleteTarget.bed_number}? This cannot be undone.` : ''}
+        confirmLabel="Delete"
+        loading={deleting}
+      />
     </div>
   );
 };

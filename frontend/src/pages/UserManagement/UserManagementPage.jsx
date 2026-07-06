@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Database, Download, RotateCcw, Trash2 } from 'lucide-react';
-import { getAllUsers, createUser, updateUser, deactivateUser, reactivateUser } from '../../api/users.api';
+import { getAllUsers, createUser, updateUser, deactivateUser, reactivateUser, setDoctorInCharge } from '../../api/users.api';
 import { createBackup, listBackups, getBackupDownloadUrl, restoreBackup, deleteBackup } from '../../api/backup.api';
 import { formatDate } from '../../utils/formatDate';
 import { ROLE_LABELS } from '../../utils/constants';
@@ -38,6 +38,13 @@ const UserManagementPage = () => {
   const [confirm,          setConfirm]          = useState(null); // user row to deactivate
   const [reactivateConfirm, setReactivateConfirm] = useState(null); // user row to reactivate
   const [saving,  setSaving]  = useState(false);
+
+  // ── Doctor-in-Charge toggle state ──────────────────────────────────────────
+  // dicTarget = { row, enabled }; dicStep: 'confirm' (enable only) → 'password'
+  const [dicTarget,   setDicTarget]   = useState(null);
+  const [dicStep,     setDicStep]     = useState(null);
+  const [dicPassword, setDicPassword] = useState('');
+  const [dicSaving,   setDicSaving]   = useState(false);
 
   // ── Backup state ───────────────────────────────────────────────────────────
   const [backups,        setBackups]        = useState([]);
@@ -104,6 +111,31 @@ const UserManagementPage = () => {
     finally { setSaving(false); }
   };
 
+  // Enabling asks for an explanatory confirmation first; disabling goes
+  // straight to password re-verification.
+  const openDicToggle = (row) => {
+    const enabled = !row.is_doctor_in_charge;
+    setDicTarget({ row, enabled });
+    setDicPassword('');
+    setDicStep(enabled ? 'confirm' : 'password');
+  };
+
+  const closeDicFlow = () => { setDicTarget(null); setDicStep(null); setDicPassword(''); };
+
+  const handleDicSubmit = async (e) => {
+    e?.preventDefault();
+    if (!dicTarget || !dicPassword) return;
+    setDicSaving(true);
+    try {
+      const res = await setDoctorInCharge(dicTarget.row.user_id, dicTarget.enabled, dicPassword);
+      setSuccess(res.message || 'Doctor-in-Charge updated.');
+      closeDicFlow(); load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Doctor-in-Charge update failed.');
+      closeDicFlow();
+    } finally { setDicSaving(false); }
+  };
+
   // ── Backup handler ─────────────────────────────────────────────────────────
   const handleCreateBackup = async () => {
     setBackupRunning(true);
@@ -164,15 +196,26 @@ const UserManagementPage = () => {
   // ── Table columns ──────────────────────────────────────────────────────────
   const userColumns = [
     { key:'username',  label:'Username',render:(r)=><span style={{fontWeight:600}}>{r.username}</span> },
-    { key:'role',      label:'Role',    render:(r)=><Badge status={r.role} label={ROLE_LABELS[r.role]??r.role} /> },
+    { key:'role',      label:'Role',    render:(r)=>(
+      <span style={{display:'inline-flex',gap:'var(--space-2)',alignItems:'center'}}>
+        <Badge status={r.role} label={ROLE_LABELS[r.role]??r.role} />
+        {!!r.is_doctor_in_charge && <Badge status="Completed" label="DIC" />}
+      </span>
+    )},
     { key:'linked_name', label:'Staff Member', render:(r)=>r.linked_name ?? '—', hideMobile: true },
     { key:'is_active', label:'Status',  render:(r)=>r.is_active ? <Badge status="Completed" label="Active" /> : <Badge status="Cancelled" label="Inactive" /> },
     { key:'created_at',label:'Created', render:(r)=>formatDate(r.created_at), hideMobile: true },
     {
-      key:'actions', label:'', width:'140px', align:'right',
+      key:'actions', label:'', width:'230px', align:'right',
       render:(r)=>(
-        <div style={{display:'flex',gap:'var(--space-2)',justifyContent:'flex-end'}}>
+        <div style={{display:'flex',gap:'var(--space-2)',justifyContent:'flex-end',flexWrap:'wrap'}}>
           <Button size="sm" variant="outline" onClick={(e)=>{e.stopPropagation();setModal(r);}}>Edit</Button>
+          {r.role === 'doctor' && r.is_active && (
+            <Button size="sm" variant={r.is_doctor_in_charge ? 'secondary' : 'outline'}
+              onClick={(e)=>{e.stopPropagation();openDicToggle(r);}}>
+              {r.is_doctor_in_charge ? 'Disable DIC' : 'Enable DIC'}
+            </Button>
+          )}
           {r.is_active
             ? <Button size="sm" variant="danger"   onClick={(e)=>{e.stopPropagation();setConfirm(r);}}>Deactivate</Button>
             : <Button size="sm" variant="primary"  onClick={(e)=>{e.stopPropagation();setReactivateConfirm(r);}}>Reactivate</Button>
@@ -353,6 +396,55 @@ const UserManagementPage = () => {
         confirmLabel="Reactivate"
         loading={saving}
       />
+
+      {/* ── Doctor-in-Charge two-step flow ─────────────────────────────────── */}
+      <ConfirmDialog
+        isOpen={dicStep === 'confirm'}
+        onClose={closeDicFlow}
+        onConfirm={() => setDicStep('password')}
+        title="Enable Doctor-in-Charge Mode"
+        message={
+          `Enable Doctor-in-Charge mode for "${dicTarget?.row?.username}"?\n\n` +
+          `This grants elevated visibility: access to ALL patient records, ` +
+          `the doctor workload overview, and the ability to reassign referrals. ` +
+          `A maximum of 3 doctors can hold this mode at once. ` +
+          `You will be asked to re-enter your password to confirm.`
+        }
+        confirmLabel="Continue"
+        variant="primary"
+      />
+
+      <Modal
+        isOpen={dicStep === 'password'}
+        onClose={closeDicFlow}
+        title={dicTarget?.enabled ? 'Confirm — Enable Doctor-in-Charge' : 'Confirm — Disable Doctor-in-Charge'}
+        size="sm"
+      >
+        <form onSubmit={handleDicSubmit} noValidate>
+          <p style={{ color:'var(--color-text-muted)', marginBottom:'var(--space-4)' }}>
+            Re-enter your admin password to {dicTarget?.enabled ? 'enable' : 'disable'} Doctor-in-Charge
+            mode for <strong>{dicTarget?.row?.username}</strong>.
+          </p>
+          <div className="form-group">
+            <label htmlFor="dic-pwd">Admin Password *</label>
+            <input
+              id="dic-pwd"
+              type="password"
+              value={dicPassword}
+              onChange={(e) => setDicPassword(e.target.value)}
+              placeholder="Your password"
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          <div className="form-actions">
+            <Button type="button" variant="secondary" onClick={closeDicFlow} disabled={dicSaving}>Cancel</Button>
+            <Button type="submit" variant="primary" loading={dicSaving} disabled={!dicPassword}>
+              {dicTarget?.enabled ? 'Enable' : 'Disable'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* ── Restore / Delete dialogs (backup-only) ─────────────────────────── */}
       {BACKUPS_ENABLED && <>

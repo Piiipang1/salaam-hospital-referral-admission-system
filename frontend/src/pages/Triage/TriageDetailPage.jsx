@@ -39,7 +39,8 @@ const TriageDetailPage = () => {
 
   if (loading) return <Spinner />;
   if (!triage)  return <Alert type="error" message="Triage not found." />;
-  const vs = triage.vital_signs;
+  // getTriageById returns the vitals columns flattened onto the triage row
+  const vs = triage.blood_pressure ? triage : null;
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
@@ -47,7 +48,7 @@ const TriageDetailPage = () => {
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
-      <Card title={`Triage #${triage.triage_id}`} action={
+      <Card title={triage.patient_name ? `Triage — ${triage.patient_name}` : 'Triage Details'} action={
         canManageTriage(user?.role) && (
           <div style={{ display:'flex', gap:'var(--space-2)' }}>
             <Button size="sm" variant="outline" onClick={() => setModal('edit')}>Edit Triage</Button>
@@ -56,11 +57,11 @@ const TriageDetailPage = () => {
         )
       }>
         <div className="patient-info-grid">
-          <div><span className="info-label">Patient ID</span><span>#{triage.patient_id}</span></div>
+          <div><span className="info-label">Patient</span><span>{triage.patient_name ?? '—'}</span></div>
           <div><span className="info-label">Triage Level</span><Badge status={triage.triage_level} /></div>
           <div><span className="info-label">Date/Time</span><span>{formatDate(triage.triage_datetime, true)}</span></div>
-          <div><span className="info-label">Employee ID</span><span>{triage.employee_id ?? '—'}</span></div>
-          <div><span className="info-label">Visit Room ID</span><span>{triage.visit_room_id ?? '—'}</span></div>
+          <div><span className="info-label">Recorded By</span><span>{triage.employee_name ?? '—'}</span></div>
+          <div><span className="info-label">Visit Room</span><span>{triage.visit_room_label ?? '—'}</span></div>
         </div>
         {triage.notes && <p style={{ marginTop:'var(--space-4)', color:'var(--color-text-muted)', fontSize:'var(--font-size-sm)' }}>{triage.notes}</p>}
       </Card>
@@ -72,7 +73,8 @@ const TriageDetailPage = () => {
             <div><span className="info-label">Heart Rate</span><span>{vs.heart_rate} bpm</span></div>
             <div><span className="info-label">Temperature</span><span>{vs.temperature}°C</span></div>
             <div><span className="info-label">Respiratory Rate</span><span>{vs.respiratory_rate}/min</span></div>
-            <div><span className="info-label">Recorded At</span><span>{formatDate(vs.recorded_at, true)}</span></div>
+            <div><span className="info-label">Date Recorded</span><span>{formatDate(vs.recorded_at, true)}</span></div>
+            <div><span className="info-label">Last Updated</span><span>{vs.updated_at ? formatDate(vs.updated_at, true) : '—'}</span></div>
           </div>
         ) : <p className="text-muted text-sm">No vital signs recorded yet.</p>}
       </Card>
