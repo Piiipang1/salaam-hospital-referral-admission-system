@@ -5,3 +5,5 @@ export const createUser    = (data) => api.post('/api/users', data).then(r => r.
 export const updateUser    = (id, data) => api.put(`/api/users/${id}`, data).then(r => r.data);
 export const deactivateUser  = (id) => api.delete(`/api/users/${id}`).then(r => r.data);
 export const reactivateUser  = (id) => api.put(`/api/users/${id}/reactivate`).then(r => r.data);
+export const setDoctorInCharge = (id, enabled, admin_password) =>
+  api.put(`/api/users/${id}/doctor-in-charge`, { enabled, admin_password }).then(r => r.data);

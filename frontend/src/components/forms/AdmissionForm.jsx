@@ -6,17 +6,16 @@ import { ADMISSION_TYPES } from '../../utils/constants';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { getPatientHistory, getAllPatients } from '../../api/patients.api';
 import { useAuth } from '../../context/AuthContext';
+import { patientLabel, findPatientByLabel } from '../../utils/patientLabels';
+import { formatDate } from '../../utils/formatDate';
 
 // medical_condition can be a long clinical paragraph — keep dropdown options readable
 const truncate = (str, n) => str?.length > n ? str.slice(0, n) + '…' : (str ?? '');
 
-// Build the dropdown label for a diagnosis option — diagnosis ID is already unique, so skip the date
-const diagnosisLabel = (d) => `Dx#${d.diagnosis_id} — ${truncate(d.medical_condition, 35)}`;
+// Build the dropdown label for a diagnosis option — date + condition, no internal id
+const diagnosisLabel = (d) => `${formatDate(d.diagnosis_date)} — ${truncate(d.medical_condition, 35)}`;
 
-// Build the searchable combobox label for a patient option
-const patientLabel = (p) => `${p.first_name} ${p.last_name} (ID: ${p.patient_id})`;
-
-const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading }) => {
+const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSubmit, loading }) => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
 
@@ -36,7 +35,7 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
   const selfDoctor = doctors.find((d) => d.doctor_id === user?.linked_id);
 
   // Visible text of the standalone patient search combobox — separate from
-  // form.patient_id since the box displays "Name (ID: n)", not the bare id.
+  // form.patient_id since the box displays the patient's name, not the id.
   const [patientSearchText, setPatientSearchText] = useState('');
 
   // Diagnosis dropdown — looked up by patient ID (known up front or typed in by the user)
@@ -55,21 +54,12 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
       .finally(() => { setDiagLoading(false); setDiagFetched(true); });
   };
 
-  const handlePatientIdChange = (e) => {
-    const value = e.target.value;
-    setForm((f) => ({ ...f, patient_id: value, diagnosis_id: '' }));
-    setDiagnosisOptions([]);
-    setDiagFetched(false);
-  };
-
-  const handlePatientIdBlur = () => fetchDiagnosesForPatient(form.patient_id);
-
   // Standalone mode (no patientId prop): selecting a suggestion from the
   // patient combobox resolves the typed label back to a patient_id.
   const handlePatientSelect = (e) => {
     const value = e.target.value;
     setPatientSearchText(value);
-    const match = patients.find((p) => patientLabel(p) === value);
+    const match = findPatientByLabel(patients, value);
     if (match) {
       setForm((f) => ({ ...f, patient_id: match.patient_id, diagnosis_id: '' }));
       setDiagnosisOptions([]);
@@ -102,7 +92,7 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.patient_id || (!isDoctor && !form.doctor_id) || !form.admission_type) {
-      setError('Patient ID, doctor, and admission type are required.');
+      setError('Patient, doctor, and admission type are required.');
       return;
     }
     setError('');
@@ -119,16 +109,22 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
         <div className="form-group">
           {patientId ? (
             <>
-              <label htmlFor="af-pat">Patient ID *</label>
-              <input
+              <label htmlFor="af-pat">Patient</label>
+              <div
                 id="af-pat"
-                type="number"
-                value={form.patient_id}
-                onChange={handlePatientIdChange}
-                onBlur={handlePatientIdBlur}
-                placeholder="Patient ID"
-                required
-              />
+                style={{
+                  padding: 'var(--space-2) var(--space-3)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-sm)',
+                  background: 'var(--color-surface-2)',
+                  color: 'var(--color-text-muted)',
+                  minHeight: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+              >
+                {patientName || 'Selected patient'}
+              </div>
             </>
           ) : (
             <>
@@ -144,7 +140,7 @@ const AdmissionForm = ({ patientId, diagnosisId, initial = {}, onSubmit, loading
               />
               <datalist id="af-patient-options">
                 {patients.map((p) => (
-                  <option key={p.patient_id} value={patientLabel(p)} />
+                  <option key={p.patient_id} value={patientLabel(p, patients)} />
                 ))}
               </datalist>
             </>
