@@ -37,17 +37,23 @@ const RolePill = ({ role }) => (
   </span>
 );
 
+// ── Affected record — merged "Table #id" label, e.g. "Patients #12" ──────────
+const affectedRecord = (r) => {
+  if (!r.target_table) return '—';
+  const table = r.target_table.charAt(0).toUpperCase() + r.target_table.slice(1);
+  return r.target_id != null ? `${table} #${r.target_id}` : table;
+};
+
 // ── CSV export ────────────────────────────────────────────────────────────────
 const exportCSV = (rows) => {
-  const headers = ['Log ID', 'Date/Time', 'User', 'Role', 'Action', 'Target Table', 'Target ID'];
+  const headers = ['Log ID', 'Date/Time', 'User', 'Role', 'Action', 'Affected Record'];
   const lines   = rows.map((r) => [
     r.log_id,
     formatDate(r.created_at, true),
     r.username ?? '',
     r.role     ?? '',
     r.action,
-    r.target_table ?? '',
-    r.target_id    ?? '',
+    affectedRecord(r),
   ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','));
 
   const csv  = [headers.join(','), ...lines].join('\n');
@@ -143,17 +149,9 @@ const AuditPage = () => {
       render: (r) => <ActionPill action={r.action} />,
     },
     {
-      key: 'target_table', label: 'Table', width: '130px', hideMobile: true,
+      key: 'affected_record', label: 'Affected Record', width: '160px', hideMobile: true,
       render: (r) => (
-        <code className="audit-table-name">{r.target_table ?? '—'}</code>
-      ),
-    },
-    {
-      key: 'target_id', label: 'Record ID', width: '90px', align: 'center', hideMobile: true,
-      render: (r) => (
-        <span className="audit-record-id">
-          {r.target_id != null ? `#${r.target_id}` : '—'}
-        </span>
+        <code className="audit-table-name">{affectedRecord(r)}</code>
       ),
     },
   ];

@@ -75,9 +75,8 @@ const AdmissionsPage = () => {
   };
 
   const columns = [
-    { key: 'admission_id',   label: 'ID',      width: '60px', hideMobile: true },
-    { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? `Patient #${r.patient_id}` },
-    { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name  ?? `Doctor #${r.doctor_id}` },
+    { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
+    { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name  ?? '—' },
     { key: 'room_type',      label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : '—' },
     { key: 'admission_type', label: 'Type',    hideMobile: true },
     { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
