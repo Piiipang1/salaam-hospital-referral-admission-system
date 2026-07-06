@@ -82,7 +82,6 @@ const ReferralsPage = () => {
 
   // ── Table columns ───────────────────────────────────────────────────────────
   const columns = [
-    { key: 'referral_id',    label: 'ID',       width: '60px', hideMobile: true },
     { key: 'patient_name',   label: 'Patient'   },
     { key: 'medical_condition', label: 'Condition', hideMobile: true, render: (r) => <span className="truncate" style={{ maxWidth:'200px', display:'block' }}>{r.medical_condition ?? '—'}</span> },
     { key: 'assigned_doctor_name', label: 'Assigned To', render: (r) => r.assigned_doctor_name

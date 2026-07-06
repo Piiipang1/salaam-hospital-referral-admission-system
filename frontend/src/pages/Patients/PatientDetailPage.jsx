@@ -231,10 +231,11 @@ const PatientDetailPage = () => {
         }
       >
         <div className="patient-info-grid">
-          <div><span className="info-label">Patient ID</span><span>#{patient.patient_id}</span></div>
-          <div><span className="info-label">Sex</span><span>{patient.sex}</span></div>
+          <div><span className="info-label">Sex</span><span>{patient.sex === 'Other' ? '—' : patient.sex}</span></div>
           <div><span className="info-label">Age</span><span>{(() => { const a = calcAge(patient.date_of_birth); return /^\d+$/.test(a) ? `${a} yrs` : a; })()}</span></div>
           <div><span className="info-label">Date of Birth</span><span>{formatDate(patient.date_of_birth)}</span></div>
+          <div><span className="info-label">Attending Doctor</span><span>{patient.attending_doctor ? `Dr. ${patient.attending_doctor}` : '—'}</span></div>
+          <div><span className="info-label">Room</span><span>{patient.room_type ? `${patient.room_type} — ${patient.bed_number}` : patient.admission_status === 'Pending Room' ? 'Awaiting room' : '—'}</span></div>
           <div><span className="info-label">Contact</span><span>{patient.contact_number || '—'}</span></div>
           <div><span className="info-label">Address</span><span>{patient.address || '—'}</span></div>
           <div><span className="info-label">Emergency Contact</span><span>{patient.emergency_contact_name || '—'}</span></div>
@@ -279,6 +280,8 @@ const PatientDetailPage = () => {
                   <span>HR: {t.heart_rate} bpm</span>
                   <span>Temp: {t.temperature}°C</span>
                   <span>RR: {t.respiratory_rate}/min</span>
+                  <span>Recorded: {formatDate(t.vitals_recorded_at, true)}</span>
+                  {t.vitals_updated_at && <span>Updated: {formatDate(t.vitals_updated_at, true)}</span>}
                 </div>
               )}
             </Card>
@@ -380,7 +383,7 @@ const PatientDetailPage = () => {
               <div className="detail-item__header">
                 <span className="font-semibold">{tx.prescribed_medications}</span>
               </div>
-              <p className="text-sm text-muted">Diagnosis: {tx.medical_condition || `#${tx.diagnosis_id}`}</p>
+              <p className="text-sm text-muted">Diagnosis: {tx.medical_condition || '—'}</p>
               <p className="text-sm text-muted">Dosage: {tx.dosage || '—'}</p>
               <p className="text-sm text-muted">Frequency: {tx.frequency || '—'}</p>
               <p className="text-sm text-muted">Duration: {tx.treatment_duration || '—'}</p>
@@ -396,7 +399,7 @@ const PatientDetailPage = () => {
             return (
             <Card key={r.referral_id} className="detail-item">
               <div className="detail-item__header">
-                <span>Referral #{r.referral_id}</span>
+                <span>Referral — {formatDate(r.referral_date)}</span>
                 <Badge status={r.status} />
               </div>
               <p className="text-sm text-muted">Date: {formatDate(r.referral_date, true)}</p>
@@ -465,7 +468,7 @@ const PatientDetailPage = () => {
             label:     lr.test_type || 'Lab Result',
             filename:  lr.file_attachment,
             date:      lr.date_conducted,
-            source:    `Diagnosis #${d.diagnosis_id} — ${d.medical_condition}`,
+            source:    `Diagnosis (${formatDate(d.diagnosis_date)}) — ${d.medical_condition}`,
             sourceTag: <><FlaskConical size={14} /> Lab Result</>,
           }))
         );
@@ -477,7 +480,7 @@ const PatientDetailPage = () => {
           label:     'Referral Document',
           filename:  r.file_attachment,
           date:      r.referral_date,
-          source:    `Referral #${r.referral_id}${r.assigned_doctor_name ? ` → ${r.assigned_doctor_name}` : ''}`,
+          source:    `Referral (${formatDate(r.referral_date)})${r.assigned_doctor_name ? ` → ${r.assigned_doctor_name}` : ''}`,
           sourceTag: <><ClipboardList size={14} /> Referral</>,
         }));
 
@@ -557,7 +560,7 @@ const PatientDetailPage = () => {
       <Modal isOpen={modal === 'referral'} onClose={() => setModal(null)} title="Create Referral" size="md">
         <ReferralForm diagnoses={diagnoses} onSubmit={(fd) => act(createReferral)(fd)} loading={saving} />
       </Modal>
-      <Modal isOpen={modal === 'admission'} onClose={() => setModal(null)} title="Admit Patient"    size="md"><AdmissionForm patientId={id}    onSubmit={act(createAdmission)} loading={saving} /></Modal>
+      <Modal isOpen={modal === 'admission'} onClose={() => setModal(null)} title="Admit Patient"    size="md"><AdmissionForm patientId={id} patientName={`${patient.first_name} ${patient.last_name}`} onSubmit={act(createAdmission)} loading={saving} /></Modal>
       <Modal isOpen={modal === 'treatment'} onClose={() => setModal(null)} title="Add Treatment" size="md">
         <TreatmentForm diagnoses={diagnoses} onSubmit={act(handleAddTreatment)} loading={saving} />
       </Modal>

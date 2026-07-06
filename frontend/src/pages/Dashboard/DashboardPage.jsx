@@ -102,7 +102,7 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
             >
               <div className="activity-item__avatar activity-item__avatar--referral"><ClipboardList size={18} /></div>
               <div className="activity-item__body">
-                <p className="activity-item__name">{r.patient_name || `Patient #${r.patient_id}`}</p>
+                <p className="activity-item__name">{r.patient_name || 'Unknown Patient'}</p>
                 <p className="activity-item__meta">
                   {r.medical_condition || 'No condition noted'}
                   {r.referring_doctor_name ? ` · from Dr. ${r.referring_doctor_name}` : ''}
@@ -131,7 +131,7 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
             >
               <div className="activity-item__avatar activity-item__avatar--diagnosis"><FlaskConical size={18} /></div>
               <div className="activity-item__body">
-                <p className="activity-item__name">{d.patient_name || `Patient #${d.patient_id}`}</p>
+                <p className="activity-item__name">{d.patient_name || 'Unknown Patient'}</p>
                 <p className="activity-item__meta">{d.medical_condition || '—'}</p>
               </div>
               <div className="activity-item__right">
@@ -192,7 +192,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
             >
               <div className="activity-item__avatar activity-item__avatar--triage"><Siren size={18} /></div>
               <div className="activity-item__body">
-                <p className="activity-item__name">{t.patient_name || `Patient #${t.patient_id}`}</p>
+                <p className="activity-item__name">{t.patient_name || 'Unknown Patient'}</p>
                 <p className="activity-item__meta">{t.notes ? t.notes.substring(0, 60) + (t.notes.length > 60 ? '…' : '') : 'No notes'}</p>
               </div>
               <div className="activity-item__right">
@@ -218,7 +218,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
             >
               <div className="activity-item__avatar activity-item__avatar--admission"><BedDouble size={18} /></div>
               <div className="activity-item__body">
-                <p className="activity-item__name">{a.patient_name || `Patient #${a.patient_id}`}</p>
+                <p className="activity-item__name">{a.patient_name || 'Unknown Patient'}</p>
                 <p className="activity-item__meta">
                   {a.room_type && a.bed_number ? `${a.room_type} · Bed ${a.bed_number}` : 'Room TBD'}
                   {` · ${a.admission_type || 'Admission'}`}
@@ -352,7 +352,7 @@ const DashboardPage = () => {
               <button key={a.admission_id} className="activity-item" onClick={() => navigate('/admissions')}>
                 <div className="activity-item__avatar activity-item__avatar--admission"><BedDouble size={18} /></div>
                 <div className="activity-item__body">
-                  <p className="activity-item__name">{a.patient_name || `Patient #${a.patient_id}`}</p>
+                  <p className="activity-item__name">{a.patient_name || 'Unknown Patient'}</p>
                   <p className="activity-item__meta">
                     {a.room_type && a.bed_number ? `${a.room_type} · Bed ${a.bed_number}` : 'Room TBD'}
                     {a.doctor_name ? ` · Dr. ${a.doctor_name}` : ''}
@@ -372,7 +372,7 @@ const DashboardPage = () => {
               <button key={r.referral_id} className="activity-item" onClick={() => navigate('/referrals')}>
                 <div className="activity-item__avatar activity-item__avatar--referral"><Repeat size={18} /></div>
                 <div className="activity-item__body">
-                  <p className="activity-item__name">{r.patient_name || `Patient #${r.patient_id}`}</p>
+                  <p className="activity-item__name">{r.patient_name || 'Unknown Patient'}</p>
                   <p className="activity-item__meta">
                     {r.medical_condition ? `${r.medical_condition} · ` : ''}
                     {r.assigned_doctor_name ? `→ Dr. ${r.assigned_doctor_name}` : 'Unassigned'}

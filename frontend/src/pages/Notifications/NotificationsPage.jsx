@@ -7,7 +7,11 @@ import { getMyNotifications, markAsRead, markAllAsRead } from '../../api/notific
 import { useNotif } from '../../context/NotifContext';
 import { timeAgo } from '../../utils/formatDate';
 
-const cleanMsg = (s = '') => s.replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]+\s*/gu, '');
+// Strip leading emoji plus internal "… ID: n." tracing suffixes — raw database
+// ids stay in the stored message (useful for tracing) but are never rendered.
+const cleanMsg = (s = '') => s
+  .replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]+\s*/gu, '')
+  .replace(/\s*(?:Patient|Triage|Referral|Admission|Lab Result)\s+ID:\s*\d+\.?/gi, '');
 import Button  from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
 import Alert   from '../../components/ui/Alert';

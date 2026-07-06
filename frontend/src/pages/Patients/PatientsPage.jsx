@@ -136,14 +136,14 @@ const PatientsPage = () => {
 
   // ── Table columns (My Patients view) ─────────────────────────
   const columns = [
-    { key: 'patient_id', label: 'ID', width: '60px', hideMobile: true },
     { key: 'full_name', label: 'Full Name', render: (r) => (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>
         {r.first_name} {r.last_name}
         {r.is_unidentified ? <UnidentifiedBadge /> : null}
       </span>
     )},
-    { key: 'sex',            label: 'Sex',       width: '80px' },
+    { key: 'room', label: 'Room', render: (r) => r.room_type ? `${r.room_type} — ${r.bed_number}` : '—' },
+    { key: 'sex',            label: 'Sex',       width: '80px', render: (r) => r.sex === 'Other' ? '—' : r.sex },
     { key: 'age',            label: 'Age',       width: '70px', render: (r) => calcAge(r.date_of_birth) },
     { key: 'contact_number', label: 'Contact', hideMobile: true },
     { key: 'created_at',     label: 'Registered', render: (r) => formatDate(r.created_at), hideMobile: true },
@@ -195,7 +195,7 @@ const PatientsPage = () => {
               id="patient-search"
               value={search}
               onChange={setSearch}
-              placeholder="Search by name or ID…"
+              placeholder="Search by patient name…"
             />
             <select
               id="patient-sex-filter"
@@ -207,7 +207,6 @@ const PatientsPage = () => {
               <option value="">All Sexes</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
-              <option value="Other">Other</option>
             </select>
             <div className="filter-date-group">
               <span className="filter-date-label">From</span>
