@@ -163,10 +163,9 @@ const UserManagementPage = () => {
 
   // ── Table columns ──────────────────────────────────────────────────────────
   const userColumns = [
-    { key:'user_id',   label:'ID',      width:'60px', hideMobile: true },
     { key:'username',  label:'Username',render:(r)=><span style={{fontWeight:600}}>{r.username}</span> },
     { key:'role',      label:'Role',    render:(r)=><Badge status={r.role} label={ROLE_LABELS[r.role]??r.role} /> },
-    { key:'linked_id', label:'Linked ID',render:(r)=>r.linked_id??'—', hideMobile: true },
+    { key:'linked_name', label:'Staff Member', render:(r)=>r.linked_name ?? '—', hideMobile: true },
     { key:'is_active', label:'Status',  render:(r)=>r.is_active ? <Badge status="Completed" label="Active" /> : <Badge status="Cancelled" label="Inactive" /> },
     { key:'created_at',label:'Created', render:(r)=>formatDate(r.created_at), hideMobile: true },
     {

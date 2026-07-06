@@ -12,7 +12,9 @@ export const ROOM_AVAILABILITY = ['available', 'occupied'];
 
 export const ADMISSION_TYPES = ['Emergency', 'Medical', 'Surgical', 'Pediatric', 'Maternity', 'Elective'];
 
-export const PATIENT_SEX = ['Male', 'Female', 'Other'];
+// 'Other' exists in the DB ENUM only as the internal placeholder sentinel for
+// unidentified emergency patients — never offered as a user-selectable value.
+export const PATIENT_SEX = ['Male', 'Female'];
 
 export const USER_ROLES = ['admin', 'doctor', 'nurse', 'staff'];
 
