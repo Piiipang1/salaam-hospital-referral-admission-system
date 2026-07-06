@@ -4,8 +4,10 @@ import Button from '../ui/Button';
 import Alert  from '../ui/Alert';
 import Spinner from '../ui/Spinner';
 import { getActiveDoctors } from '../../api/doctors.api';
-import { getPatientHistory } from '../../api/patients.api';
+import { getPatientHistory, getAllPatients } from '../../api/patients.api';
 import { useAuth } from '../../context/AuthContext';
+import { patientLabel, findPatientByLabel } from '../../utils/patientLabels';
+import { formatDate } from '../../utils/formatDate';
 
 const ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 const MAX_SIZE_MB  = 10;
@@ -13,8 +15,8 @@ const MAX_SIZE_MB  = 10;
 // medical_condition can be a long clinical paragraph — keep dropdown options readable
 const truncate = (str, n) => str?.length > n ? str.slice(0, n) + '…' : (str ?? '');
 
-// Build the dropdown label for a diagnosis option — diagnosis ID is already unique, so skip the date
-const diagnosisLabel = (d) => `Dx#${d.diagnosis_id} — ${truncate(d.medical_condition, 35)}`;
+// Build the dropdown label for a diagnosis option — date + condition, no internal id
+const diagnosisLabel = (d) => `${formatDate(d.diagnosis_date)} — ${truncate(d.medical_condition, 35)}`;
 
 const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading }) => {
   const { user } = useAuth();
@@ -36,10 +38,11 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
   const [hasSignature, setHasSignature] = useState(false);
 
   // ── Standalone mode (Case B) — patient lookup to populate the diagnosis dropdown ──
-  const [patientId,        setPatientId]        = useState('');
-  const [patientDiagnoses, setPatientDiagnoses] = useState([]);
-  const [diagLoading,      setDiagLoading]      = useState(false);
-  const [diagFetched,      setDiagFetched]      = useState(false);
+  const [patients,          setPatients]          = useState([]);
+  const [patientSearchText, setPatientSearchText] = useState('');
+  const [patientDiagnoses,  setPatientDiagnoses]  = useState([]);
+  const [diagLoading,       setDiagLoading]       = useState(false);
+  const [diagFetched,       setDiagFetched]       = useState(false);
 
   const diagnosisOptions = standalone ? patientDiagnoses : diagnoses;
   const selfDoctor = doctors.find((d) => d.doctor_id === user?.linked_id);
@@ -56,18 +59,19 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
     }
   }, [diagnosisOptions]);
 
-  // Look up a patient's diagnoses once they tab/click away from the Patient ID field
-  const handlePatientIdChange = (e) => {
-    setPatientId(e.target.value);
+  // Selecting a suggestion from the patient combobox resolves the typed label
+  // back to a patient record, then loads that patient's diagnoses.
+  const handlePatientSelect = (e) => {
+    const value = e.target.value;
+    setPatientSearchText(value);
     setPatientDiagnoses([]);
     setDiagFetched(false);
     setForm((f) => ({ ...f, diagnosis_id: '' }));
-  };
 
-  const handlePatientIdBlur = () => {
-    if (!patientId) return;
+    const match = findPatientByLabel(patients, value);
+    if (!match) return;
     setDiagLoading(true);
-    getPatientHistory(patientId)
+    getPatientHistory(match.patient_id)
       .then((res) => { if (res.success) setPatientDiagnoses(res.data.diagnoses ?? []); })
       .catch(() => setError('Failed to load diagnoses for that patient.'))
       .finally(() => { setDiagLoading(false); setDiagFetched(true); });
@@ -125,12 +129,17 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
     setHasSignature(false);
   };
 
-  // Load active doctors on mount
+  // Load active doctors on mount; standalone mode also needs the patient list
+  // to power the searchable name combobox
   useEffect(() => {
     getActiveDoctors()
       .then((res) => { if (res.success) setDoctors(res.data); })
       .catch(() => setError('Failed to load doctors list.'))
       .finally(() => setFetching(false));
+
+    if (standalone) {
+      getAllPatients({ limit: 1000 }).then((res) => { if (res.success) setPatients(res.data); });
+    }
   }, []);
 
   // ── File validation ────────────────────────────────────────────
@@ -187,15 +196,20 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
       {/* Patient lookup — standalone mode only (no diagnoses prop supplied) */}
       {standalone && (
         <div className="form-group">
-          <label htmlFor="rf-pat">Patient ID</label>
+          <label htmlFor="rf-pat">Patient</label>
           <input
             id="rf-pat"
-            type="number"
-            value={patientId}
-            onChange={handlePatientIdChange}
-            onBlur={handlePatientIdBlur}
-            placeholder="Enter patient ID to look up diagnoses"
+            list="rf-patient-options"
+            value={patientSearchText}
+            onChange={handlePatientSelect}
+            placeholder="Search patient by name"
+            autoComplete="off"
           />
+          <datalist id="rf-patient-options">
+            {patients.map((p) => (
+              <option key={p.patient_id} value={patientLabel(p, patients)} />
+            ))}
+          </datalist>
           {diagLoading && (
             <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
               Loading diagnoses…
@@ -233,21 +247,10 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
         </div>
       )}
 
-      {/* Fallback manual entry — standalone lookup found no diagnoses for that patient */}
+      {/* Standalone lookup found no diagnoses — a referral needs one, so point the user there */}
       {standalone && diagFetched && diagnosisOptions.length === 0 && (
-        <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-          <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-2)' }}>
-            No diagnoses found for this patient.
-          </p>
-          <label htmlFor="rf-diag-fallback">Diagnosis ID *</label>
-          <input
-            id="rf-diag-fallback"
-            type="number"
-            value={form.diagnosis_id}
-            onChange={set('diagnosis_id')}
-            placeholder="Enter diagnosis ID manually"
-            required
-          />
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <Alert type="info" message="This patient has no recorded diagnoses yet — create a diagnosis first." />
         </div>
       )}
 
