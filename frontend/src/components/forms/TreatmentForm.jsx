@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
+import { formatDate } from '../../utils/formatDate';
+
+// medical_condition can be a long clinical paragraph — keep dropdown options readable
+const truncate = (str, n) => str?.length > n ? str.slice(0, n) + '…' : (str ?? '');
 
 const TreatmentForm = ({ diagnoses = [], initial = {}, onSubmit, loading }) => {
   const [form, setForm] = useState({
@@ -35,7 +39,7 @@ const TreatmentForm = ({ diagnoses = [], initial = {}, onSubmit, loading }) => {
           <option value="">— Select diagnosis —</option>
           {diagnoses.map((d) => (
             <option key={d.diagnosis_id} value={d.diagnosis_id}>
-              #{d.diagnosis_id} — {d.medical_condition}
+              {formatDate(d.diagnosis_date)} — {truncate(d.medical_condition, 35)}
             </option>
           ))}
         </select>

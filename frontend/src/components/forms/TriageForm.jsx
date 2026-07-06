@@ -6,6 +6,8 @@ import { useAuth } from '../../context/AuthContext';
 import { getActiveEmployees } from '../../api/employees.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { getAllPatients } from '../../api/patients.api';
+import { getVisitRoomOptions } from '../../api/triages.api';
+import { patientLabel } from '../../utils/patientLabels';
 
 const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
   const { user } = useAuth();
@@ -23,6 +25,7 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
   const [doctors,           setDoctors]           = useState([]);
   const [doctorsFetching,   setDoctorsFetching]   = useState(true);
   const [patients,          setPatients]          = useState([]);
+  const [visitRooms,        setVisitRooms]        = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   // Load active employees, doctors, and (standalone only) patients on mount
@@ -40,6 +43,10 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
     if (!patientId) {
       getAllPatients({ limit: 1000 }).then((res) => { if (res.success) setPatients(res.data); });
     }
+
+    getVisitRoomOptions()
+      .then((res) => { if (res.success) setVisitRooms(res.data); })
+      .catch(() => {});
   }, []);
 
   const selfEmployee = employees.find((e) => e.employee_id === user?.linked_id);
@@ -70,7 +77,7 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
             <option value="">— Select patient —</option>
             {patients.map((p) => (
               <option key={p.patient_id} value={p.patient_id}>
-                {p.first_name} {p.last_name} (ID: {p.patient_id}){p.is_unidentified ? ' ⚠ Unidentified' : ''}
+                {patientLabel(p, patients)}{p.is_unidentified ? ' ⚠ Unidentified' : ''}
               </option>
             ))}
           </select>
@@ -87,8 +94,13 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
 
       <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
         <div className="form-group">
-          <label htmlFor="tf-room">Visit Room ID</label>
-          <input id="tf-room" type="number" value={form.visit_room_id} onChange={set('visit_room_id')} placeholder="Optional room ID" />
+          <label htmlFor="tf-room">Visit Room (optional)</label>
+          <select id="tf-room" value={form.visit_room_id} onChange={set('visit_room_id')}>
+            <option value="">— None —</option>
+            {visitRooms.map((vr) => (
+              <option key={vr.visit_room_id} value={vr.visit_room_id}>{vr.room_label}</option>
+            ))}
+          </select>
         </div>
         {(user?.role === 'nurse' || user?.role === 'staff') ? (
           <div className="form-group">
