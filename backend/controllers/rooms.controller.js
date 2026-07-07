@@ -108,4 +108,45 @@ const updateRoom = async (req, res) => {
   }
 };
 
-module.exports = { getAllRooms, getAvailableRooms, getRoomById, createRoom, updateRoom };
+// DELETE /api/rooms/:id  — admin only
+const deleteRoom = async (req, res) => {
+  try {
+    const [[room]] = await db.query('SELECT * FROM rooms WHERE room_id = ?', [req.params.id]);
+    if (!room) {
+      return res.status(404).json({ success: false, message: 'Room not found.' });
+    }
+
+    // Refuse while the room is in use — occupied flag or any ongoing admission
+    const [[ongoing]] = await db.query(
+      `SELECT COUNT(*) AS cnt FROM admissions
+       WHERE room_id = ? AND status IN ('Pending Room', 'Active')`,
+      [req.params.id]
+    );
+    if (room.availability_status === 'occupied' || ongoing.cnt > 0) {
+      return res.status(409).json({ success: false, message: 'Cannot delete a room that is currently occupied.' });
+    }
+
+    try {
+      await db.query('DELETE FROM rooms WHERE room_id = ?', [req.params.id]);
+    } catch (err) {
+      // admissions.room_id → rooms is ON DELETE RESTRICT: rooms referenced by
+      // historical (Discharged) admissions must be kept for record integrity.
+      if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+        return res.status(409).json({ success: false, message: 'This room has admission history and cannot be deleted.' });
+      }
+      throw err;
+    }
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'DELETE', 'rooms', ?)",
+      [req.user.user_id, req.params.id]
+    );
+
+    return res.status(200).json({ success: true, message: 'Room deleted.' });
+  } catch (err) {
+    console.error('deleteRoom error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { getAllRooms, getAvailableRooms, getRoomById, createRoom, updateRoom, deleteRoom };

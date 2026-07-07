@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { isDoctorInCharge } = require('../utils/dic');
 
 // POST /api/referrals
 const createReferral = async (req, res) => {
@@ -116,10 +117,12 @@ const getAllReferrals = async (req, res) => {
       params.push(to_date);
     }
 
-    // Doctors only see their own referrals
+    // Doctors see referrals they are involved in — assigned to them (incoming)
+    // OR referred by them (outgoing). Matches the dashboard recent-activity
+    // scope so the two lists always show the same population.
     if (req.user.role === 'doctor') {
-      conditions.push('r.assigned_doctor_id = ?');
-      params.push(req.user.linked_id);
+      conditions.push('(r.assigned_doctor_id = ? OR r.referring_doctor_id = ?)');
+      params.push(req.user.linked_id, req.user.linked_id);
     }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -285,4 +288,94 @@ const getReferralHistory = async (req, res) => {
   }
 };
 
-module.exports = { createReferral, getAllReferrals, getReferralById, updateReferralStatus, getReferralHistory };
+// PUT /api/referrals/:id/reassign — admin or Doctor-in-Charge (checked live)
+const reassignReferral = async (req, res) => {
+  const { assigned_doctor_id } = req.body;
+
+  if (!assigned_doctor_id) {
+    return res.status(400).json({ success: false, message: 'assigned_doctor_id is required.' });
+  }
+
+  try {
+    const allowed = req.user.role === 'admin'
+      || (req.user.role === 'doctor' && await isDoctorInCharge(req.user.user_id));
+    if (!allowed) {
+      return res.status(403).json({ success: false, message: 'Doctor-in-Charge mode required.' });
+    }
+
+    const [[referral]] = await db.query(
+      `SELECT r.referral_id, r.status, r.referring_doctor_id,
+              CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+       FROM referrals r
+       JOIN diagnoses dx ON dx.diagnosis_id = r.diagnosis_id
+       JOIN patients p ON p.patient_id = dx.patient_id
+       WHERE r.referral_id = ?`,
+      [req.params.id]
+    );
+    if (!referral) {
+      return res.status(404).json({ success: false, message: 'Referral not found.' });
+    }
+    if (!['Pending', 'Accepted'].includes(referral.status)) {
+      return res.status(409).json({ success: false, message: 'Only Pending or Accepted referrals can be reassigned.' });
+    }
+
+    const [[targetDoctor]] = await db.query(
+      "SELECT doctor_id, CONCAT(first_name, ' ', last_name) AS name FROM doctors WHERE doctor_id = ? AND employment_status = 'Active'",
+      [assigned_doctor_id]
+    );
+    if (!targetDoctor) {
+      return res.status(400).json({ success: false, message: 'Assigned doctor must exist and be Active.' });
+    }
+
+    await db.query(
+      'UPDATE referrals SET assigned_doctor_id = ? WHERE referral_id = ?',
+      [assigned_doctor_id, req.params.id]
+    );
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'referrals', ?)",
+      [req.user.user_id, req.params.id]
+    );
+
+    res.status(200).json({ success: true, message: `Referral reassigned to Dr. ${targetDoctor.name}.` });
+
+    // Best-effort notifications: new assignee + referring doctor
+    try {
+      const notifRows = [];
+      const [[assigneeUser]] = await db.query(
+        "SELECT user_id FROM users WHERE linked_id = ? AND role = 'doctor' AND is_active = 1 LIMIT 1",
+        [assigned_doctor_id]
+      );
+      if (assigneeUser) {
+        notifRows.push([
+          assigneeUser.user_id,
+          `A referral for ${referral.patient_name} has been reassigned to you.`,
+          referral.referral_id,
+        ]);
+      }
+      if (referral.referring_doctor_id) {
+        const [[referrerUser]] = await db.query(
+          "SELECT user_id FROM users WHERE linked_id = ? AND role = 'doctor' AND is_active = 1 LIMIT 1",
+          [referral.referring_doctor_id]
+        );
+        if (referrerUser && referrerUser.user_id !== assigneeUser?.user_id) {
+          notifRows.push([
+            referrerUser.user_id,
+            `Your referral for ${referral.patient_name} was reassigned to Dr. ${targetDoctor.name}.`,
+            referral.referral_id,
+          ]);
+        }
+      }
+      if (notifRows.length > 0) {
+        await db.query('INSERT INTO notifications (user_id, message, referral_id) VALUES ?', [notifRows]);
+      }
+    } catch (notifErr) {
+      console.warn('reassignReferral: notification insert failed (non-fatal):', notifErr.message);
+    }
+  } catch (err) {
+    console.error('reassignReferral error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { createReferral, getAllReferrals, getReferralById, updateReferralStatus, getReferralHistory, reassignReferral };
