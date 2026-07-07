@@ -19,4 +19,7 @@ router.post('/', auth, requireRole('admin'), roomsController.createRoom);
 // PUT /api/rooms/:id  — admin only
 router.put('/:id', auth, requireRole('admin'), roomsController.updateRoom);
 
+// DELETE /api/rooms/:id  — admin only
+router.delete('/:id', auth, requireRole('admin'), roomsController.deleteRoom);
+
 module.exports = router;

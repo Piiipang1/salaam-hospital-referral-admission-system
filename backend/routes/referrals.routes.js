@@ -26,4 +26,7 @@ router.get('/:id', auth, referralsController.getReferralById);
 // PUT /api/referrals/:id/status
 router.put('/:id/status', auth, requireRole('doctor'), referralsController.updateReferralStatus);
 
+// PUT /api/referrals/:id/reassign — admin or Doctor-in-Charge (checked in controller)
+router.put('/:id/reassign', auth, requireRole('admin', 'doctor'), referralsController.reassignReferral);
+
 module.exports = router;

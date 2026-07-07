@@ -12,4 +12,7 @@ router.post('/logout', auth, authController.logout);
 // GET /api/auth/me
 router.get('/me', auth, authController.getMe);
 
+// PUT /api/auth/change-password
+router.put('/change-password', auth, authController.changePassword);
+
 module.exports = router;
