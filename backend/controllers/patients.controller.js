@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { isDoctorInCharge } = require('../utils/dic');
 
 // GET /api/patients
 const getAllPatients = async (req, res) => {
@@ -11,31 +12,33 @@ const getAllPatients = async (req, res) => {
 
     // Text search — full name OR patient_id
     if (search) {
-      conditions.push("(CONCAT(first_name, ' ', last_name) LIKE ? OR patient_id LIKE ?)");
+      conditions.push("(CONCAT(p.first_name, ' ', p.last_name) LIKE ? OR p.patient_id LIKE ?)");
       params.push(`%${search}%`, `%${search}%`);
     }
 
     // Sex filter — 'Male' | 'Female' | 'Other'
     if (sex) {
-      conditions.push('sex = ?');
+      conditions.push('p.sex = ?');
       params.push(sex);
     }
 
     // Registration date range
     if (from_date) {
-      conditions.push('DATE(created_at) >= ?');
+      conditions.push('DATE(p.created_at) >= ?');
       params.push(from_date);
     }
     if (to_date) {
-      conditions.push('DATE(created_at) <= ?');
+      conditions.push('DATE(p.created_at) <= ?');
       params.push(to_date);
     }
 
     // Doctors only see patients they are/were assigned to (doctor_in_charge,
     // referrals assigned to them, or admissions under their care) — for
     // continuity of care this includes past as well as active assignments.
-    if (req.user.role === 'doctor') {
-      conditions.push(`patient_id IN (
+    // Doctor-in-Charge mode (fresh DB read, so admin toggles apply live)
+    // bypasses this scoping entirely; nurse scoping is never bypassed.
+    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
+      conditions.push(`p.patient_id IN (
         SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ?
         UNION
         SELECT d.patient_id FROM referrals r
@@ -50,7 +53,7 @@ const getAllPatients = async (req, res) => {
     // Nurses only see patients they personally registered (issue #10)
     if (req.user.role === 'nurse') {
       conditions.push(
-        `patient_id IN (
+        `p.patient_id IN (
           SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
           WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
         )`
@@ -60,19 +63,29 @@ const getAllPatients = async (req, res) => {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
+    // Ongoing-admission join is 1:0..1 — a patient can have at most one
+    // admission in ('Pending Room','Active') (enforced by the 409 guard in
+    // admissions.controller createAdmission), so it never duplicates rows.
     const [rows] = await db.query(
-      `SELECT patient_id, first_name, last_name, sex, date_of_birth,
-              contact_number, address,
-              emergency_contact_name, emergency_contact_number,
-              is_unidentified, created_at
-       FROM patients
+      `SELECT p.patient_id, p.first_name, p.last_name, p.sex, p.date_of_birth,
+              p.contact_number, p.address,
+              p.emergency_contact_name, p.emergency_contact_number,
+              p.is_unidentified, p.created_at,
+              a.status AS admission_status,
+              rm.room_type, rm.bed_number,
+              CONCAT(d.first_name, ' ', d.last_name) AS attending_doctor
+       FROM patients p
+       LEFT JOIN admissions a
+         ON a.patient_id = p.patient_id AND a.status IN ('Pending Room','Active')
+       LEFT JOIN rooms   rm ON rm.room_id  = a.room_id
+       LEFT JOIN doctors d  ON d.doctor_id = a.doctor_id
        ${where}
-       ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+       ORDER BY p.created_at DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
     );
 
     const [[{ total }]] = await db.query(
-      `SELECT COUNT(*) AS total FROM patients ${where}`,
+      `SELECT COUNT(*) AS total FROM patients p ${where}`,
       params
     );
 
@@ -92,12 +105,24 @@ const getAllPatients = async (req, res) => {
 // GET /api/patients/:id
 const getPatientById = async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM patients WHERE patient_id = ?', [req.params.id]);
+    const [rows] = await db.query(
+      `SELECT p.*,
+              a.status AS admission_status,
+              rm.room_type, rm.bed_number,
+              CONCAT(d.first_name, ' ', d.last_name) AS attending_doctor
+       FROM patients p
+       LEFT JOIN admissions a
+         ON a.patient_id = p.patient_id AND a.status IN ('Pending Room','Active')
+       LEFT JOIN rooms   rm ON rm.room_id  = a.room_id
+       LEFT JOIN doctors d  ON d.doctor_id = a.doctor_id
+       WHERE p.patient_id = ?`,
+      [req.params.id]
+    );
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Patient not found.' });
     }
 
-    if (req.user.role === 'doctor') {
+    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
       const [[access]] = await db.query(
         `SELECT 1 AS allowed FROM (
           SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ?
@@ -139,7 +164,9 @@ const getPatientById = async (req, res) => {
 const getPatientHistory = async (req, res) => {
   const { id } = req.params;
   try {
-    if (req.user.role === 'doctor') {
+    // Same doctor scoping as getPatientById — Doctor-in-Charge bypasses it so
+    // the patient detail page (info + history) works for unassigned patients.
+    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
       const [[access]] = await db.query(
         `SELECT 1 AS allowed FROM (
           SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ?
@@ -171,7 +198,8 @@ const getPatientHistory = async (req, res) => {
     }
 
     const [triages] = await db.query(
-      `SELECT t.*, vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate
+      `SELECT t.*, vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate,
+              vs.recorded_at AS vitals_recorded_at, vs.updated_at AS vitals_updated_at
        FROM triages t
        LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
        WHERE t.patient_id = ? ORDER BY t.triage_datetime DESC`,
@@ -254,6 +282,12 @@ const createPatient = async (req, res) => {
     return res.status(400).json({ success: false, message: 'First name, last name, sex, and date of birth are required.' });
   }
 
+  // 'Other' is reserved as the internal placeholder sentinel for unidentified
+  // emergency patients (createEmergencyTriage) — not user-selectable.
+  if (sex !== 'Male' && sex !== 'Female') {
+    return res.status(400).json({ success: false, message: 'Sex must be Male or Female.' });
+  }
+
   if (date_of_birth) {
     const now = new Date();
     const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -319,6 +353,12 @@ const updatePatient = async (req, res) => {
     if (date_of_birth > todayStr) {
       return res.status(400).json({ success: false, message: 'Date of birth cannot be in the future.' });
     }
+  }
+
+  // Whitelist the incoming sex value only — omitted/null sex must pass through
+  // for the COALESCE partial-update pattern below.
+  if (sex != null && sex !== 'Male' && sex !== 'Female') {
+    return res.status(400).json({ success: false, message: 'Sex must be Male or Female.' });
   }
 
   // When completing registration of an unidentified patient, the real identity

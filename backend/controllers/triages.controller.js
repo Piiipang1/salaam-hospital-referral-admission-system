@@ -191,9 +191,13 @@ const getTriageById = async (req, res) => {
   try {
     const [rows] = await db.query(
       `SELECT t.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-              vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate, vs.recorded_at
+              CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
+              vr.room_label AS visit_room_label,
+              vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate, vs.recorded_at, vs.updated_at
        FROM triages t
        LEFT JOIN patients p ON t.patient_id = p.patient_id
+       LEFT JOIN employees e ON t.employee_id = e.employee_id
+       LEFT JOIN visit_rooms vr ON t.visit_room_id = vr.visit_room_id
        LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
        WHERE t.triage_id = ?`,
       [req.params.id]
@@ -242,12 +246,33 @@ const addVitalSigns = async (req, res) => {
   }
 
   try {
-    // Remove existing vital signs for this triage if re-recorded
-    await db.query('DELETE FROM vital_signs WHERE triage_id = ?', [req.params.id]);
+    // Upsert — re-recording updates the existing row so recorded_at (creation
+    // time) is preserved and updated_at tracks the last modification.
+    const [[existing]] = await db.query(
+      'SELECT vs_id FROM vital_signs WHERE triage_id = ?',
+      [req.params.id]
+    );
+
+    if (existing) {
+      await db.query(
+        `UPDATE vital_signs
+         SET blood_pressure = ?, heart_rate = ?, temperature = ?, respiratory_rate = ?,
+             updated_at = NOW()
+         WHERE vs_id = ?`,
+        [blood_pressure, heart_rate, temperature, respiratory_rate, existing.vs_id]
+      );
+
+      await db.query(
+        "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'vital_signs', ?)",
+        [req.user.user_id, existing.vs_id]
+      );
+
+      return res.status(200).json({ success: true, message: 'Vital signs updated.', vs_id: existing.vs_id });
+    }
 
     const [result] = await db.query(
-      `INSERT INTO vital_signs (triage_id, blood_pressure, heart_rate, temperature, respiratory_rate, recorded_at)
-       VALUES (?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO vital_signs (triage_id, blood_pressure, heart_rate, temperature, respiratory_rate, recorded_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, NOW(), NULL)`,
       [req.params.id, blood_pressure, heart_rate, temperature, respiratory_rate]
     );
 
@@ -400,4 +425,17 @@ const createEmergencyTriage = async (req, res) => {
   }
 };
 
-module.exports = { createTriage, getAllTriages, getTriageById, updateTriage, addVitalSigns, createEmergencyTriage };
+// GET /api/triages/visit-rooms/options — dropdown options for the triage form
+const getVisitRoomOptions = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT visit_room_id, room_label FROM visit_rooms ORDER BY room_label'
+    );
+    return res.status(200).json({ success: true, data: rows });
+  } catch (err) {
+    console.error('getVisitRoomOptions error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { createTriage, getAllTriages, getTriageById, updateTriage, addVitalSigns, createEmergencyTriage, getVisitRoomOptions };
