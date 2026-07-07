@@ -103,6 +103,18 @@ const createAdmission = async (req, res) => {
   }
 
   try {
+    // ── Guard: only ER-assigned doctors may admit (fresh DB read — admins
+    // toggle the flag at runtime; admins themselves are unaffected) ───────────
+    if (req.user.role === 'doctor') {
+      const [[doc]] = await db.query(
+        'SELECT is_er_assigned FROM doctors WHERE doctor_id = ?',
+        [req.user.linked_id]
+      );
+      if (!doc?.is_er_assigned) {
+        return res.status(403).json({ success: false, message: 'Only ER-assigned doctors can admit patients.' });
+      }
+    }
+
     // ── Guard: reject if the patient already has an ongoing admission ──────────
     const [[ongoing]] = await db.query(
       `SELECT admission_id FROM admissions
@@ -347,9 +359,73 @@ const assignRoom = async (req, res) => {
 };
 
 // PUT /api/admissions/:id/discharge
+// Two-step discharge, step 1 (doctor initiates): Active → Pending Discharge.
+// Does NOT set discharge_date and does NOT free the room — the patient is
+// still physically in it until a nurse confirms (confirmDischarge).
 const dischargePatient = async (req, res) => {
   try {
-    // Fetch admission + patient + doctor in one shot — needed for notification text
+    const [admRows] = await db.query(
+      `SELECT a.room_id, a.status, a.doctor_id, a.patient_id,
+              CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+              r.room_type, r.bed_number
+       FROM admissions a
+       LEFT JOIN patients p ON a.patient_id = p.patient_id
+       LEFT JOIN rooms r ON a.room_id = r.room_id
+       WHERE a.admission_id = ?`,
+      [req.params.id]
+    );
+    if (admRows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Admission not found.' });
+    }
+    const adm = admRows[0];
+    if (adm.status !== 'Active') {
+      return res.status(409).json({ success: false, message: 'Only Active admissions can be sent for discharge.' });
+    }
+
+    if (req.user.role === 'doctor' && req.user.linked_id !== adm.doctor_id) {
+      return res.status(403).json({ success: false, message: 'You are not the assigned doctor for this admission.' });
+    }
+
+    await db.query(
+      "UPDATE admissions SET status = 'Pending Discharge' WHERE admission_id = ?",
+      [req.params.id]
+    );
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'admissions', ?)",
+      [req.user.user_id, req.params.id]
+    );
+
+    // ── Respond immediately — notifications are best-effort ───────────────────
+    res.status(200).json({ success: true, message: 'Discharge initiated. Awaiting nurse confirmation.' });
+
+    // Notify all active nurses to review and confirm
+    try {
+      const [nurses] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'nurse' AND is_active = 1"
+      );
+      const roomLabel = adm.room_type ? `${adm.room_type} — ${adm.bed_number}` : 'no room assigned';
+      const notifRows = nurses.map((n) => [
+        n.user_id,
+        `Discharge requested for ${adm.patient_name} — ${roomLabel}. Please review and confirm.`,
+        null,
+      ]);
+      if (notifRows.length > 0) {
+        await db.query('INSERT INTO notifications (user_id, message, referral_id) VALUES ?', [notifRows]);
+      }
+    } catch (notifErr) {
+      console.warn('dischargePatient: notification insert failed (non-fatal):', notifErr.message);
+    }
+
+  } catch (err) {
+    console.error('dischargePatient error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// Two-step discharge, step 2 (nurse confirms): Pending Discharge → Discharged,
+// discharge_date stamped, room freed.
+const confirmDischarge = async (req, res) => {
+  try {
     const [admRows] = await db.query(
       `SELECT a.room_id, a.status, a.doctor_id, a.patient_id,
               CONCAT(p.first_name, ' ', p.last_name) AS patient_name
@@ -362,12 +438,8 @@ const dischargePatient = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Admission not found.' });
     }
     const adm = admRows[0];
-    if (adm.status === 'Discharged') {
-      return res.status(409).json({ success: false, message: 'Patient is already discharged.' });
-    }
-
-    if (req.user.role === 'doctor' && req.user.linked_id !== adm.doctor_id) {
-      return res.status(403).json({ success: false, message: 'You are not the assigned doctor for this admission.' });
+    if (adm.status !== 'Pending Discharge') {
+      return res.status(409).json({ success: false, message: 'Only admissions pending discharge can be confirmed.' });
     }
 
     const connection = await db.getConnection();
@@ -394,56 +466,60 @@ const dischargePatient = async (req, res) => {
     }
 
     // ── Respond immediately — notifications are best-effort ───────────────────
-    res.status(200).json({ success: true, message: 'Patient discharged. Room is now available.' });
+    res.status(200).json({ success: true, message: 'Discharge confirmed. Room is now available.' });
 
-    // ── Post-commit discharge notifications ───────────────────────────────────
+    // Notify the admitting doctor that the discharge was confirmed
     try {
-      const dischargeDate = new Date().toLocaleDateString('en-US', {
-        year: 'numeric', month: 'short', day: 'numeric',
-      });
-
-      // Resolve assigned doctor's user account
       const [[doctorUser]] = await db.query(
         "SELECT user_id FROM users WHERE role = 'doctor' AND linked_id = ? AND is_active = 1",
         [adm.doctor_id]
       );
-      const [admins] = await db.query(
-        "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
-      );
-
-      const notifRows = [];
-
       if (doctorUser) {
-        notifRows.push([
-          doctorUser.user_id,
-          `Your patient ${adm.patient_name} has been discharged on ${dischargeDate}. Admission ID: ${req.params.id}.`,
-          null,
-        ]);
-      }
-
-      const adminMsg =
-        `Patient ${adm.patient_name} has been discharged. Admission ID: ${req.params.id}.`;
-
-      for (const admin of admins) {
-        if (admin.user_id !== req.user.user_id) {
-          notifRows.push([admin.user_id, adminMsg, null]);
-        }
-      }
-
-      if (notifRows.length > 0) {
         await db.query(
-          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
-          [notifRows]
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
+          [doctorUser.user_id, `Discharge confirmed for your patient ${adm.patient_name}. The room has been freed.`, null]
         );
       }
     } catch (notifErr) {
-      console.warn('dischargePatient: notification insert failed (non-fatal):', notifErr.message);
+      console.warn('confirmDischarge: notification insert failed (non-fatal):', notifErr.message);
     }
 
   } catch (err) {
-    console.error('dischargePatient error:', err);
+    console.error('confirmDischarge error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
 
-module.exports = { getAllAdmissions, getAdmissionById, createAdmission, assignRoom, dischargePatient };
+// Escape hatch: a mistaken initiation returns to Active (doctor or admin).
+const cancelDischarge = async (req, res) => {
+  try {
+    const [[adm]] = await db.query(
+      'SELECT status, doctor_id FROM admissions WHERE admission_id = ?',
+      [req.params.id]
+    );
+    if (!adm) {
+      return res.status(404).json({ success: false, message: 'Admission not found.' });
+    }
+    if (adm.status !== 'Pending Discharge') {
+      return res.status(409).json({ success: false, message: 'Only admissions pending discharge can be cancelled.' });
+    }
+    if (req.user.role === 'doctor' && req.user.linked_id !== adm.doctor_id) {
+      return res.status(403).json({ success: false, message: 'You are not the assigned doctor for this admission.' });
+    }
+
+    await db.query(
+      "UPDATE admissions SET status = 'Active' WHERE admission_id = ?",
+      [req.params.id]
+    );
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'admissions', ?)",
+      [req.user.user_id, req.params.id]
+    );
+    return res.status(200).json({ success: true, message: 'Discharge cancelled. Admission is Active again.' });
+  } catch (err) {
+    console.error('cancelDischarge error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { getAllAdmissions, getAdmissionById, createAdmission, assignRoom, dischargePatient, confirmDischarge, cancelDischarge };

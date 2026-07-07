@@ -2,6 +2,10 @@ const db = require('../config/db');
 
 // GET /api/dashboard/stats
 const getStats = async (req, res) => {
+  // Hospital-wide totals are not for doctors — they get /my-stats instead.
+  if (req.user.role === 'doctor') {
+    return res.status(403).json({ success: false, message: 'Doctors use /api/dashboard/my-stats.' });
+  }
   try {
     const [
       [[{ total_patients }]],
@@ -30,8 +34,36 @@ const getStats = async (req, res) => {
 };
 
 // GET /api/dashboard/recent-activity
+// Role-scoped: doctors see only their own admissions/referrals (assigned OR
+// referring — same OR-scope as referrals.controller getAllReferrals so the
+// dashboard and Referrals page always show the same population); nurses see
+// activity for patients they personally registered (same activity_logs
+// pattern as patients.controller); admin/staff see hospital-wide.
 const getRecentActivity = async (req, res) => {
   try {
+    let admissionWhere = '';
+    let referralWhere  = '';
+    const admissionParams = [];
+    const referralParams  = [];
+
+    if (req.user.role === 'doctor') {
+      admissionWhere = 'WHERE a.doctor_id = ?';
+      admissionParams.push(req.user.linked_id);
+      referralWhere = 'WHERE (r.assigned_doctor_id = ? OR r.referring_doctor_id = ?)';
+      referralParams.push(req.user.linked_id, req.user.linked_id);
+    }
+
+    if (req.user.role === 'nurse') {
+      const nurseScope = `IN (
+        SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
+        WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+      )`;
+      admissionWhere = `WHERE a.patient_id ${nurseScope}`;
+      admissionParams.push(req.user.user_id);
+      referralWhere = `WHERE diag.patient_id ${nurseScope}`;
+      referralParams.push(req.user.user_id);
+    }
+
     const [admissions, referrals] = await Promise.all([
       db.query(`
         SELECT a.admission_id, a.admission_date, a.status AS admission_status, a.admission_type,
@@ -42,8 +74,9 @@ const getRecentActivity = async (req, res) => {
         LEFT JOIN patients p ON a.patient_id = p.patient_id
         LEFT JOIN doctors  d ON a.doctor_id  = d.doctor_id
         LEFT JOIN rooms    r ON a.room_id    = r.room_id
+        ${admissionWhere}
         ORDER BY a.admission_date DESC LIMIT 5
-      `),
+      `, admissionParams),
       db.query(`
         SELECT r.referral_id, r.referral_date, r.status AS referral_status,
                CONCAT(p.first_name, ' ', p.last_name)   AS patient_name, p.patient_id,
@@ -55,8 +88,9 @@ const getRecentActivity = async (req, res) => {
         LEFT JOIN patients  p    ON diag.patient_id      = p.patient_id
         LEFT JOIN doctors   ad   ON r.assigned_doctor_id  = ad.doctor_id
         LEFT JOIN doctors   rd   ON r.referring_doctor_id = rd.doctor_id
+        ${referralWhere}
         ORDER BY r.referral_date DESC LIMIT 5
-      `),
+      `, referralParams),
     ]);
 
     return res.status(200).json({

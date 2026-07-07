@@ -3,7 +3,12 @@
     "allow": [
       "PowerShell(node --check backend\\\\controllers\\\\admissions.controller.js)",
       "PowerShell(node --check backend\\\\controllers\\\\diagnoses.controller.js)",
-      "PowerShell(node --check backend\\\\controllers\\\\patients.controller.js)"
+      "PowerShell(node --check backend\\\\controllers\\\\patients.controller.js)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "PowerShell(Test-NetConnection -ComputerName localhost -Port 3306 -InformationLevel Quiet -WarningAction SilentlyContinue)",
+      "PowerShell(Get-Process mysqld -ErrorAction SilentlyContinue)",
+      "PowerShell(Start-Process -FilePath \"C:\\\\xampp\\\\mysql\\\\bin\\\\mysqld.exe\" -ArgumentList \"--defaults-file=C:\\\\xampp\\\\mysql\\\\bin\\\\my.ini\",\"--standalone\" -WindowStyle Hidden)"
     ]
   }
 }
