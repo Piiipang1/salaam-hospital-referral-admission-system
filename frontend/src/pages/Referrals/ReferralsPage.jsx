@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getAllReferrals, createReferral, updateReferralStatus } from '../../api/referrals.api';
+import { getAllReferrals, createReferral, updateReferralStatus, reassignReferral } from '../../api/referrals.api';
+import { getDoctorWorkload, getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
 import { canUpdateReferralStatus, canCreateReferral } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
@@ -9,9 +10,17 @@ import Table from '../../components/ui/Table';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Alert from '../../components/ui/Alert';
+import Card from '../../components/ui/Card';
 import ReferralForm from '../../components/forms/ReferralForm';
 
 const LIMIT = 20; // rows per page — must match backend default
+
+// Purely presentational availability hint from combined load
+const loadHint = (load) => {
+  if (load <= 2) return { label: 'Available',  color: 'var(--color-primary)' };
+  if (load <= 5) return { label: 'Busy',       color: 'var(--color-warning, #d97706)' };
+  return          { label: 'Overloaded', color: 'var(--color-danger)' };
+};
 
 const ReferralsPage = () => {
   const { user } = useAuth();
@@ -23,9 +32,35 @@ const ReferralsPage = () => {
   const [filter,    setFilter]    = useState('');
   const [fromDate,  setFromDate]  = useState('');
   const [toDate,    setToDate]    = useState('');
-  const [modal,     setModal]     = useState(null); // 'create' | { type:'status', referral }
+  const [modal,     setModal]     = useState(null); // 'create' | { type:'status'|'reassign', referral }
   const [saving,    setSaving]    = useState(false);
   const [newStatus, setNewStatus] = useState('');
+
+  // ── Doctor-in-Charge state ──────────────────────────────────────────────────
+  // Seeded from the login response; a 403 from any DIC endpoint means the flag
+  // was revoked mid-session — hide the DIC UI gracefully instead of crashing.
+  const [dicActive, setDicActive] = useState(!!user?.is_doctor_in_charge && user?.role === 'doctor');
+  const [workload,  setWorkload]  = useState([]);
+  const [doctors,   setDoctors]   = useState([]);
+  const [reassignDoctorId, setReassignDoctorId] = useState('');
+
+  const handleDicRevoked = (msg) => {
+    setDicActive(false);
+    setModal(null);
+    setError(msg || 'Doctor-in-Charge mode is no longer active on your account.');
+  };
+
+  useEffect(() => {
+    if (!dicActive) return;
+    getDoctorWorkload()
+      .then((r) => { if (r.success) setWorkload(r.data); })
+      .catch((err) => {
+        if (err.response?.status === 403) handleDicRevoked();
+      });
+    getActiveDoctors()
+      .then((r) => { if (r.success) setDoctors(r.data); })
+      .catch(() => {});
+  }, [dicActive]);
 
   // ── Pagination state ────────────────────────────────────────────────────────
   const [page,  setPage]  = useState(1);
@@ -80,6 +115,22 @@ const ReferralsPage = () => {
     finally { setSaving(false); }
   };
 
+  const handleReassign = async () => {
+    if (!reassignDoctorId || !modal?.referral) return;
+    setSaving(true);
+    try {
+      const res = await reassignReferral(modal.referral.referral_id, reassignDoctorId);
+      setSuccess(res.message || 'Referral reassigned.');
+      setModal(null);
+      load();
+      // Refresh workload counts after a reassignment
+      getDoctorWorkload().then((r) => { if (r.success) setWorkload(r.data); }).catch(() => {});
+    } catch (err) {
+      if (err.response?.status === 403) handleDicRevoked(err.response?.data?.message);
+      else setError(err.response?.data?.message || 'Reassign failed.');
+    } finally { setSaving(false); }
+  };
+
   // ── Table columns ───────────────────────────────────────────────────────────
   const columns = [
     { key: 'patient_name',   label: 'Patient'   },
@@ -93,9 +144,16 @@ const ReferralsPage = () => {
     { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date) },
     { key: 'status',         label: 'Status',   render: (r) => <Badge status={r.status} /> },
     {
-      key: 'actions', label: '', width: '120px', align: 'right',
-      render: (r) => canUpdateReferralStatus(user?.role) && r.status === 'Pending' && (
-        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setNewStatus('Accepted'); setModal({ type:'status', referral:r }); }}>Update Status</Button>
+      key: 'actions', label: '', width: '210px', align: 'right',
+      render: (r) => (
+        <div style={{ display:'flex', gap:'var(--space-2)', justifyContent:'flex-end', flexWrap:'wrap' }}>
+          {canUpdateReferralStatus(user?.role) && r.status === 'Pending' && (
+            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setNewStatus('Accepted'); setModal({ type:'status', referral:r }); }}>Update Status</Button>
+          )}
+          {dicActive && ['Pending', 'Accepted'].includes(r.status) && (
+            <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); setReassignDoctorId(''); setModal({ type:'reassign', referral:r }); }}>Reassign</Button>
+          )}
+        </div>
       ),
     },
   ];
@@ -142,6 +200,41 @@ const ReferralsPage = () => {
       {/* Alerts */}
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
+
+      {/* ── Doctor Workload — Doctor-in-Charge only ─────────────────────────── */}
+      {dicActive && workload.length > 0 && (
+        <Card title="Doctor Workload">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-sm)' }}>
+              <thead>
+                <tr style={{ textAlign: 'left', color: 'var(--color-text-muted)' }}>
+                  <th style={{ padding: 'var(--space-2)' }}>Doctor</th>
+                  <th style={{ padding: 'var(--space-2)' }}>Specialty</th>
+                  <th style={{ padding: 'var(--space-2)', textAlign: 'center' }}>Active Admissions</th>
+                  <th style={{ padding: 'var(--space-2)', textAlign: 'center' }}>Pending Referrals</th>
+                  <th style={{ padding: 'var(--space-2)', textAlign: 'center' }}>Patients in Charge</th>
+                  <th style={{ padding: 'var(--space-2)' }}>Availability</th>
+                </tr>
+              </thead>
+              <tbody>
+                {workload.map((w) => {
+                  const hint = loadHint(w.active_admissions + w.pending_referrals);
+                  return (
+                    <tr key={w.doctor_id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: 'var(--space-2)', fontWeight: 600 }}>Dr. {w.name}</td>
+                      <td style={{ padding: 'var(--space-2)', color: 'var(--color-text-muted)' }}>{w.specialization || 'General'}</td>
+                      <td style={{ padding: 'var(--space-2)', textAlign: 'center' }}>{w.active_admissions}</td>
+                      <td style={{ padding: 'var(--space-2)', textAlign: 'center' }}>{w.pending_referrals}</td>
+                      <td style={{ padding: 'var(--space-2)', textAlign: 'center' }}>{w.patients_in_charge}</td>
+                      <td style={{ padding: 'var(--space-2)', fontWeight: 600, color: hint.color }}>{hint.label}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Status filter pills */}
       <div style={{ display:'flex', gap:'var(--space-2)', flexWrap:'wrap', alignItems:'center' }}>
@@ -245,6 +338,29 @@ const ReferralsPage = () => {
         <div className="form-actions">
           <Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button>
           <Button variant="primary" onClick={handleUpdateStatus} loading={saving}>Update</Button>
+        </div>
+      </Modal>
+
+      {/* Reassign modal — Doctor-in-Charge only */}
+      <Modal isOpen={modal?.type === 'reassign'} onClose={() => setModal(null)} title="Reassign Referral" size="sm">
+        <p className="text-sm text-muted" style={{ marginBottom:'var(--space-4)' }}>
+          Reassign the referral for <strong>{modal?.referral?.patient_name}</strong> to another doctor.
+          Both the new assignee and the referring doctor will be notified.
+        </p>
+        <div className="form-group" style={{ marginBottom:'var(--space-6)' }}>
+          <label htmlFor="ref-reassign-sel">New Assigned Doctor *</label>
+          <select id="ref-reassign-sel" value={reassignDoctorId} onChange={(e) => setReassignDoctorId(e.target.value)} required>
+            <option value="">— Select doctor —</option>
+            {doctors.map((d) => (
+              <option key={d.doctor_id} value={d.doctor_id}>
+                Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button>
+          <Button variant="primary" onClick={handleReassign} loading={saving} disabled={!reassignDoctorId}>Reassign</Button>
         </div>
       </Modal>
 

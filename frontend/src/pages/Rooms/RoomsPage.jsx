@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { BedDouble, DoorClosed, HeartPulse, Baby, Building2, Pencil, Trash2, ChevronRight } from 'lucide-react';
 import { getAllRooms, createRoom, updateRoom, deleteRoom } from '../../api/rooms.api';
+import { getAllAdmissions } from '../../api/admissions.api';
 import { useAuth } from '../../context/AuthContext';
+import Table from '../../components/ui/Table';
 import { canManageRooms } from '../../utils/roleGuard';
 import { ROOM_TYPES } from '../../utils/constants';
 import { formatDate } from '../../utils/formatDate';
@@ -24,6 +27,59 @@ const isRoomBased = (type) => ROOM_BASED_TYPES.includes(type);
 // never renamed, just used to derive the unit's position within its type.
 const friendlyUnitLabel = (room, group) =>
   `${room.room_type} ${group.findIndex((r) => r.room_id === room.room_id) + 1}`;
+
+// ── Doctor view: table of the doctor's CURRENT admissions ────────────────────
+// GET /api/admissions is already doctor-scoped server-side (a.doctor_id =
+// linked_id), so this only ever shows the logged-in doctor's own patients.
+const CURRENT_STATUSES = ['Pending Room', 'Active', 'Pending Discharge'];
+
+const MyAdmittedPatientsView = () => {
+  const navigate = useNavigate();
+  const [rows,    setRows]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
+
+  useEffect(() => {
+    getAllAdmissions()
+      .then((r) => { if (r.success) setRows(r.data.filter((a) => CURRENT_STATUSES.includes(a.status))); })
+      .catch(() => setError('Failed to load your admissions.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const columns = [
+    { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
+    { key: 'room',           label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : 'Awaiting room' },
+    { key: 'admission_type', label: 'Type',    hideMobile: true },
+    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
+    { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
+    {
+      key: 'actions', label: '', width: '80px', align: 'right',
+      render: (r) => (
+        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); navigate(`/patients/${r.patient_id}`); }}>View</Button>
+      ),
+    },
+  ];
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
+      <div className="page-header">
+        <div>
+          <h2 className="page-title">My Patients' Rooms</h2>
+          <p className="page-subtitle">{rows.length} current admission{rows.length !== 1 ? 's' : ''} under your care</p>
+        </div>
+      </div>
+      {error && <Alert type="error" message={error} onDismiss={() => setError('')} />}
+      <Table
+        columns={columns}
+        data={rows}
+        emptyMessage="You have no admitted patients right now."
+        onRowClick={(r) => navigate(`/patients/${r.patient_id}`)}
+      />
+    </div>
+  );
+};
 
 const RoomsPage = () => {
   const { user } = useAuth();
@@ -99,6 +155,10 @@ const RoomsPage = () => {
     : isRoomBased(selectedWard)
       ? rooms.filter(r => r.room_type === selectedWard).sort((a, b) => a.bed_number.localeCompare(b.bed_number))
       : rooms.filter(r => r.room_type === selectedWard);
+
+  // Doctors get their own view: a table of their current admissions instead
+  // of the hospital-wide room grid (confidentiality + relevance).
+  if (user?.role === 'doctor') return <MyAdmittedPatientsView />;
 
   if (loading) return <Spinner />;
 

@@ -4,7 +4,7 @@ export const TRIAGE_LEVELS = ['Critical', 'Urgent', 'Non-Urgent'];
 
 export const REFERRAL_STATUSES = ['Pending', 'Accepted', 'Completed', 'Cancelled'];
 
-export const ADMISSION_STATUSES = ['Pending Room', 'Active', 'Discharged'];
+export const ADMISSION_STATUSES = ['Pending Room', 'Active', 'Pending Discharge', 'Discharged'];
 
 export const ROOM_TYPES = ['General Ward', 'Private Room', 'ICU', 'Pediatric Ward', 'Emergency Room'];
 
@@ -32,9 +32,10 @@ export const STATUS_COLORS = {
   Completed:  'success',
   Cancelled:  'muted',
   // Admission
-  'Pending Room': 'warning',
-  Active:         'primary',
-  Discharged:     'muted',
+  'Pending Room':      'warning',
+  Active:              'primary',
+  'Pending Discharge': 'info',
+  Discharged:          'muted',
   // Room
   available:  'success',
   occupied:   'danger',

@@ -17,6 +17,7 @@ import NotificationsPage   from '../pages/Notifications/NotificationsPage';
 import ReportsPage         from '../pages/Reports/ReportsPage';
 import UserManagementPage  from '../pages/UserManagement/UserManagementPage';
 import AuditPage           from '../pages/Audit/AuditPage';
+import ProfilePage         from '../pages/Profile/ProfilePage';
 
 /** Redirect to /login if not authenticated */
 const ProtectedRoute = ({ children }) => {
@@ -66,6 +67,7 @@ const AppRouter = () => {
           <Route path="admissions"    element={<AdmissionsPage />} />
           <Route path="rooms"         element={<RoomsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="profile"       element={<ProfilePage />} />
 
           {/* admin only */}
           <Route

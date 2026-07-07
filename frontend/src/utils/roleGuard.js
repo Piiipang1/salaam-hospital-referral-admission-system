@@ -29,6 +29,14 @@ export const canAssignRoom = (role) => hasRole(role, ['nurse', 'staff']);
 /** Returns true if user can admit a patient */
 export const canAdmitPatient = (role) => hasRole(role, ['doctor']);
 
+/**
+ * Returns true if this specific USER may admit right now — doctors must also
+ * be ER-assigned (user.is_er_assigned from login). Takes the whole user
+ * object, not just the role. Server enforces the same rule in createAdmission.
+ */
+export const canUserAdmit = (user) =>
+  canAdmitPatient(user?.role) && (user?.role !== 'doctor' || !!user?.is_er_assigned);
+
 /** Returns true if user can upload lab results */
 export const canUploadLabResult = (role) => hasRole(role, ['doctor', 'nurse']);
 
