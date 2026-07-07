@@ -251,11 +251,17 @@ const DashboardPage = () => {
   const [error,    setError]    = useState('');
 
   useEffect(() => {
-    // All three requests run in parallel — independent loading states
-    getDashboardStats()
-      .then((r) => { if (r.success) setStats(r.data); })
-      .catch(() => setError('Failed to load stats.'))
-      .finally(() => setLoadStat(false));
+    // All requests run in parallel — independent loading states.
+    // Doctors never call the hospital-wide stats endpoint (backend 403s it);
+    // their dashboard is my-stats + their own scoped recent activity.
+    if (role !== 'doctor') {
+      getDashboardStats()
+        .then((r) => { if (r.success) setStats(r.data); })
+        .catch(() => setError('Failed to load stats.'))
+        .finally(() => setLoadStat(false));
+    } else {
+      setLoadStat(false);
+    }
 
     getDashboardRecentActivity()
       .then((r) => { if (r.success) setActivity(r.data); })
@@ -266,7 +272,7 @@ const DashboardPage = () => {
       .then((r) => { if (r.success) setMyData(r.data); })
       .catch(() => {}) // non-critical
       .finally(() => setLoadMy(false));
-  }, []);
+  }, [role]);
 
   // Re-fetch my-stats whenever a referral status changes (issue #12)
   useEffect(() => {
@@ -274,13 +280,15 @@ const DashboardPage = () => {
       getDashboardMyStats()
         .then((r) => { if (r.success) setMyData(r.data); })
         .catch(() => {});
-      getDashboardStats()
-        .then((r) => { if (r.success) setStats(r.data); })
-        .catch(() => {});
+      if (role !== 'doctor') {
+        getDashboardStats()
+          .then((r) => { if (r.success) setStats(r.data); })
+          .catch(() => {});
+      }
     };
     window.addEventListener('referral-status-updated', handleReferralUpdate);
     return () => window.removeEventListener('referral-status-updated', handleReferralUpdate);
-  }, []);
+  }, [role]);
 
   if (loadStat && !stats) return <Spinner />;
 

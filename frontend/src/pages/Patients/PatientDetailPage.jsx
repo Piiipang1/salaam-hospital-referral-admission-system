@@ -7,7 +7,7 @@ import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessm
 import { createReferral } from '../../api/referrals.api';
 import { createAdmission } from '../../api/admissions.api';
 import { useAuth } from '../../context/AuthContext';
-import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral, canAdmitPatient, canUploadLabResult } from '../../utils/roleGuard';
+import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral, canUserAdmit, canUploadLabResult } from '../../utils/roleGuard';
 import { formatDate, calcAge } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Button from '../../components/ui/Button';
@@ -249,7 +249,7 @@ const PatientDetailPage = () => {
         {canManageTriage(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('triage')}>+ Triage</Button>}
         {canDiagnose(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('diagnosis')}>+ Diagnosis</Button>}
         {canCreateReferral(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('referral')}>+ Referral</Button>}
-        {canAdmitPatient(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('admission')}>+ Admission</Button>}
+        {canUserAdmit(user) && <Button size="sm" variant="secondary" onClick={() => setModal('admission')}>+ Admission</Button>}
       </div>
 
       {/* Tabs */}

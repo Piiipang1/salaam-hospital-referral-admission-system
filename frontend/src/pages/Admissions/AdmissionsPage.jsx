@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { getAllAdmissions, createAdmission, assignRoom, dischargePatient } from '../../api/admissions.api';
+import { getAllAdmissions, createAdmission, assignRoom, dischargePatient, confirmDischarge, cancelDischarge } from '../../api/admissions.api';
 import { getAllRooms } from '../../api/rooms.api';
 import { useAuth } from '../../context/AuthContext';
-import { canAssignRoom, canAdmitPatient } from '../../utils/roleGuard';
+import { canAssignRoom, canUserAdmit } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -20,7 +20,8 @@ const AdmissionsPage = () => {
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
   const [modal,   setModal]   = useState(false);
-  const [confirm, setConfirm] = useState(null); // admission row
+  const [confirm, setConfirm] = useState(null); // admission row — doctor initiates discharge
+  const [nurseConfirm, setNurseConfirm] = useState(null); // admission row — nurse confirms discharge
   const [saving,  setSaving]  = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate,   setToDate]   = useState('');
@@ -48,11 +49,28 @@ const AdmissionsPage = () => {
     finally { setSaving(false); }
   };
 
-  const handleDischarge = async () => {
+  // Step 1 — doctor initiates: status becomes Pending Discharge, nurses notified
+  const handleInitiateDischarge = async () => {
     if (!confirm) return;
     setSaving(true);
-    try { await dischargePatient(confirm.admission_id); setSuccess('Patient discharged.'); setConfirm(null); load(); }
-    catch (err) { setError(err.response?.data?.message || 'Discharge failed.'); }
+    try { await dischargePatient(confirm.admission_id); setSuccess('Discharge initiated — awaiting nurse confirmation.'); setConfirm(null); load(); }
+    catch (err) { setError(err.response?.data?.message || 'Discharge failed.'); setConfirm(null); }
+    finally { setSaving(false); }
+  };
+
+  // Step 2 — nurse confirms: Discharged, discharge_date set, room freed
+  const handleConfirmDischarge = async () => {
+    if (!nurseConfirm) return;
+    setSaving(true);
+    try { await confirmDischarge(nurseConfirm.admission_id); setSuccess('Discharge confirmed. Room is now available.'); setNurseConfirm(null); load(); }
+    catch (err) { setError(err.response?.data?.message || 'Confirmation failed.'); setNurseConfirm(null); }
+    finally { setSaving(false); }
+  };
+
+  const handleCancelDischarge = async (row) => {
+    setSaving(true);
+    try { await cancelDischarge(row.admission_id); setSuccess('Discharge cancelled.'); load(); }
+    catch (err) { setError(err.response?.data?.message || 'Cancel failed.'); }
     finally { setSaving(false); }
   };
 
@@ -83,14 +101,20 @@ const AdmissionsPage = () => {
     { key: 'discharge_date', label: 'Discharged', hideMobile: true, render: (r) => formatDate(r.discharge_date) },
     { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
     {
-      key: 'actions', label: '', width: '140px', align: 'right',
+      key: 'actions', label: '', width: '190px', align: 'right',
       render: (r) => (
         <>
           {r.status === 'Pending Room' && canAssignRoom(user?.role) && (
             <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); openAssignRoom(r); }}>Assign Room</Button>
           )}
           {r.status === 'Active' && user?.role === 'doctor' && user?.linked_id === r.doctor_id && (
-            <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); setConfirm(r); }}>Discharge</Button>
+            <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); setConfirm(r); }}>Initiate Discharge</Button>
+          )}
+          {r.status === 'Pending Discharge' && user?.role === 'nurse' && (
+            <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); setNurseConfirm(r); }}>Confirm Discharge</Button>
+          )}
+          {r.status === 'Pending Discharge' && (user?.role === 'admin' || (user?.role === 'doctor' && user?.linked_id === r.doctor_id)) && (
+            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleCancelDischarge(r); }}>Cancel</Button>
           )}
         </>
       ),
@@ -101,7 +125,7 @@ const AdmissionsPage = () => {
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
       <div className="page-header">
         <div><h2 className="page-title">Admissions</h2><p className="page-subtitle">{data.filter(d=>d.status==='Active').length} active admission{data.filter(d=>d.status==='Active').length !== 1?'s':''}</p></div>
-        {canAdmitPatient(user?.role) && (
+        {canUserAdmit(user) && (
           <Button id="admit-patient-btn" variant="primary" onClick={() => setModal(true)}>+ Admit Patient</Button>
         )}
       </div>
@@ -150,10 +174,19 @@ const AdmissionsPage = () => {
       <ConfirmDialog
         isOpen={!!confirm}
         onClose={() => setConfirm(null)}
-        onConfirm={handleDischarge}
-        title="Discharge Patient"
-        message={`Discharge ${confirm?.patient_name ?? 'this patient'}? The room will be marked as available.`}
-        confirmLabel="Discharge"
+        onConfirm={handleInitiateDischarge}
+        title="Initiate Discharge"
+        message={`Request discharge for ${confirm?.patient_name ?? 'this patient'}? A nurse must confirm before the room is freed.`}
+        confirmLabel="Initiate Discharge"
+        loading={saving}
+      />
+      <ConfirmDialog
+        isOpen={!!nurseConfirm}
+        onClose={() => setNurseConfirm(null)}
+        onConfirm={handleConfirmDischarge}
+        title="Confirm Discharge"
+        message={`Confirm discharge for ${nurseConfirm?.patient_name ?? 'this patient'}? This finalizes the discharge and frees ${nurseConfirm?.room_id ? `${nurseConfirm.room_type} — ${nurseConfirm.bed_number}` : 'the room'}.`}
+        confirmLabel="Confirm Discharge"
         loading={saving}
       />
       <Modal isOpen={!!assignRow} onClose={() => setAssignRow(null)} title="Assign Room" size="sm">

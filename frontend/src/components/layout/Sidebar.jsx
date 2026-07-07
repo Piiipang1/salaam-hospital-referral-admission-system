@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Siren, Repeat, BedDouble,
-  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut,
+  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut, CircleUserRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canViewReports, canManageUsers } from '../../utils/roleGuard';
@@ -15,8 +15,10 @@ const NAV_ITEMS = [
   { to: '/triage',        icon: Siren,           label: 'Triage'           },
   { to: '/referrals',     icon: Repeat,          label: 'Referrals'        },
   { to: '/admissions',    icon: BedDouble,       label: 'Admissions'       },
-  { to: '/rooms',         icon: DoorOpen,        label: 'Rooms'            },
+  // Doctors see their own admitted patients on /rooms, not the room grid
+  { to: '/rooms',         icon: DoorOpen,        label: 'Rooms',           doctorLabel: "My Patients' Rooms" },
   { to: '/notifications', icon: Bell,            label: 'Notifications'    },
+  { to: '/profile',       icon: CircleUserRound, label: 'My Profile'       },
   { to: '/reports',       icon: BarChart3,       label: 'Reports',         roles: ['admin'] },
   { to: '/users',         icon: UserCog,         label: 'User Management', roles: ['admin'] },
   { to: '/audit',         icon: ScrollText,      label: 'Audit Trail',     roles: ['admin'] },
@@ -60,6 +62,7 @@ const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
         <nav className="sidebar__nav" aria-label="Main navigation">
           {visibleItems.map((item) => {
             const Icon = item.icon;
+            const label = (user?.role === 'doctor' && item.doctorLabel) ? item.doctorLabel : item.label;
             return (
               <NavLink
                 key={item.to}
@@ -68,10 +71,10 @@ const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
                   `sidebar__link${isActive ? ' sidebar__link--active' : ''}`
                 }
                 onClick={onClose}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? label : undefined}
               >
                 <span className="sidebar__link-icon"><Icon size={18} /></span>
-                {!collapsed && <span className="sidebar__link-label">{item.label}</span>}
+                {!collapsed && <span className="sidebar__link-label">{label}</span>}
               </NavLink>
             );
           })}

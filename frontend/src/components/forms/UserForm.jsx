@@ -12,6 +12,7 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
     last_name:       initial.last_name       ?? '',
     specialization:  initial.specialization  ?? '',
     contact_details: initial.contact_details ?? '',
+    is_er_assigned:  !!initial.is_er_assigned,
   });
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
@@ -39,6 +40,7 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
       payload.contact_details = form.contact_details;
       if (form.role === 'doctor') payload.specialization = form.specialization;
     }
+    if (form.role === 'doctor') payload.is_er_assigned = form.is_er_assigned;
     onSubmit(payload);
   };
 
@@ -64,6 +66,21 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
           <input id="uf-pwd" type="password" value={form.password} onChange={set('password')} placeholder={isEdit ? 'New password (optional)' : 'Set password'} />
         </div>
       </div>
+
+      {form.role === 'doctor' && (
+        <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer' }}>
+            <input
+              id="uf-er"
+              type="checkbox"
+              checked={form.is_er_assigned}
+              onChange={(e) => setForm((f) => ({ ...f, is_er_assigned: e.target.checked }))}
+              style={{ width: 'auto' }}
+            />
+            ER-assigned (may admit patients)
+          </label>
+        </div>
+      )}
 
       {showPersonFields && (
         <>
