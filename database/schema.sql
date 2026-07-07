@@ -13,7 +13,7 @@
 --   rooms.availability_status : available, occupied
 --   triages.triage_level : Critical, Urgent, Non-Urgent
 --   referrals.status     : Pending, Accepted, Completed, Cancelled
---   admissions.status    : Pending Room, Active, Discharged
+--   admissions.status    : Pending Room, Active, Pending Discharge, Discharged
 --   doctor_assessments.disposition : Admit, Discharge, Refer, Observe
 -- =============================================================================
 
@@ -57,6 +57,7 @@ CREATE TABLE doctors (
     first_name         VARCHAR(100)    NOT NULL,
     last_name          VARCHAR(100)    NOT NULL,
     specialization     VARCHAR(150)    DEFAULT NULL,
+    is_er_assigned     TINYINT(1)      NOT NULL DEFAULT 0,
     contact_details    VARCHAR(150)    DEFAULT NULL,
     employment_status  ENUM('Active','Inactive') NOT NULL DEFAULT 'Active',
     created_at         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -138,6 +139,7 @@ CREATE TABLE users (
     password_hash VARCHAR(255)    NOT NULL,
     role          ENUM('admin','doctor','nurse','staff') NOT NULL,
     linked_id     INT UNSIGNED    DEFAULT NULL,
+    is_doctor_in_charge TINYINT(1) NOT NULL DEFAULT 0,
     is_active     TINYINT(1)      NOT NULL DEFAULT 1,
     created_at    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),
@@ -206,8 +208,9 @@ CREATE TABLE triages (
 -- vital_signs
 -- Queried by: triages.controller, patients.controller
 -- Columns from code: vs_id, triage_id, blood_pressure, heart_rate,
---                    temperature, respiratory_rate, recorded_at
--- One record per triage — controller DELETEs and re-INSERTs on update
+--                    temperature, respiratory_rate, recorded_at, updated_at
+-- One record per triage — controller upserts: INSERT on first record,
+-- UPDATE (preserving recorded_at, stamping updated_at) on re-record
 -- -----------------------------------------------------------------------------
 CREATE TABLE vital_signs (
     vs_id             INT UNSIGNED    NOT NULL AUTO_INCREMENT,
@@ -217,6 +220,7 @@ CREATE TABLE vital_signs (
     temperature       DECIMAL(4,1)    NOT NULL COMMENT 'degrees Celsius',
     respiratory_rate  SMALLINT UNSIGNED NOT NULL COMMENT 'breaths per minute',
     recorded_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME        NULL DEFAULT NULL,
     PRIMARY KEY (vs_id),
     CONSTRAINT fk_vital_signs_triage
         FOREIGN KEY (triage_id) REFERENCES triages (triage_id)
@@ -369,7 +373,7 @@ CREATE TABLE doctor_assessments (
 -- Columns from code: admission_id, patient_id, diagnosis_id, doctor_id,
 --                    room_id, admission_type, admission_date,
 --                    discharge_date, status
--- ENUM from admissions.controller: Pending Room, Active, Discharged
+-- ENUM from admissions.controller: Pending Room, Active, Pending Discharge, Discharged
 -- Uses DB transaction (getConnection + beginTransaction) in createAdmission
 -- and dischargePatient — pool must support getConnection() ✅ (mysql2 pool)
 -- -----------------------------------------------------------------------------
@@ -382,7 +386,7 @@ CREATE TABLE admissions (
     admission_type  VARCHAR(100)    NOT NULL,
     admission_date  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     discharge_date  DATETIME        DEFAULT NULL,
-    status          ENUM('Pending Room','Active','Discharged') NOT NULL DEFAULT 'Pending Room',
+    status          ENUM('Pending Room','Active','Pending Discharge','Discharged') NOT NULL DEFAULT 'Pending Room',
     PRIMARY KEY (admission_id),
     CONSTRAINT fk_admissions_patient
         FOREIGN KEY (patient_id)   REFERENCES patients  (patient_id)

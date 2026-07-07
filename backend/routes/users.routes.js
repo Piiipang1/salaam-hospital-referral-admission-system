@@ -23,4 +23,7 @@ router.delete('/:id', auth, requireRole('admin'), usersController.deactivateUser
 // PUT /api/users/:id/reactivate
 router.put('/:id/reactivate', auth, requireRole('admin'), usersController.reactivateUser);
 
+// PUT /api/users/:id/doctor-in-charge
+router.put('/:id/doctor-in-charge', auth, requireRole('admin'), usersController.setDoctorInCharge);
+
 module.exports = router;
