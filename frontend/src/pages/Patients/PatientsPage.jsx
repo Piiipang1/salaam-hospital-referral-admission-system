@@ -176,12 +176,22 @@ const PatientsPage = () => {
           <h2 className="page-title">Patients</h2>
           <p className="page-subtitle">{total} patient{total !== 1 ? 's' : ''} found</p>
         </div>
-        {canManagePatients(user?.role) && (
+        {canManagePatients(user?.role) ? (
           <Button id="register-patient-btn" variant="primary"
             onClick={() => setModal({ open: true, patient: null })}>
             + Register Patient
           </Button>
-        )}
+        ) : user?.role === 'admin' ? (
+          <span style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-muted)',
+            maxWidth: '340px',
+            textAlign: 'right',
+            lineHeight: 1.4,
+          }}>
+            Read-only oversight — patient registration and edits are performed by nurses and staff.
+          </span>
+        ) : null}
       </div>
 
       {/* ── Alerts ── */}
