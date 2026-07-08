@@ -208,7 +208,53 @@ const updateReferralStatus = async (req, res) => {
     return res.status(400).json({ success: false, message: `status must be one of: ${validStatuses.join(', ')}.` });
   }
 
+  // Referral status lifecycle — the only forward transitions permitted.
+  // Completed and Cancelled are terminal.
+  const allowedNext = {
+    Pending:   ['Accepted', 'Cancelled'],
+    Accepted:  ['Completed', 'Cancelled'],
+    Completed: [],
+    Cancelled: [],
+  };
+
   try {
+    // Load current state + parties for the transition/ownership checks
+    const [[referral]] = await db.query(
+      'SELECT status, assigned_doctor_id, referring_doctor_id FROM referrals WHERE referral_id = ?',
+      [req.params.id]
+    );
+    if (!referral) {
+      return res.status(404).json({ success: false, message: 'Referral not found.' });
+    }
+
+    // 1. Transition validity (state machine)
+    const nextOptions = allowedNext[referral.status] ?? [];
+    if (!nextOptions.includes(status)) {
+      const message = nextOptions.length
+        ? `Cannot change a ${referral.status} referral to ${status}. Allowed next status: ${nextOptions.join(' or ')}.`
+        : `This referral is ${referral.status} and can no longer change status.`;
+      return res.status(409).json({ success: false, message });
+    }
+
+    // 2. Ownership
+    //   - Accepted / Completed: only the assigned doctor (takes responsibility /
+    //     finishes the consultation).
+    //   - Cancelled: only the referring doctor or an admin (the assigned doctor
+    //     never cancels; they either accept+complete or leave it).
+    const isAssignedDoctor  = req.user.role === 'doctor' && referral.assigned_doctor_id  === req.user.linked_id;
+    const isReferringDoctor = req.user.role === 'doctor' && referral.referring_doctor_id === req.user.linked_id;
+    const isAdmin           = req.user.role === 'admin';
+
+    if (status === 'Accepted' || status === 'Completed') {
+      if (!isAssignedDoctor) {
+        return res.status(403).json({ success: false, message: `Only the assigned doctor may set a referral to ${status}.` });
+      }
+    } else if (status === 'Cancelled') {
+      if (!isReferringDoctor && !isAdmin) {
+        return res.status(403).json({ success: false, message: 'Only the referring doctor or an admin may cancel a referral.' });
+      }
+    }
+
     await db.query('UPDATE referrals SET status = ? WHERE referral_id = ?', [status, req.params.id]);
 
     await db.query(

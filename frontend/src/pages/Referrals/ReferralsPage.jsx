@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getAllReferrals, createReferral, updateReferralStatus, reassignReferral } from '../../api/referrals.api';
 import { getDoctorWorkload, getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
-import { canUpdateReferralStatus, canCreateReferral } from '../../utils/roleGuard';
+import { canCreateReferral } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
 import { REFERRAL_STATUSES } from '../../utils/constants';
 import Badge from '../../components/ui/Badge';
@@ -20,6 +20,14 @@ const loadHint = (load) => {
   if (load <= 2) return { label: 'Available',  color: 'var(--color-primary)' };
   if (load <= 5) return { label: 'Busy',       color: 'var(--color-warning, #d97706)' };
   return          { label: 'Overloaded', color: 'var(--color-danger)' };
+};
+
+// Plain-language meaning of each referral status (legend + confirm modal).
+const STATUS_MEANINGS = {
+  Pending:   'Awaiting the assigned doctor’s response.',
+  Accepted:  'The assigned doctor has taken responsibility for the patient.',
+  Completed: 'The referred consultation is finished.',
+  Cancelled: 'The referral has been withdrawn.',
 };
 
 const ReferralsPage = () => {
@@ -144,17 +152,31 @@ const ReferralsPage = () => {
     { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date) },
     { key: 'status',         label: 'Status',   render: (r) => <Badge status={r.status} /> },
     {
-      key: 'actions', label: '', width: '210px', align: 'right',
-      render: (r) => (
-        <div style={{ display:'flex', gap:'var(--space-2)', justifyContent:'flex-end', flexWrap:'wrap' }}>
-          {canUpdateReferralStatus(user?.role) && r.status === 'Pending' && (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setNewStatus('Accepted'); setModal({ type:'status', referral:r }); }}>Update Status</Button>
-          )}
-          {dicActive && ['Pending', 'Accepted'].includes(r.status) && (
-            <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); setReassignDoctorId(''); setModal({ type:'reassign', referral:r }); }}>Reassign</Button>
-          )}
-        </div>
-      ),
+      key: 'actions', label: '', width: '260px', align: 'right',
+      render: (r) => {
+        // Mirror the backend lifecycle: assigned doctor accepts/completes; the
+        // referring doctor or an admin may cancel a non-terminal referral.
+        const isAssigned  = user?.role === 'doctor' && r.assigned_doctor_id  === user?.linked_id;
+        const isReferring = user?.role === 'doctor' && r.referring_doctor_id === user?.linked_id;
+        const isAdmin     = user?.role === 'admin';
+        const openStatus = (target) => (e) => { e.stopPropagation(); setNewStatus(target); setModal({ type:'status', referral:r }); };
+        return (
+          <div style={{ display:'flex', gap:'var(--space-2)', justifyContent:'flex-end', flexWrap:'wrap' }}>
+            {isAssigned && r.status === 'Pending' && (
+              <Button size="sm" variant="primary" title="Take responsibility for this patient" onClick={openStatus('Accepted')}>Accept</Button>
+            )}
+            {isAssigned && r.status === 'Accepted' && (
+              <Button size="sm" variant="primary" title="Mark the referred consultation as finished" onClick={openStatus('Completed')}>Complete</Button>
+            )}
+            {(isReferring || isAdmin) && ['Pending', 'Accepted'].includes(r.status) && (
+              <Button size="sm" variant="danger" title="Withdraw this referral" onClick={openStatus('Cancelled')}>Cancel</Button>
+            )}
+            {dicActive && ['Pending', 'Accepted'].includes(r.status) && (
+              <Button size="sm" variant="secondary" onClick={(e) => { e.stopPropagation(); setReassignDoctorId(''); setModal({ type:'reassign', referral:r }); }}>Reassign</Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -289,6 +311,16 @@ const ReferralsPage = () => {
         )}
       </div>
 
+      {/* Status lifecycle legend — what each status means */}
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'var(--space-4)', alignItems:'center' }}>
+        {REFERRAL_STATUSES.map((s) => (
+          <span key={s} style={{ display:'inline-flex', alignItems:'center', gap:'var(--space-2)', fontSize:'var(--font-size-xs)', color:'var(--color-text-muted)' }}>
+            <Badge status={s} />
+            {STATUS_MEANINGS[s]}
+          </span>
+        ))}
+      </div>
+
       {/* Table */}
       <Table columns={columns} data={data} loading={loading} emptyMessage="No referrals found." />
 
@@ -327,17 +359,24 @@ const ReferralsPage = () => {
         <ReferralForm onSubmit={handleCreate} loading={saving} />
       </Modal>
 
-      {/* Update status modal */}
-      <Modal isOpen={modal?.type === 'status'} onClose={() => setModal(null)} title="Update Referral Status" size="sm">
-        <div className="form-group" style={{ marginBottom:'var(--space-6)' }}>
-          <label htmlFor="ref-status-sel">New Status</label>
-          <select id="ref-status-sel" value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-            {REFERRAL_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
+      {/* Status transition confirm modal — target is fixed by the action button */}
+      <Modal
+        isOpen={modal?.type === 'status'}
+        onClose={() => setModal(null)}
+        title={newStatus === 'Cancelled' ? 'Cancel Referral' : `Mark Referral as ${newStatus}`}
+        size="sm"
+      >
+        <p className="text-sm" style={{ marginBottom:'var(--space-2)' }}>
+          Set the referral for <strong>{modal?.referral?.patient_name}</strong> to <strong>{newStatus}</strong>?
+        </p>
+        <p className="text-sm text-muted" style={{ marginBottom:'var(--space-6)' }}>
+          {STATUS_MEANINGS[newStatus]}
+        </p>
         <div className="form-actions">
           <Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button>
-          <Button variant="primary" onClick={handleUpdateStatus} loading={saving}>Update</Button>
+          <Button variant={newStatus === 'Cancelled' ? 'danger' : 'primary'} onClick={handleUpdateStatus} loading={saving}>
+            Confirm
+          </Button>
         </div>
       </Modal>
 
