@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { isDoctorInCharge } = require('../utils/dic');
 
 // GET /api/admissions
 const getAllAdmissions = async (req, res) => {
@@ -72,6 +73,14 @@ const getAdmissionById = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Admission not found.' });
     }
+
+    // Doctors may only view their own admissions (Doctor-in-Charge bypasses).
+    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
+      if (rows[0].doctor_id !== req.user.linked_id) {
+        return res.status(403).json({ success: false, message: 'You are not the assigned doctor for this admission.' });
+      }
+    }
+
     return res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
     console.error('getAdmissionById error:', err);

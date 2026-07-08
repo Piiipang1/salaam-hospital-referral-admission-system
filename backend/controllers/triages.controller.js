@@ -1,4 +1,6 @@
 const db = require('../config/db');
+const { isDoctorInCharge } = require('../utils/dic');
+const { scopeToAssignedPatients, doctorCanAccessPatient } = require('../utils/scoping');
 
 // POST /api/triages
 const createTriage = async (req, res) => {
@@ -153,6 +155,14 @@ const getAllTriages = async (req, res) => {
       params.push(to_date);
     }
 
+    // Doctors only see triages of patients assigned to them (Doctor-in-Charge
+    // bypasses this, matching getAllPatients). Admins/nurses/staff unscoped.
+    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
+      const scope = scopeToAssignedPatients('t.patient_id', req.user.linked_id);
+      conditions.push(scope.sql);
+      params.push(...scope.params);
+    }
+
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     // Run data + count in parallel
@@ -205,6 +215,15 @@ const getTriageById = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Triage not found.' });
     }
+
+    // Doctors may only view triages of their assigned patients (DIC bypasses).
+    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
+      const allowed = await doctorCanAccessPatient(req.user.linked_id, rows[0].patient_id);
+      if (!allowed) {
+        return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
+      }
+    }
+
     return res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
     console.error('getTriageById error:', err);

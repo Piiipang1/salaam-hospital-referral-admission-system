@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
+const { scopeToAssignedPatients, doctorCanAccessPatient } = require('../utils/scoping');
 
 // GET /api/patients
 const getAllPatients = async (req, res) => {
@@ -38,16 +39,9 @@ const getAllPatients = async (req, res) => {
     // Doctor-in-Charge mode (fresh DB read, so admin toggles apply live)
     // bypasses this scoping entirely; nurse scoping is never bypassed.
     if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      conditions.push(`p.patient_id IN (
-        SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ?
-        UNION
-        SELECT d.patient_id FROM referrals r
-          JOIN diagnoses d ON d.diagnosis_id = r.diagnosis_id
-          WHERE r.assigned_doctor_id = ?
-        UNION
-        SELECT patient_id FROM admissions WHERE doctor_id = ?
-      )`);
-      params.push(req.user.linked_id, req.user.linked_id, req.user.linked_id);
+      const scope = scopeToAssignedPatients('p.patient_id', req.user.linked_id);
+      conditions.push(scope.sql);
+      params.push(...scope.params);
     }
 
     // Nurses only see patients they personally registered (issue #10)
@@ -123,19 +117,8 @@ const getPatientById = async (req, res) => {
     }
 
     if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      const [[access]] = await db.query(
-        `SELECT 1 AS allowed FROM (
-          SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ?
-          UNION
-          SELECT d.patient_id FROM referrals r
-            JOIN diagnoses d ON d.diagnosis_id = r.diagnosis_id
-            WHERE r.assigned_doctor_id = ? AND d.patient_id = ?
-          UNION
-          SELECT patient_id FROM admissions WHERE doctor_id = ? AND patient_id = ?
-        ) AS t LIMIT 1`,
-        [req.user.linked_id, req.params.id, req.user.linked_id, req.params.id, req.user.linked_id, req.params.id]
-      );
-      if (!access) {
+      const allowed = await doctorCanAccessPatient(req.user.linked_id, req.params.id);
+      if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }
     }
@@ -167,19 +150,8 @@ const getPatientHistory = async (req, res) => {
     // Same doctor scoping as getPatientById — Doctor-in-Charge bypasses it so
     // the patient detail page (info + history) works for unassigned patients.
     if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      const [[access]] = await db.query(
-        `SELECT 1 AS allowed FROM (
-          SELECT patient_id FROM doctor_in_charge WHERE doctor_id = ? AND patient_id = ?
-          UNION
-          SELECT d.patient_id FROM referrals r
-            JOIN diagnoses d ON d.diagnosis_id = r.diagnosis_id
-            WHERE r.assigned_doctor_id = ? AND d.patient_id = ?
-          UNION
-          SELECT patient_id FROM admissions WHERE doctor_id = ? AND patient_id = ?
-        ) AS t LIMIT 1`,
-        [req.user.linked_id, id, req.user.linked_id, id, req.user.linked_id, id]
-      );
-      if (!access) {
+      const allowed = await doctorCanAccessPatient(req.user.linked_id, id);
+      if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }
     }

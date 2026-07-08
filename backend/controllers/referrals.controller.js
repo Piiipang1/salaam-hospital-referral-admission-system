@@ -180,6 +180,18 @@ const getReferralById = async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Referral not found.' });
     }
+
+    // Doctors may only view referrals where they are the referring or the
+    // assigned doctor (Doctor-in-Charge bypasses this).
+    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
+      const ref = rows[0];
+      const isParty = ref.referring_doctor_id === req.user.linked_id
+        || ref.assigned_doctor_id === req.user.linked_id;
+      if (!isParty) {
+        return res.status(403).json({ success: false, message: 'You do not have access to this referral.' });
+      }
+    }
+
     return res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
     console.error('getReferralById error:', err);
