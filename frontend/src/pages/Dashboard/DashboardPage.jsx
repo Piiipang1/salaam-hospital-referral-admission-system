@@ -295,12 +295,12 @@ const DashboardPage = () => {
   const recentAdmissions = activity?.recent_admissions ?? [];
   const recentReferrals  = activity?.recent_referrals  ?? [];
 
-  // ── Greeting based on role ──
+  // ── Greeting based on role — prefer the real name, fall back to username ──
   const greetings = {
     admin:  'Hospital Operations Overview',
-    doctor: `Welcome back, Dr. ${user?.username ?? ''}`,
-    nurse:  'Nursing Dashboard',
-    staff:  'Staff Dashboard',
+    doctor: `Welcome back, Dr. ${user?.last_name ?? user?.username ?? ''}`,
+    nurse:  `Welcome back, ${user?.first_name ?? user?.username ?? ''}`,
+    staff:  `Welcome back, ${user?.first_name ?? user?.username ?? ''}`,
   };
 
   return (
