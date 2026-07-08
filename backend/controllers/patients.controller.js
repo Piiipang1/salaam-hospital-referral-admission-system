@@ -44,8 +44,8 @@ const getAllPatients = async (req, res) => {
       params.push(...scope.params);
     }
 
-    // Nurses only see patients they personally registered (issue #10)
-    if (req.user.role === 'nurse') {
+    // Nurses and staff only see patients they personally registered (issue #10)
+    if (req.user.role === 'nurse' || req.user.role === 'staff') {
       conditions.push(
         `p.patient_id IN (
           SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
@@ -123,8 +123,8 @@ const getPatientById = async (req, res) => {
       }
     }
 
-    // Nurses only see patients they personally registered (issue #10)
-    if (req.user.role === 'nurse') {
+    // Nurses and staff only see patients they personally registered (issue #10)
+    if (req.user.role === 'nurse' || req.user.role === 'staff') {
       const [[nurseAccess]] = await db.query(
         `SELECT 1 AS allowed FROM activity_logs
          WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
