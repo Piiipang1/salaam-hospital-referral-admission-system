@@ -156,11 +156,17 @@ const getAllTriages = async (req, res) => {
     }
 
     // Doctors only see triages of patients assigned to them (Doctor-in-Charge
-    // bypasses this, matching getAllPatients). Admins/nurses/staff unscoped.
+    // bypasses this, matching getAllPatients). Admins unscoped.
     if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
       const scope = scopeToAssignedPatients('t.patient_id', req.user.linked_id);
       conditions.push(scope.sql);
       params.push(...scope.params);
+    }
+
+    // Nurses and staff only see triages they personally recorded.
+    if (req.user.role === 'nurse' || req.user.role === 'staff') {
+      conditions.push('t.employee_id = ?');
+      params.push(req.user.linked_id);
     }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -224,6 +230,12 @@ const getTriageById = async (req, res) => {
       }
     }
 
+    // Nurses and staff may only view triages they personally recorded.
+    if ((req.user.role === 'nurse' || req.user.role === 'staff')
+        && rows[0].employee_id !== req.user.linked_id) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
+    }
+
     return res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
     console.error('getTriageById error:', err);
@@ -234,7 +246,27 @@ const getTriageById = async (req, res) => {
 // PUT /api/triages/:id
 const updateTriage = async (req, res) => {
   const { triage_level, notes, visit_room_id } = req.body;
+
+  const validLevels = ['Critical', 'Urgent', 'Non-Urgent'];
+  if (triage_level != null && !validLevels.includes(triage_level)) {
+    return res.status(400).json({ success: false, message: `triage_level must be one of: ${validLevels.join(', ')}.` });
+  }
+
   try {
+    const [[triage]] = await db.query(
+      'SELECT employee_id FROM triages WHERE triage_id = ?',
+      [req.params.id]
+    );
+    if (!triage) {
+      return res.status(404).json({ success: false, message: 'Triage not found.' });
+    }
+
+    // Nurses and staff may only edit triages they personally recorded.
+    if ((req.user.role === 'nurse' || req.user.role === 'staff')
+        && triage.employee_id !== req.user.linked_id) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
+    }
+
     await db.query(
       `UPDATE triages SET
         triage_level = COALESCE(?, triage_level),
@@ -265,6 +297,20 @@ const addVitalSigns = async (req, res) => {
   }
 
   try {
+    const [[triage]] = await db.query(
+      'SELECT employee_id FROM triages WHERE triage_id = ?',
+      [req.params.id]
+    );
+    if (!triage) {
+      return res.status(404).json({ success: false, message: 'Triage not found.' });
+    }
+
+    // Nurses and staff may only record vitals on triages they personally created.
+    if ((req.user.role === 'nurse' || req.user.role === 'staff')
+        && triage.employee_id !== req.user.linked_id) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
+    }
+
     // Upsert — re-recording updates the existing row so recorded_at (creation
     // time) is preserved and updated_at tracks the last modification.
     const [[existing]] = await db.query(

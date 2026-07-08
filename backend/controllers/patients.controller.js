@@ -156,8 +156,8 @@ const getPatientHistory = async (req, res) => {
       }
     }
 
-    // Nurses only see history for patients they personally registered (issue #10)
-    if (req.user.role === 'nurse') {
+    // Nurses and staff only see history for patients they personally registered (issue #10)
+    if (req.user.role === 'nurse' || req.user.role === 'staff') {
       const [[nurseAccess]] = await db.query(
         `SELECT 1 AS allowed FROM activity_logs
          WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
