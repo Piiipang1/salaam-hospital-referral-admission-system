@@ -41,6 +41,10 @@ const getStats = async (req, res) => {
 // pattern as patients.controller); admin/staff see hospital-wide.
 const getRecentActivity = async (req, res) => {
   try {
+    // Referrals are clinical — only doctors and admins ever see them. Nurses
+    // and staff receive none, matching the referral route/nav restrictions.
+    const canSeeReferrals = req.user.role === 'doctor' || req.user.role === 'admin';
+
     let admissionWhere = '';
     let referralWhere  = '';
     const admissionParams = [];
@@ -54,14 +58,11 @@ const getRecentActivity = async (req, res) => {
     }
 
     if (req.user.role === 'nurse') {
-      const nurseScope = `IN (
+      admissionWhere = `WHERE a.patient_id IN (
         SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
         WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
       )`;
-      admissionWhere = `WHERE a.patient_id ${nurseScope}`;
       admissionParams.push(req.user.user_id);
-      referralWhere = `WHERE diag.patient_id ${nurseScope}`;
-      referralParams.push(req.user.user_id);
     }
 
     const [admissions, referrals] = await Promise.all([
@@ -77,20 +78,22 @@ const getRecentActivity = async (req, res) => {
         ${admissionWhere}
         ORDER BY a.admission_date DESC LIMIT 5
       `, admissionParams),
-      db.query(`
-        SELECT r.referral_id, r.referral_date, r.status AS referral_status,
-               CONCAT(p.first_name, ' ', p.last_name)   AS patient_name, p.patient_id,
-               CONCAT(ad.first_name, ' ', ad.last_name) AS assigned_doctor_name,
-               CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name,
-               diag.medical_condition
-        FROM referrals r
-        LEFT JOIN diagnoses diag ON r.diagnosis_id       = diag.diagnosis_id
-        LEFT JOIN patients  p    ON diag.patient_id      = p.patient_id
-        LEFT JOIN doctors   ad   ON r.assigned_doctor_id  = ad.doctor_id
-        LEFT JOIN doctors   rd   ON r.referring_doctor_id = rd.doctor_id
-        ${referralWhere}
-        ORDER BY r.referral_date DESC LIMIT 5
-      `, referralParams),
+      canSeeReferrals
+        ? db.query(`
+            SELECT r.referral_id, r.referral_date, r.status AS referral_status,
+                   CONCAT(p.first_name, ' ', p.last_name)   AS patient_name, p.patient_id,
+                   CONCAT(ad.first_name, ' ', ad.last_name) AS assigned_doctor_name,
+                   CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name,
+                   diag.medical_condition
+            FROM referrals r
+            LEFT JOIN diagnoses diag ON r.diagnosis_id       = diag.diagnosis_id
+            LEFT JOIN patients  p    ON diag.patient_id      = p.patient_id
+            LEFT JOIN doctors   ad   ON r.assigned_doctor_id  = ad.doctor_id
+            LEFT JOIN doctors   rd   ON r.referring_doctor_id = rd.doctor_id
+            ${referralWhere}
+            ORDER BY r.referral_date DESC LIMIT 5
+          `, referralParams)
+        : Promise.resolve([[]]),
     ]);
 
     return res.status(200).json({

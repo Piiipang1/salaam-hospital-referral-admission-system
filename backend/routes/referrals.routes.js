@@ -14,14 +14,14 @@ router.post(
   referralsController.createReferral
 );
 
-// GET /api/referrals
-router.get('/', auth, referralsController.getAllReferrals);
+// GET /api/referrals  — referrals are clinical; nurses/staff have no access
+router.get('/', auth, requireRole('doctor', 'admin'), referralsController.getAllReferrals);
 
 // GET /api/referrals/history/:patient_id
-router.get('/history/:patient_id', auth, referralsController.getReferralHistory);
+router.get('/history/:patient_id', auth, requireRole('doctor', 'admin'), referralsController.getReferralHistory);
 
 // GET /api/referrals/:id
-router.get('/:id', auth, referralsController.getReferralById);
+router.get('/:id', auth, requireRole('doctor', 'admin'), referralsController.getReferralById);
 
 // PUT /api/referrals/:id/status
 router.put('/:id/status', auth, requireRole('doctor'), referralsController.updateReferralStatus);

@@ -18,7 +18,7 @@ const BAR_ITEMS = [
 // Nav links that appear in the More sheet (role-restricted where noted)
 const SHEET_ITEMS = [
   { to: '/notifications', icon: Bell,       label: 'Notifications'    },
-  { to: '/referrals',     icon: Repeat,     label: 'Referrals'        },
+  { to: '/referrals',     icon: Repeat,     label: 'Referrals',       roles: ['doctor', 'admin'] },
   { to: '/rooms',         icon: DoorOpen,   label: 'Rooms'            },
   { to: '/reports',       icon: BarChart3,  label: 'Reports',         roles: ['admin'] },
   { to: '/users',         icon: UserCog,    label: 'User Management', roles: ['admin'] },

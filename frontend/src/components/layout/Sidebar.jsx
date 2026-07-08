@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard'       },
   { to: '/patients',      icon: Users,           label: 'Patients'        },
   { to: '/triage',        icon: Siren,           label: 'Triage'           },
-  { to: '/referrals',     icon: Repeat,          label: 'Referrals'        },
+  { to: '/referrals',     icon: Repeat,          label: 'Referrals',       roles: ['doctor', 'admin'] },
   { to: '/admissions',    icon: BedDouble,       label: 'Admissions'       },
   // Doctors see their own admitted patients on /rooms, not the room grid
   { to: '/rooms',         icon: DoorOpen,        label: 'Rooms',           doctorLabel: "My Patients' Rooms" },

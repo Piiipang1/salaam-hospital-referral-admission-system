@@ -241,30 +241,34 @@ const saveAssessment = async (req, res) => {
       );
 
       const patientName = diag?.patient_name ?? 'a patient';
+      // Referrals are clinical and hidden from nurse/staff — the 'Refer'
+      // disposition intentionally generates no nurse/staff notification.
+      // (Guarding on notifMessage also skips any unrecognized disposition.)
       const dispositionMessages = {
         Admit:     `Doctor has ordered ADMISSION for ${patientName}. Please prepare bed assignment.`,
         Discharge: `Doctor has ordered DISCHARGE for ${patientName}. Please prepare discharge documents.`,
-        Refer:     `Doctor has ordered REFERRAL for ${patientName}. Referral will be created.`,
         Observe:   `Doctor has ordered OBSERVATION for ${patientName}. Please monitor the patient.`,
       };
       const notifMessage = dispositionMessages[disposition];
 
-      const [staffUsers] = await db.query(
-        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
-      );
-
-      const notifRows = [];
-      for (const su of staffUsers) {
-        if (su.user_id !== req.user.user_id) {
-          notifRows.push([su.user_id, notifMessage, null]);
-        }
-      }
-
-      if (notifRows.length > 0) {
-        await db.query(
-          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
-          [notifRows]
+      if (notifMessage) {
+        const [staffUsers] = await db.query(
+          "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
         );
+
+        const notifRows = [];
+        for (const su of staffUsers) {
+          if (su.user_id !== req.user.user_id) {
+            notifRows.push([su.user_id, notifMessage, null]);
+          }
+        }
+
+        if (notifRows.length > 0) {
+          await db.query(
+            'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+            [notifRows]
+          );
+        }
       }
     } catch (notifErr) {
       console.warn('saveAssessment: notification insert failed (non-fatal):', notifErr.message);

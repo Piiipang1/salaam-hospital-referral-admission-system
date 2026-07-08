@@ -63,7 +63,14 @@ const AppRouter = () => {
           <Route path="patients/:id"  element={<PatientDetailPage />} />
           <Route path="triage"        element={<TriagePage />} />
           <Route path="triage/:id"    element={<TriageDetailPage />} />
-          <Route path="referrals"     element={<ReferralsPage />} />
+          <Route
+            path="referrals"
+            element={
+              <RoleRoute roles={['doctor', 'admin']}>
+                <ReferralsPage />
+              </RoleRoute>
+            }
+          />
           <Route path="admissions"    element={<AdmissionsPage />} />
           <Route path="rooms"         element={<RoomsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />

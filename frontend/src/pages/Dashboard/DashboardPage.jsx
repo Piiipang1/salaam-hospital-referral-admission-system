@@ -373,26 +373,29 @@ const DashboardPage = () => {
               </button>
             )}
           />
-          <ActivityPanel
-            title="Recent Referrals" icon={<Repeat size={18} />} loading={loadAct}
-            items={recentReferrals} emptyMsg="No referrals recorded yet."
-            renderItem={(r) => (
-              <button key={r.referral_id} className="activity-item" onClick={() => navigate('/referrals')}>
-                <div className="activity-item__avatar activity-item__avatar--referral"><Repeat size={18} /></div>
-                <div className="activity-item__body">
-                  <p className="activity-item__name">{r.patient_name || 'Unknown Patient'}</p>
-                  <p className="activity-item__meta">
-                    {r.medical_condition ? `${r.medical_condition} · ` : ''}
-                    {r.assigned_doctor_name ? `→ Dr. ${r.assigned_doctor_name}` : 'Unassigned'}
-                  </p>
-                </div>
-                <div className="activity-item__right">
-                  <Badge status={r.referral_status} />
-                  <span className="activity-item__time">{timeAgo(r.referral_date)}</span>
-                </div>
-              </button>
-            )}
-          />
+          {/* Referrals are clinical — hidden from nurse/staff */}
+          {(role === 'doctor' || role === 'admin') && (
+            <ActivityPanel
+              title="Recent Referrals" icon={<Repeat size={18} />} loading={loadAct}
+              items={recentReferrals} emptyMsg="No referrals recorded yet."
+              renderItem={(r) => (
+                <button key={r.referral_id} className="activity-item" onClick={() => navigate('/referrals')}>
+                  <div className="activity-item__avatar activity-item__avatar--referral"><Repeat size={18} /></div>
+                  <div className="activity-item__body">
+                    <p className="activity-item__name">{r.patient_name || 'Unknown Patient'}</p>
+                    <p className="activity-item__meta">
+                      {r.medical_condition ? `${r.medical_condition} · ` : ''}
+                      {r.assigned_doctor_name ? `→ Dr. ${r.assigned_doctor_name}` : 'Unassigned'}
+                    </p>
+                  </div>
+                  <div className="activity-item__right">
+                    <Badge status={r.referral_status} />
+                    <span className="activity-item__time">{timeAgo(r.referral_date)}</span>
+                  </div>
+                </button>
+              )}
+            />
+          )}
         </div>
       </section>
 
