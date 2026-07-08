@@ -204,7 +204,7 @@ const PatientsPage = () => {
               onChange={(e) => setSex(e.target.value)}
               aria-label="Filter by sex"
             >
-              <option value="">All Sexes</option>
+              <option value="">Filter by sex</option>
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
