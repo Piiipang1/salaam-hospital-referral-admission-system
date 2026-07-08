@@ -372,7 +372,7 @@ CREATE TABLE doctor_assessments (
 --             reports.controller, dashboard.controller
 -- Columns from code: admission_id, patient_id, diagnosis_id, doctor_id,
 --                    room_id, admission_type, admission_date,
---                    discharge_date, status
+--                    discharge_date, discharge_notes, status
 -- ENUM from admissions.controller: Pending Room, Active, Pending Discharge, Discharged
 -- Uses DB transaction (getConnection + beginTransaction) in createAdmission
 -- and dischargePatient — pool must support getConnection() ✅ (mysql2 pool)
@@ -386,6 +386,7 @@ CREATE TABLE admissions (
     admission_type  VARCHAR(100)    NOT NULL,
     admission_date  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     discharge_date  DATETIME        DEFAULT NULL,
+    discharge_notes TEXT            DEFAULT NULL,
     status          ENUM('Pending Room','Active','Pending Discharge','Discharged') NOT NULL DEFAULT 'Pending Room',
     PRIMARY KEY (admission_id),
     CONSTRAINT fk_admissions_patient

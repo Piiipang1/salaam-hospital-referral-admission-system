@@ -33,7 +33,7 @@ const getAllAdmissions = async (req, res) => {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const [rows] = await db.query(
-      `SELECT a.*,
+      `SELECT a.*, a.discharge_notes,
               CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
               CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
               r.room_type, r.bed_number
@@ -57,7 +57,7 @@ const getAllAdmissions = async (req, res) => {
 const getAdmissionById = async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT a.*,
+      `SELECT a.*, a.discharge_notes,
               CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
               p.date_of_birth, p.sex,
               CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
@@ -363,6 +363,7 @@ const assignRoom = async (req, res) => {
 // Does NOT set discharge_date and does NOT free the room — the patient is
 // still physically in it until a nurse confirms (confirmDischarge).
 const dischargePatient = async (req, res) => {
+  const { discharge_notes } = req.body;
   try {
     const [admRows] = await db.query(
       `SELECT a.room_id, a.status, a.doctor_id, a.patient_id,
@@ -387,8 +388,8 @@ const dischargePatient = async (req, res) => {
     }
 
     await db.query(
-      "UPDATE admissions SET status = 'Pending Discharge' WHERE admission_id = ?",
-      [req.params.id]
+      "UPDATE admissions SET status = 'Pending Discharge', discharge_notes = ? WHERE admission_id = ?",
+      [discharge_notes?.trim() || null, req.params.id]
     );
     await db.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'admissions', ?)",

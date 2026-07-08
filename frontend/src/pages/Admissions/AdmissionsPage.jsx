@@ -9,7 +9,6 @@ import Table from '../../components/ui/Table';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Alert from '../../components/ui/Alert';
-import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import Spinner from '../../components/ui/Spinner';
 import AdmissionForm from '../../components/forms/AdmissionForm';
 
@@ -21,6 +20,7 @@ const AdmissionsPage = () => {
   const [success, setSuccess] = useState('');
   const [modal,   setModal]   = useState(false);
   const [confirm, setConfirm] = useState(null); // admission row — doctor initiates discharge
+  const [dischargeNotes, setDischargeNotes] = useState(''); // optional notes for the initiate-discharge modal
   const [nurseConfirm, setNurseConfirm] = useState(null); // admission row — nurse confirms discharge
   const [saving,  setSaving]  = useState(false);
   const [fromDate, setFromDate] = useState('');
@@ -49,11 +49,15 @@ const AdmissionsPage = () => {
     finally { setSaving(false); }
   };
 
-  // Step 1 — doctor initiates: status becomes Pending Discharge, nurses notified
+  // Doctor opens the initiate-discharge modal (resets the notes field)
+  const openInitiateDischarge = (row) => { setConfirm(row); setDischargeNotes(''); };
+
+  // Step 1 — doctor initiates: status becomes Pending Discharge, nurses notified.
+  // Optional discharge notes / final assessment are saved for the nurse to see.
   const handleInitiateDischarge = async () => {
     if (!confirm) return;
     setSaving(true);
-    try { await dischargePatient(confirm.admission_id); setSuccess('Discharge initiated — awaiting nurse confirmation.'); setConfirm(null); load(); }
+    try { await dischargePatient(confirm.admission_id, dischargeNotes); setSuccess('Discharge initiated — awaiting nurse confirmation.'); setConfirm(null); load(); }
     catch (err) { setError(err.response?.data?.message || 'Discharge failed.'); setConfirm(null); }
     finally { setSaving(false); }
   };
@@ -108,7 +112,7 @@ const AdmissionsPage = () => {
             <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); openAssignRoom(r); }}>Assign Room</Button>
           )}
           {r.status === 'Active' && user?.role === 'doctor' && user?.linked_id === r.doctor_id && (
-            <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); setConfirm(r); }}>Initiate Discharge</Button>
+            <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); openInitiateDischarge(r); }}>Initiate Discharge</Button>
           )}
           {r.status === 'Pending Discharge' && user?.role === 'nurse' && (
             <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); setNurseConfirm(r); }}>Confirm Discharge</Button>
@@ -171,24 +175,52 @@ const AdmissionsPage = () => {
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Admit Patient" size="md">
         <AdmissionForm onSubmit={handleAdmit} loading={saving} />
       </Modal>
-      <ConfirmDialog
-        isOpen={!!confirm}
-        onClose={() => setConfirm(null)}
-        onConfirm={handleInitiateDischarge}
-        title="Initiate Discharge"
-        message={`Request discharge for ${confirm?.patient_name ?? 'this patient'}? A nurse must confirm before the room is freed.`}
-        confirmLabel="Initiate Discharge"
-        loading={saving}
-      />
-      <ConfirmDialog
-        isOpen={!!nurseConfirm}
-        onClose={() => setNurseConfirm(null)}
-        onConfirm={handleConfirmDischarge}
-        title="Confirm Discharge"
-        message={`Confirm discharge for ${nurseConfirm?.patient_name ?? 'this patient'}? This finalizes the discharge and frees ${nurseConfirm?.room_id ? `${nurseConfirm.room_type} — ${nurseConfirm.bed_number}` : 'the room'}.`}
-        confirmLabel="Confirm Discharge"
-        loading={saving}
-      />
+      {/* Step 1 — doctor initiates discharge with optional notes */}
+      <Modal isOpen={!!confirm} onClose={() => setConfirm(null)} title="Initiate Discharge" size="sm">
+        <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
+          Request discharge for <strong>{confirm?.patient_name ?? 'this patient'}</strong>? A nurse must confirm before the room is freed.
+        </p>
+        <div className="form-group">
+          <label htmlFor="discharge-notes">Discharge notes / final assessment (optional)</label>
+          <textarea
+            id="discharge-notes"
+            rows={4}
+            value={dischargeNotes}
+            onChange={(e) => setDischargeNotes(e.target.value)}
+            placeholder="e.g. Stable for discharge. Continue oral antibiotics for 5 days, follow up in 1 week."
+          />
+        </div>
+        <div className="form-actions">
+          <Button type="button" variant="secondary" onClick={() => setConfirm(null)}>Cancel</Button>
+          <Button type="button" variant="danger" onClick={handleInitiateDischarge} loading={saving}>Initiate Discharge</Button>
+        </div>
+      </Modal>
+
+      {/* Step 2 — nurse confirms discharge, sees the doctor's notes */}
+      <Modal isOpen={!!nurseConfirm} onClose={() => setNurseConfirm(null)} title="Confirm Discharge" size="sm">
+        <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
+          Confirm discharge for <strong>{nurseConfirm?.patient_name ?? 'this patient'}</strong>? This finalizes the discharge and frees {nurseConfirm?.room_id ? `${nurseConfirm.room_type} — ${nurseConfirm.bed_number}` : 'the room'}.
+        </p>
+        <div className="form-group">
+          <span className="info-label">Doctor's discharge notes</span>
+          <p style={{
+            marginTop: 'var(--space-1)',
+            padding: 'var(--space-3)',
+            background: 'var(--color-surface-2)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 'var(--radius-sm)',
+            whiteSpace: 'pre-wrap',
+            color: nurseConfirm?.discharge_notes ? 'var(--color-text)' : 'var(--color-text-muted)',
+            fontSize: 'var(--font-size-sm)',
+          }}>
+            {nurseConfirm?.discharge_notes || 'No notes provided by the doctor.'}
+          </p>
+        </div>
+        <div className="form-actions">
+          <Button type="button" variant="secondary" onClick={() => setNurseConfirm(null)}>Cancel</Button>
+          <Button type="button" variant="primary" onClick={handleConfirmDischarge} loading={saving}>Confirm Discharge</Button>
+        </div>
+      </Modal>
       <Modal isOpen={!!assignRow} onClose={() => setAssignRow(null)} title="Assign Room" size="sm">
         <div className="form-group">
           <label htmlFor="assign-room-select">
