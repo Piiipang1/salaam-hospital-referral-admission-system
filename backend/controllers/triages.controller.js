@@ -1,6 +1,6 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
-const { scopeToAssignedPatients, doctorCanAccessPatient } = require('../utils/scoping');
+const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition } = require('../utils/scoping');
 
 // POST /api/triages
 const createTriage = async (req, res) => {
@@ -155,12 +155,21 @@ const getAllTriages = async (req, res) => {
       params.push(to_date);
     }
 
-    // Doctors only see triages of patients assigned to them (Doctor-in-Charge
-    // bypasses this, matching getAllPatients). Admins unscoped.
-    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      const scope = scopeToAssignedPatients('t.patient_id', req.user.linked_id);
+    // Doctors see triages of their assigned patients. A Doctor-in-Charge (ER
+    // coordinator) also sees triages of currently-unassigned patients.
+    // Admins unscoped. (Fresh DB read — never trust the JWT for the DIC flag.)
+    if (req.user.role === 'doctor') {
+      const scope = (await isDoctorInCharge(req.user.user_id))
+        ? scopeForDoctorInCharge('t.patient_id', req.user.linked_id)
+        : scopeToAssignedPatients('t.patient_id', req.user.linked_id);
       conditions.push(scope.sql);
       params.push(...scope.params);
+    }
+
+    // Optional "unassigned only" filter for the DIC/admin coordination views.
+    if (['true', '1'].includes(String(req.query.unassigned))) {
+      const cond = unassignedPatientsCondition('t.patient_id');
+      conditions.push(cond.sql);
     }
 
     // Nurses and staff only see triages they personally recorded.
@@ -222,9 +231,12 @@ const getTriageById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Triage not found.' });
     }
 
-    // Doctors may only view triages of their assigned patients (DIC bypasses).
-    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      const allowed = await doctorCanAccessPatient(req.user.linked_id, rows[0].patient_id);
+    // Doctors may view triages of their assigned patients; a Doctor-in-Charge
+    // may also view triages of currently-unassigned patients.
+    if (req.user.role === 'doctor') {
+      const allowed = (await isDoctorInCharge(req.user.user_id))
+        ? await doctorInChargeCanAccessPatient(req.user.linked_id, rows[0].patient_id)
+        : await doctorCanAccessPatient(req.user.linked_id, rows[0].patient_id);
       if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }
@@ -503,4 +515,88 @@ const getVisitRoomOptions = async (req, res) => {
   }
 };
 
-module.exports = { createTriage, getAllTriages, getTriageById, updateTriage, addVitalSigns, createEmergencyTriage, getVisitRoomOptions };
+// PUT /api/triages/:id/assign-doctor
+// ER-coordinator power: set (or change) the attending doctor for a triage's
+// patient by writing doctor_in_charge. Allowed for admin or a live-checked
+// Doctor-in-Charge. Once assigned, the patient leaves the unassigned pool.
+const assignTriageDoctor = async (req, res) => {
+  const { doctor_id } = req.body;
+
+  if (!doctor_id) {
+    return res.status(400).json({ success: false, message: 'doctor_id is required.' });
+  }
+
+  try {
+    const allowed = req.user.role === 'admin'
+      || (req.user.role === 'doctor' && await isDoctorInCharge(req.user.user_id));
+    if (!allowed) {
+      return res.status(403).json({ success: false, message: 'Doctor-in-Charge mode required.' });
+    }
+
+    const [[triage]] = await db.query(
+      `SELECT t.patient_id, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+       FROM triages t LEFT JOIN patients p ON p.patient_id = t.patient_id
+       WHERE t.triage_id = ?`,
+      [req.params.id]
+    );
+    if (!triage) {
+      return res.status(404).json({ success: false, message: 'Triage not found.' });
+    }
+
+    const [[targetDoctor]] = await db.query(
+      "SELECT doctor_id, CONCAT(first_name, ' ', last_name) AS name FROM doctors WHERE doctor_id = ? AND employment_status = 'Active'",
+      [doctor_id]
+    );
+    if (!targetDoctor) {
+      return res.status(400).json({ success: false, message: 'Assigned doctor must exist and be Active.' });
+    }
+
+    // "Assign or change" — replace the patient's doctor_in_charge with the new
+    // attending doctor, in a transaction.
+    const connection = await db.getConnection();
+    await connection.beginTransaction();
+    try {
+      await connection.query('DELETE FROM doctor_in_charge WHERE patient_id = ?', [triage.patient_id]);
+      await connection.query(
+        'INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at) VALUES (?, ?, NOW())',
+        [doctor_id, triage.patient_id]
+      );
+      await connection.query(
+        "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'ASSIGN_DOCTOR', 'doctor_in_charge', ?)",
+        [req.user.user_id, triage.patient_id]
+      );
+      await connection.commit();
+      connection.release();
+    } catch (txErr) {
+      await connection.rollback();
+      connection.release();
+      throw txErr;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Dr. ${targetDoctor.name} is now the attending doctor for ${triage.patient_name ?? 'this patient'}.`,
+    });
+
+    // Best-effort notification to the newly assigned doctor
+    try {
+      const [[docUser]] = await db.query(
+        "SELECT user_id FROM users WHERE linked_id = ? AND role = 'doctor' AND is_active = 1 LIMIT 1",
+        [doctor_id]
+      );
+      if (docUser && docUser.user_id !== req.user.user_id) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
+          [docUser.user_id, `You have been assigned as the attending doctor for ${triage.patient_name ?? 'a patient'}.`, null]
+        );
+      }
+    } catch (notifErr) {
+      console.warn('assignTriageDoctor: notification insert failed (non-fatal):', notifErr.message);
+    }
+  } catch (err) {
+    console.error('assignTriageDoctor error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { createTriage, getAllTriages, getTriageById, updateTriage, addVitalSigns, createEmergencyTriage, getVisitRoomOptions, assignTriageDoctor };
