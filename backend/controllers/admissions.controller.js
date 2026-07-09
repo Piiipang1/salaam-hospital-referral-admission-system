@@ -37,11 +37,14 @@ const getAllAdmissions = async (req, res) => {
       `SELECT a.*, a.discharge_notes,
               CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
               CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
-              r.room_type, r.bed_number
+              r.room_type, r.bed_number,
+              CONCAT(e_conf.first_name, ' ', e_conf.last_name) AS confirmed_by_name
        FROM admissions a
        LEFT JOIN patients p ON a.patient_id = p.patient_id
        LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
        LEFT JOIN rooms r ON a.room_id = r.room_id
+       LEFT JOIN users u_conf ON a.discharge_confirmed_by = u_conf.user_id
+       LEFT JOIN employees e_conf ON u_conf.linked_id = e_conf.employee_id
        ${where}
        ORDER BY a.admission_date DESC LIMIT ? OFFSET ?`,
       [...params, parseInt(limit), offset]
@@ -62,11 +65,14 @@ const getAdmissionById = async (req, res) => {
               CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
               p.date_of_birth, p.sex,
               CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
-              r.room_type, r.bed_number
+              r.room_type, r.bed_number,
+              CONCAT(e_conf.first_name, ' ', e_conf.last_name) AS confirmed_by_name
        FROM admissions a
        LEFT JOIN patients p ON a.patient_id = p.patient_id
        LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
        LEFT JOIN rooms r ON a.room_id = r.room_id
+       LEFT JOIN users u_conf ON a.discharge_confirmed_by = u_conf.user_id
+       LEFT JOIN employees e_conf ON u_conf.linked_id = e_conf.employee_id
        WHERE a.admission_id = ?`,
       [req.params.id]
     );
@@ -124,7 +130,8 @@ const createAdmission = async (req, res) => {
       }
     }
 
-    // ── Guard: reject if the patient already has an ongoing admission ──────────
+    // ── Fast-fail: reject if the patient already has an ongoing admission ─────
+    // (Authoritative re-check happens inside the transaction below.)
     const [[ongoing]] = await db.query(
       `SELECT admission_id FROM admissions
        WHERE patient_id = ? AND status IN ('Pending Room', 'Active')
@@ -138,13 +145,31 @@ const createAdmission = async (req, res) => {
       });
     }
 
-    // ── Transaction: insert admission (no room yet) + log ─────────────────────
+    // ── Transaction: re-check under a lock, then insert (no room yet) + log ────
     // Room assignment happens later via the dedicated assign-room endpoint.
     const connection = await db.getConnection();
     await connection.beginTransaction();
 
     let admissionId;
     try {
+      // Locking re-check — a FOR UPDATE read on the patient's ongoing admissions
+      // gap-locks the patient_id range, so two simultaneous requests can't both
+      // create an ongoing admission for the same patient.
+      const [[ongoingTx]] = await connection.query(
+        `SELECT admission_id FROM admissions
+         WHERE patient_id = ? AND status IN ('Pending Room', 'Active')
+         LIMIT 1 FOR UPDATE`,
+        [patient_id]
+      );
+      if (ongoingTx) {
+        await connection.rollback();
+        connection.release();
+        return res.status(409).json({
+          success: false,
+          message: 'This patient already has an ongoing admission. Discharge the current admission before admitting again.',
+        });
+      }
+
       const [result] = await connection.query(
         `INSERT INTO admissions (patient_id, diagnosis_id, doctor_id, room_id, admission_type, admission_date, status)
          VALUES (?, ?, ?, NULL, ?, ?, 'Pending Room')`,
@@ -163,6 +188,15 @@ const createAdmission = async (req, res) => {
     } catch (txErr) {
       await connection.rollback();
       connection.release();
+      // A deadlock / lock-wait here means a concurrent request is admitting the
+      // same patient (the FOR UPDATE re-check serializes them) — surface it as
+      // the duplicate-admission conflict rather than a 500.
+      if (txErr.code === 'ER_LOCK_DEADLOCK' || txErr.code === 'ER_LOCK_WAIT_TIMEOUT') {
+        return res.status(409).json({
+          success: false,
+          message: 'This patient already has an ongoing admission. Discharge the current admission before admitting again.',
+        });
+      }
       throw txErr;
     }
 
@@ -294,22 +328,38 @@ const assignRoom = async (req, res) => {
     if (room.length === 0) {
       return res.status(404).json({ success: false, message: 'Room not found.' });
     }
+    // Fast-fail for the common case; the atomic claim below is authoritative.
     if (room[0].availability_status === 'occupied') {
       return res.status(409).json({ success: false, message: 'Room is currently occupied.' });
     }
 
-    // ── Transaction: assign room + mark occupied + log ────────────────────────
+    // ── Transaction: atomically claim the room, then assign it ────────────────
     const connection = await db.getConnection();
     await connection.beginTransaction();
     try {
-      await connection.query(
-        "UPDATE admissions SET room_id = ?, status = 'Active' WHERE admission_id = ?",
-        [room_id, req.params.id]
-      );
-      await connection.query(
-        "UPDATE rooms SET availability_status = 'occupied' WHERE room_id = ?",
+      // Atomic claim — the conditional UPDATE only succeeds if the room is still
+      // available, closing the race where two requests both pass the check above.
+      const [roomClaim] = await connection.query(
+        "UPDATE rooms SET availability_status = 'occupied' WHERE room_id = ? AND availability_status = 'available'",
         [room_id]
       );
+      if (roomClaim.affectedRows === 0) {
+        await connection.rollback();
+        connection.release();
+        return res.status(409).json({ success: false, message: 'Room was just taken. Please choose another room.' });
+      }
+
+      // Guard the admission too, so the same admission can't be assigned twice.
+      const [admClaim] = await connection.query(
+        "UPDATE admissions SET room_id = ?, status = 'Active' WHERE admission_id = ? AND status = 'Pending Room'",
+        [room_id, req.params.id]
+      );
+      if (admClaim.affectedRows === 0) {
+        await connection.rollback();
+        connection.release();
+        return res.status(409).json({ success: false, message: 'This admission already has a room assigned.' });
+      }
+
       await connection.query(
         "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'admissions', ?)",
         [req.user.user_id, req.params.id]
@@ -456,8 +506,8 @@ const confirmDischarge = async (req, res) => {
     await connection.beginTransaction();
     try {
       await connection.query(
-        "UPDATE admissions SET status = 'Discharged', discharge_date = NOW() WHERE admission_id = ?",
-        [req.params.id]
+        "UPDATE admissions SET status = 'Discharged', discharge_date = NOW(), discharge_confirmed_by = ? WHERE admission_id = ?",
+        [req.user.user_id, req.params.id]
       );
       await connection.query(
         "UPDATE rooms SET availability_status = 'available' WHERE room_id = ?",
