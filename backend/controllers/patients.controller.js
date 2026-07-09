@@ -1,6 +1,6 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
-const { scopeToAssignedPatients, doctorCanAccessPatient } = require('../utils/scoping');
+const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition } = require('../utils/scoping');
 
 // GET /api/patients
 const getAllPatients = async (req, res) => {
@@ -38,10 +38,22 @@ const getAllPatients = async (req, res) => {
     // continuity of care this includes past as well as active assignments.
     // Doctor-in-Charge mode (fresh DB read, so admin toggles apply live)
     // bypasses this scoping entirely; nurse scoping is never bypassed.
-    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      const scope = scopeToAssignedPatients('p.patient_id', req.user.linked_id);
+    // Doctors are scoped to their assigned patients. A Doctor-in-Charge (ER
+    // coordinator) also sees currently-unassigned patients. (Fresh DB read —
+    // never trust the JWT for the DIC flag.)
+    if (req.user.role === 'doctor') {
+      const scope = (await isDoctorInCharge(req.user.user_id))
+        ? scopeForDoctorInCharge('p.patient_id', req.user.linked_id)
+        : scopeToAssignedPatients('p.patient_id', req.user.linked_id);
       conditions.push(scope.sql);
       params.push(...scope.params);
+    }
+
+    // Optional "unassigned only" filter (used by the DIC/admin coordination
+    // views). AND-composes with the role scope above.
+    if (['true', '1'].includes(String(req.query.unassigned))) {
+      const cond = unassignedPatientsCondition('p.patient_id');
+      conditions.push(cond.sql);
     }
 
     // Nurses and staff only see patients they personally registered (issue #10)
@@ -116,8 +128,10 @@ const getPatientById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Patient not found.' });
     }
 
-    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      const allowed = await doctorCanAccessPatient(req.user.linked_id, req.params.id);
+    if (req.user.role === 'doctor') {
+      const allowed = (await isDoctorInCharge(req.user.user_id))
+        ? await doctorInChargeCanAccessPatient(req.user.linked_id, req.params.id)
+        : await doctorCanAccessPatient(req.user.linked_id, req.params.id);
       if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }
@@ -149,8 +163,10 @@ const getPatientHistory = async (req, res) => {
   try {
     // Same doctor scoping as getPatientById — Doctor-in-Charge bypasses it so
     // the patient detail page (info + history) works for unassigned patients.
-    if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
-      const allowed = await doctorCanAccessPatient(req.user.linked_id, id);
+    if (req.user.role === 'doctor') {
+      const allowed = (await isDoctorInCharge(req.user.user_id))
+        ? await doctorInChargeCanAccessPatient(req.user.linked_id, id)
+        : await doctorCanAccessPatient(req.user.linked_id, id);
       if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }
