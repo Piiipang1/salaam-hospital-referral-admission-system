@@ -22,6 +22,9 @@ router.get('/:id', auth, triagesController.getTriageById);
 // PUT /api/triages/:id
 router.put('/:id', auth, requireRole('nurse', 'staff'), triagesController.updateTriage);
 
+// PUT /api/triages/:id/assign-doctor — admin or Doctor-in-Charge (checked in controller)
+router.put('/:id/assign-doctor', auth, requireRole('doctor', 'admin'), triagesController.assignTriageDoctor);
+
 // POST /api/triages/:id/vital-signs
 router.post('/:id/vital-signs', auth, requireRole('nurse', 'staff'), triagesController.addVitalSigns);
 
