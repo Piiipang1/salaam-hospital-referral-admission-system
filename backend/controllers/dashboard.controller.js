@@ -14,6 +14,10 @@ const getStats = async (req, res) => {
       [[{ pending_referrals }]],
       [[{ todays_triages }]],
       [[{ total_doctors }]],
+      [[{ patients_today }]],
+      [[{ todays_diagnoses }]],
+      [[{ pending_room_admissions }]],
+      [[{ pending_discharges }]],
     ] = await Promise.all([
       db.query('SELECT COUNT(*) AS total_patients FROM patients'),
       db.query("SELECT COUNT(*) AS active_admissions FROM admissions WHERE status = 'Active'"),
@@ -21,11 +25,19 @@ const getStats = async (req, res) => {
       db.query("SELECT COUNT(*) AS pending_referrals FROM referrals WHERE status = 'Pending'"),
       db.query('SELECT COUNT(*) AS todays_triages FROM triages WHERE DATE(triage_datetime) = CURDATE()'),
       db.query("SELECT COUNT(*) AS total_doctors FROM doctors WHERE employment_status = 'Active'"),
+      // ── Workflow-stepper counts (admin dashboard) ──────────────────────────
+      db.query('SELECT COUNT(*) AS patients_today FROM patients WHERE DATE(created_at) = CURDATE()'),
+      db.query('SELECT COUNT(*) AS todays_diagnoses FROM diagnoses WHERE DATE(diagnosis_date) = CURDATE()'),
+      db.query("SELECT COUNT(*) AS pending_room_admissions FROM admissions WHERE status = 'Pending Room'"),
+      db.query("SELECT COUNT(*) AS pending_discharges FROM admissions WHERE status = 'Pending Discharge'"),
     ]);
 
     return res.status(200).json({
       success: true,
-      data: { total_patients, active_admissions, available_rooms, pending_referrals, todays_triages, total_doctors },
+      data: {
+        total_patients, active_admissions, available_rooms, pending_referrals, todays_triages, total_doctors,
+        patients_today, todays_diagnoses, pending_room_admissions, pending_discharges,
+      },
     });
   } catch (err) {
     console.error('getStats error:', err);
