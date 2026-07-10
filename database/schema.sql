@@ -311,10 +311,13 @@ CREATE TABLE lab_results (
 -- Queried by: referrals.controller, patients.controller,
 --             reports.controller, dashboard.controller
 -- Columns from code: referral_id, diagnosis_id, referring_doctor_id,
---                    assigned_doctor_id, referral_date, status, e_signature
+--                    assigned_doctor_id, referral_date, status, e_signature,
+--                    file_attachment
 -- ENUM from referrals.controller validStatuses: Pending, Accepted, Completed, Cancelled
 -- e_signature stores a base64 PNG data URL captured from the signature canvas
 -- in ReferralForm (frontend) — nullable, referrals may be submitted without one
+-- file_attachment stores the multer filename (backend/uploads/) of an optional
+-- referral form document uploaded with the referral
 -- -----------------------------------------------------------------------------
 CREATE TABLE referrals (
     referral_id          INT UNSIGNED    NOT NULL AUTO_INCREMENT,
@@ -325,6 +328,7 @@ CREATE TABLE referrals (
     status               ENUM('Pending','Accepted','Completed','Cancelled')
                                          NOT NULL DEFAULT 'Pending',
     e_signature          TEXT            DEFAULT NULL,
+    file_attachment      VARCHAR(255)    DEFAULT NULL COMMENT 'filename saved in backend/uploads/',
     PRIMARY KEY (referral_id),
     CONSTRAINT fk_referrals_diagnosis
         FOREIGN KEY (diagnosis_id)        REFERENCES diagnoses (diagnosis_id)

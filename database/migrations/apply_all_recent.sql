@@ -28,3 +28,11 @@ ALTER TABLE admissions MODIFY COLUMN status
 -- 4. vital_signs.updated_at  — tracks last edit; recorded_at stays the creation time.
 ALTER TABLE vital_signs
   ADD COLUMN updated_at DATETIME NULL DEFAULT NULL AFTER recorded_at;
+
+-- 5. referrals.file_attachment  — optional referral form document (multer
+--    filename in backend/uploads/). createReferral INSERTs this column;
+--    without it every referral creation fails with "Unknown column".
+ALTER TABLE referrals
+  ADD COLUMN IF NOT EXISTS file_attachment VARCHAR(255) DEFAULT NULL
+    COMMENT 'filename saved in backend/uploads/'
+    AFTER e_signature;
