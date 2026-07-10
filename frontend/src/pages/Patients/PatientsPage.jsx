@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getAllPatients, createPatient, updatePatient } from '../../api/patients.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManagePatients } from '../../utils/roleGuard';
-import { formatDate, calcAge } from '../../utils/formatDate';
+import { formatDate, calcAge, todayInput } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
 import SearchBar from '../../components/ui/SearchBar';
@@ -53,11 +53,19 @@ const PatientsPage = () => {
   const { user }   = useAuth();
   const navigate   = useNavigate();
 
+  // ER coordinator = admin or a Doctor-in-Charge. Gets the "Unassigned" filter.
+  const isCoordinator = user?.role === 'admin' || (user?.role === 'doctor' && !!user?.is_doctor_in_charge);
+
+  // Pre-apply a filter from the admin workflow stepper (e.g. ?registered=today)
+  const [searchParams] = useSearchParams();
+  const stepDate = searchParams.get('registered') === 'today' ? todayInput() : '';
+
   // ── Filter state ─────────────────────────────────────────────
   const [search,    setSearch]    = useState('');
   const [sex,       setSex]       = useState('');
-  const [fromDate,  setFromDate]  = useState('');
-  const [toDate,    setToDate]    = useState('');
+  const [fromDate,  setFromDate]  = useState(stepDate);
+  const [toDate,    setToDate]    = useState(stepDate);
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
 
   // ── Pagination state ─────────────────────────────────────────
   const [page,  setPage]  = useState(1);
@@ -73,17 +81,18 @@ const PatientsPage = () => {
   const [saving,    setSaving]    = useState(false);
 
   // Reset to page 1 whenever any filter changes
-  useEffect(() => { setPage(1); }, [search, sex, fromDate, toDate]);
+  useEffect(() => { setPage(1); }, [search, sex, fromDate, toDate, unassignedOnly]);
 
   // ── Data fetching ─────────────────────────────────────────────
   const load = useCallback(() => {
     setLoading(true);
 
     const params = { page, limit: LIMIT };
-    if (search)   params.search    = search;
-    if (sex)      params.sex       = sex;
-    if (fromDate) params.from_date = fromDate;
-    if (toDate)   params.to_date   = toDate;
+    if (search)         params.search     = search;
+    if (sex)            params.sex        = sex;
+    if (fromDate)       params.from_date  = fromDate;
+    if (toDate)         params.to_date    = toDate;
+    if (unassignedOnly) params.unassigned = 'true';
 
     getAllPatients(params)
       .then((res) => {
@@ -94,7 +103,7 @@ const PatientsPage = () => {
       })
       .catch(() => setError('Failed to load patients.'))
       .finally(() => setLoading(false));
-  }, [search, sex, fromDate, toDate, page]);
+  }, [search, sex, fromDate, toDate, unassignedOnly, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -130,9 +139,10 @@ const PatientsPage = () => {
     setSex('');
     setFromDate('');
     setToDate('');
+    setUnassignedOnly(false);
   };
 
-  const hasActiveFilters = search || sex || fromDate || toDate;
+  const hasActiveFilters = search || sex || fromDate || toDate || unassignedOnly;
 
   // ── Table columns (My Patients view) ─────────────────────────
   const columns = [
@@ -240,6 +250,29 @@ const PatientsPage = () => {
                 aria-label="Registered to date"
               />
             </div>
+            {/* Unassigned-only toggle — ER coordinators (admin / Doctor-in-Charge) */}
+            {isCoordinator && (
+              <button
+                type="button"
+                onClick={() => setUnassignedOnly((v) => !v)}
+                title="Show only patients with no doctor assigned yet"
+                style={{
+                  height: '38px',
+                  padding: '0 var(--space-4)',
+                  borderRadius: 'var(--radius-sm)',
+                  border: '1px solid',
+                  cursor: 'pointer',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  color:       unassignedOnly ? '#fff' : 'var(--color-text-muted)',
+                  background:  unassignedOnly ? 'var(--color-primary)' : 'var(--color-surface-2)',
+                  borderColor: unassignedOnly ? 'var(--color-primary)' : 'var(--color-border)',
+                }}
+              >
+                Unassigned only
+              </button>
+            )}
             {hasActiveFilters && (
               <button className="filter-clear-btn" onClick={clearFilters} title="Clear all filters">
                 ✕ Clear

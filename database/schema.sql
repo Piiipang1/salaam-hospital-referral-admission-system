@@ -387,11 +387,15 @@ CREATE TABLE admissions (
     admission_date  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     discharge_date  DATETIME        DEFAULT NULL,
     discharge_notes TEXT            DEFAULT NULL,
+    discharge_confirmed_by INT UNSIGNED DEFAULT NULL,
     status          ENUM('Pending Room','Active','Pending Discharge','Discharged') NOT NULL DEFAULT 'Pending Room',
     PRIMARY KEY (admission_id),
     CONSTRAINT fk_admissions_patient
         FOREIGN KEY (patient_id)   REFERENCES patients  (patient_id)
         ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_admissions_discharge_confirmed_by
+        FOREIGN KEY (discharge_confirmed_by) REFERENCES users (user_id)
+        ON DELETE SET NULL,
     CONSTRAINT fk_admissions_diagnosis
         FOREIGN KEY (diagnosis_id) REFERENCES diagnoses (diagnosis_id)
         ON UPDATE CASCADE ON DELETE SET NULL,

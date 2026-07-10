@@ -34,6 +34,12 @@ export const toInputDate = (dateStr) => {
   return new Date(dateStr).toISOString().split('T')[0];
 };
 
+/** Today's date in YYYY-MM-DD (local time) — for pre-filling date filters. */
+export const todayInput = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 /**
  * Format age from date of birth as a human-readable string.
  * Returns: '—' | 'Invalid DOB' | '23' (years) | '3 mos' | '12 days' | 'Newborn'

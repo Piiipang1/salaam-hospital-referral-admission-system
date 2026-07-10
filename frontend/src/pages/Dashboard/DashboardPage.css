@@ -287,3 +287,52 @@
   .activity-item__name   { font-size: var(--font-size-xs); }
   .role-badge            { display: none; }
 }
+
+/* ── Admin workflow stepper ──────────────────────────────────────── */
+.workflow-heading {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+}
+.workflow-stepper {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  overflow-x: auto;
+  padding-bottom: var(--space-2);
+  scrollbar-width: thin;
+}
+.workflow-step-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex: 1 1 0;
+  min-width: 0;
+}
+.workflow-step {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 122px;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.workflow-step:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .06);
+  transform: translateY(-1px);
+}
+.workflow-step__icon  { color: var(--color-primary); display: inline-flex; }
+.workflow-step__count { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+.workflow-step__label { font-weight: 600; font-size: var(--font-size-sm); }
+.workflow-step__caption { font-size: var(--font-size-xs); color: var(--color-text-muted); }
+.workflow-step__arrow { color: var(--color-text-muted); flex-shrink: 0; display: inline-flex; }

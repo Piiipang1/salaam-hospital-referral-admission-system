@@ -3,6 +3,7 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import PageWrapper from './PageWrapper';
 import BottomNav from './BottomNav';
+import { useAuth } from '../../context/AuthContext';
 
 const PAGE_TITLES = {
   '/dashboard':     'Dashboard',
@@ -25,11 +26,17 @@ const getTitle = (pathname) => {
 
 const AppLayout = () => {
   const location = useLocation();
+  const { user } = useAuth();
+
+  // Doctors' Admissions page is their merged "My Patients" view.
+  const title = (user?.role === 'doctor' && location.pathname.startsWith('/admissions'))
+    ? 'My Patients'
+    : getTitle(location.pathname);
 
   return (
     <>
       <Sidebar collapsed={false} />
-      <TopBar title={getTitle(location.pathname)} />
+      <TopBar title={title} />
       <PageWrapper>
         <Outlet />
       </PageWrapper>

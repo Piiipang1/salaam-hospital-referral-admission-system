@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getAllAdmissions, createAdmission, assignRoom, dischargePatient, confirmDischarge, cancelDischarge } from '../../api/admissions.api';
 import { getAllRooms } from '../../api/rooms.api';
 import { useAuth } from '../../context/AuthContext';
@@ -12,8 +13,15 @@ import Alert from '../../components/ui/Alert';
 import Spinner from '../../components/ui/Spinner';
 import AdmissionForm from '../../components/forms/AdmissionForm';
 
+// Ongoing (non-discharged) admission statuses — the doctor "Current" tab.
+const CURRENT_STATUSES = ['Pending Room', 'Active', 'Pending Discharge'];
+
 const AdmissionsPage = () => {
   const { user } = useAuth();
+  const isDoctor = user?.role === 'doctor';
+  const isNurse  = user?.role === 'nurse';
+  const [tab,      setTab]      = useState('Current');    // doctor "My Patients" tab
+  const [nurseTab, setNurseTab] = useState('Admissions'); // nurse view tab
   const [data,    setData]    = useState([]);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
@@ -25,6 +33,11 @@ const AdmissionsPage = () => {
   const [saving,  setSaving]  = useState(false);
   const [fromDate, setFromDate] = useState('');
   const [toDate,   setToDate]   = useState('');
+
+  // Status filter pre-applied from the admin workflow stepper
+  // (?status=Pending Room | Pending Discharge). Applies to the admin/staff view.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
 
   // Assign-room modal: which admission row is being assigned, the available
   // rooms to choose from, and the currently selected room_id
@@ -96,6 +109,26 @@ const AdmissionsPage = () => {
     finally { setSaving(false); }
   };
 
+  // Row actions — shared by the default table and the doctor "Current" tab.
+  // Initiate Discharge stays exactly as before (Active + own admission).
+  const renderRowActions = (r) => (
+    <>
+      {r.status === 'Pending Room' && canAssignRoom(user?.role) && (
+        <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); openAssignRoom(r); }}>Assign Room</Button>
+      )}
+      {r.status === 'Active' && user?.role === 'doctor' && user?.linked_id === r.doctor_id && (
+        <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); openInitiateDischarge(r); }}>Initiate Discharge</Button>
+      )}
+      {r.status === 'Pending Discharge' && user?.role === 'nurse' && (
+        <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); setNurseConfirm(r); }}>Confirm Discharge</Button>
+      )}
+      {r.status === 'Pending Discharge' && (user?.role === 'admin' || (user?.role === 'doctor' && user?.linked_id === r.doctor_id)) && (
+        <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleCancelDischarge(r); }}>Cancel</Button>
+      )}
+    </>
+  );
+
+  // Default table (nurse / staff / admin)
   const columns = [
     { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
     { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name  ?? '—' },
@@ -104,31 +137,72 @@ const AdmissionsPage = () => {
     { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
     { key: 'discharge_date', label: 'Discharged', hideMobile: true, render: (r) => formatDate(r.discharge_date) },
     { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
-    {
-      key: 'actions', label: '', width: '190px', align: 'right',
-      render: (r) => (
-        <>
-          {r.status === 'Pending Room' && canAssignRoom(user?.role) && (
-            <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); openAssignRoom(r); }}>Assign Room</Button>
-          )}
-          {r.status === 'Active' && user?.role === 'doctor' && user?.linked_id === r.doctor_id && (
-            <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); openInitiateDischarge(r); }}>Initiate Discharge</Button>
-          )}
-          {r.status === 'Pending Discharge' && user?.role === 'nurse' && (
-            <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); setNurseConfirm(r); }}>Confirm Discharge</Button>
-          )}
-          {r.status === 'Pending Discharge' && (user?.role === 'admin' || (user?.role === 'doctor' && user?.linked_id === r.doctor_id)) && (
-            <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleCancelDischarge(r); }}>Cancel</Button>
-          )}
-        </>
+    { key: 'actions', label: '', width: '190px', align: 'right', render: renderRowActions },
+  ];
+
+  // Doctor "My Patients" — Current tab: ongoing admissions with room + actions
+  const doctorCurrentColumns = [
+    { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
+    { key: 'room',           label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : (r.status === 'Pending Room' ? 'Awaiting room' : '—') },
+    { key: 'admission_type', label: 'Type',    hideMobile: true },
+    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
+    { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
+    { key: 'actions', label: '', width: '190px', align: 'right', render: renderRowActions },
+  ];
+
+  // Doctor "My Patients" — History tab: discharged, with admission + discharge dates
+  const doctorHistoryColumns = [
+    { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
+    { key: 'room_type',      label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : '—' },
+    { key: 'admission_type', label: 'Type',    hideMobile: true },
+    { key: 'admission_date', label: 'Admitted', render: (r) => formatDate(r.admission_date) },
+    { key: 'discharge_date', label: 'Discharged', render: (r) => formatDate(r.discharge_date) },
+    { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
+  ];
+
+  // Nurse "Discharge History" tab — who confirmed each discharge, with the
+  // doctor's discharge notes (from the earlier discharge-notes feature).
+  const nurseHistoryColumns = [
+    { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
+    { key: 'room',           label: 'Room',    render: (r) => r.room_type ? `${r.room_type} — ${r.bed_number}` : '—' },
+    { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name ?? '—' },
+    { key: 'discharge_date', label: 'Discharged', render: (r) => formatDate(r.discharge_date) },
+    { key: 'discharge_notes', label: "Doctor's Notes", hideMobile: true, render: (r) => (
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap' }}>
+          {r.discharge_notes ? (r.discharge_notes.length > 80 ? r.discharge_notes.slice(0, 80) + '…' : r.discharge_notes) : '—'}
+        </span>
       ),
     },
+    { key: 'confirmed_by', label: 'Confirmed By', render: (r) => r.confirmed_by_name ?? '—' },
   ];
+
+  // Tab data (the fetched list is already role-scoped by the backend)
+  const currentRows = data.filter((d) => CURRENT_STATUSES.includes(d.status));
+  const historyRows = data.filter((d) => d.status === 'Discharged');
+
+  const tabButtonStyle = (active) => ({
+    padding: 'var(--space-2) var(--space-5)',
+    borderRadius: 'var(--radius-full)',
+    border: '1px solid',
+    cursor: 'pointer',
+    fontSize: 'var(--font-size-sm)',
+    fontWeight: 600,
+    color:       active ? '#fff' : 'var(--color-text-muted)',
+    background:  active ? 'var(--color-primary)' : 'transparent',
+    borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
+  });
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
       <div className="page-header">
-        <div><h2 className="page-title">Admissions</h2><p className="page-subtitle">{data.filter(d=>d.status==='Active').length} active admission{data.filter(d=>d.status==='Active').length !== 1?'s':''}</p></div>
+        <div>
+          <h2 className="page-title">{isDoctor ? 'My Patients' : 'Admissions'}</h2>
+          <p className="page-subtitle">
+            {isDoctor
+              ? `${currentRows.length} current · ${historyRows.length} discharged`
+              : `${data.filter(d=>d.status==='Active').length} active admission${data.filter(d=>d.status==='Active').length !== 1?'s':''}`}
+          </p>
+        </div>
         {canUserAdmit(user) && (
           <Button id="admit-patient-btn" variant="primary" onClick={() => setModal(true)}>+ Admit Patient</Button>
         )}
@@ -171,7 +245,69 @@ const AdmissionsPage = () => {
         )}
       </div>
 
-      <Table columns={columns} data={data} loading={loading} emptyMessage="No admission records found." />
+      {isDoctor ? (
+        <>
+          {/* Current / History tabs */}
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            {['Current', 'History'].map((t) => {
+              const count = t === 'Current' ? currentRows.length : historyRows.length;
+              return (
+                <button key={t} onClick={() => setTab(t)} style={tabButtonStyle(tab === t)}>
+                  {t} ({count})
+                </button>
+              );
+            })}
+          </div>
+          <Table
+            columns={tab === 'Current' ? doctorCurrentColumns : doctorHistoryColumns}
+            data={tab === 'Current' ? currentRows : historyRows}
+            loading={loading}
+            emptyMessage={tab === 'Current' ? 'No current admissions.' : 'No discharge history.'}
+          />
+        </>
+      ) : isNurse ? (
+        <>
+          {/* Admissions / Discharge History tabs */}
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            {[
+              { key: 'Admissions',        count: data.length },
+              { key: 'Discharge History', count: historyRows.length },
+            ].map((t) => (
+              <button key={t.key} onClick={() => setNurseTab(t.key)} style={tabButtonStyle(nurseTab === t.key)}>
+                {t.key} ({t.count})
+              </button>
+            ))}
+          </div>
+          <Table
+            columns={nurseTab === 'Discharge History' ? nurseHistoryColumns : columns}
+            data={nurseTab === 'Discharge History' ? historyRows : data}
+            loading={loading}
+            emptyMessage={nurseTab === 'Discharge History' ? 'No discharge history yet.' : 'No admission records found.'}
+          />
+        </>
+      ) : (
+        <>
+          {statusFilter && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Filtered by status:</span>
+              <Badge status={statusFilter} />
+              <button
+                className="filter-clear-btn"
+                onClick={() => { setStatusFilter(''); setSearchParams({}); }}
+                title="Clear status filter"
+              >
+                ✕ Clear
+              </button>
+            </div>
+          )}
+          <Table
+            columns={columns}
+            data={statusFilter ? data.filter((d) => d.status === statusFilter) : data}
+            loading={loading}
+            emptyMessage={statusFilter ? `No admissions with status “${statusFilter}”.` : 'No admission records found.'}
+          />
+        </>
+      )}
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Admit Patient" size="md">
         <AdmissionForm onSubmit={handleAdmit} loading={saving} />
       </Modal>

@@ -1,10 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { BedDouble, DoorClosed, HeartPulse, Baby, Building2, Pencil, Trash2, ChevronRight } from 'lucide-react';
 import { getAllRooms, createRoom, updateRoom, deleteRoom } from '../../api/rooms.api';
-import { getAllAdmissions } from '../../api/admissions.api';
 import { useAuth } from '../../context/AuthContext';
-import Table from '../../components/ui/Table';
 import { canManageRooms } from '../../utils/roleGuard';
 import { ROOM_TYPES } from '../../utils/constants';
 import { formatDate } from '../../utils/formatDate';
@@ -28,59 +26,6 @@ const isRoomBased = (type) => ROOM_BASED_TYPES.includes(type);
 const friendlyUnitLabel = (room, group) =>
   `${room.room_type} ${group.findIndex((r) => r.room_id === room.room_id) + 1}`;
 
-// ── Doctor view: table of the doctor's CURRENT admissions ────────────────────
-// GET /api/admissions is already doctor-scoped server-side (a.doctor_id =
-// linked_id), so this only ever shows the logged-in doctor's own patients.
-const CURRENT_STATUSES = ['Pending Room', 'Active', 'Pending Discharge'];
-
-const MyAdmittedPatientsView = () => {
-  const navigate = useNavigate();
-  const [rows,    setRows]    = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
-
-  useEffect(() => {
-    getAllAdmissions()
-      .then((r) => { if (r.success) setRows(r.data.filter((a) => CURRENT_STATUSES.includes(a.status))); })
-      .catch(() => setError('Failed to load your admissions.'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const columns = [
-    { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
-    { key: 'room',           label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : 'Awaiting room' },
-    { key: 'admission_type', label: 'Type',    hideMobile: true },
-    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
-    { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
-    {
-      key: 'actions', label: '', width: '80px', align: 'right',
-      render: (r) => (
-        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); navigate(`/patients/${r.patient_id}`); }}>View</Button>
-      ),
-    },
-  ];
-
-  if (loading) return <Spinner />;
-
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
-      <div className="page-header">
-        <div>
-          <h2 className="page-title">My Patients' Rooms</h2>
-          <p className="page-subtitle">{rows.length} current admission{rows.length !== 1 ? 's' : ''} under your care</p>
-        </div>
-      </div>
-      {error && <Alert type="error" message={error} onDismiss={() => setError('')} />}
-      <Table
-        columns={columns}
-        data={rows}
-        emptyMessage="You have no admitted patients right now."
-        onRowClick={(r) => navigate(`/patients/${r.patient_id}`)}
-      />
-    </div>
-  );
-};
-
 const RoomsPage = () => {
   const { user } = useAuth();
   const [rooms,   setRooms]   = useState([]);
@@ -94,12 +39,27 @@ const RoomsPage = () => {
   const [selectedBed,  setSelectedBed]  = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null); // room object pending delete confirmation
   const [deleting,     setDeleting]     = useState(false);
+  const [lastUpdated,  setLastUpdated]  = useState(null);  // timestamp of the latest successful fetch
 
-  const load = useCallback(() => {
-    setLoading(true);
-    getAllRooms().then((r) => { if (r.success) setRooms(r.data); }).catch(() => setError('Failed to load rooms.')).finally(() => setLoading(false));
+  // `silent` refreshes (from polling) don't toggle the spinner or surface
+  // transient errors, so the view stays stable during the demo.
+  const load = useCallback((silent = false) => {
+    if (!silent) setLoading(true);
+    getAllRooms()
+      .then((r) => { if (r.success) { setRooms(r.data); setLastUpdated(new Date()); } })
+      .catch(() => { if (!silent) setError('Failed to load rooms.'); })
+      .finally(() => { if (!silent) setLoading(false); });
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Auto-refresh room availability every 15s — paused while any modal is open
+  // so a live poll never clobbers what the user is entering.
+  const isModalOpen = modal !== null || selectedBed !== null || deleteTarget !== null;
+  useEffect(() => {
+    if (isModalOpen) return undefined;
+    const id = setInterval(() => load(true), 15000);
+    return () => clearInterval(id);
+  }, [isModalOpen, load]);
 
   const openEdit = (room) => { setForm({ room_type: room.room_type, bed_number: room.bed_number }); setModal(room); };
   // presetType lets the Level 2 ward view pre-fill room_type so the admin
@@ -156,9 +116,9 @@ const RoomsPage = () => {
       ? rooms.filter(r => r.room_type === selectedWard).sort((a, b) => a.bed_number.localeCompare(b.bed_number))
       : rooms.filter(r => r.room_type === selectedWard);
 
-  // Doctors get their own view: a table of their current admissions instead
-  // of the hospital-wide room grid (confidentiality + relevance).
-  if (user?.role === 'doctor') return <MyAdmittedPatientsView />;
+  // Doctors' room/patient view is merged into the "My Patients" page — send
+  // any direct /rooms navigation there. Admin/nurse/staff keep the room grid.
+  if (user?.role === 'doctor') return <Navigate to="/admissions" replace />;
 
   if (loading) return <Spinner />;
 
@@ -171,6 +131,11 @@ const RoomsPage = () => {
               <h2 className="page-title">Rooms</h2>
               <p className="page-subtitle">{available} of {rooms.length} available</p>
             </div>
+            {lastUpdated && (
+              <span className="live-indicator" title="Auto-refreshes every 15 seconds">
+                <span className="live-dot" aria-hidden="true" /> Last updated {lastUpdated.toLocaleTimeString()}
+              </span>
+            )}
           </div>
           {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
           {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
@@ -211,6 +176,11 @@ const RoomsPage = () => {
               <h2 className="page-title" style={{ marginTop: 'var(--space-2)' }}>
                 {isRoomBased(selectedWard) ? `${selectedWard}s` : `${selectedWard} beds`}
               </h2>
+              {lastUpdated && (
+                <span className="live-indicator" title="Auto-refreshes every 15 seconds">
+                  <span className="live-dot" aria-hidden="true" /> Last updated {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
             </div>
             {canManageRooms(user?.role) && (
               <Button variant="primary" onClick={() => openNew(selectedWard)}>

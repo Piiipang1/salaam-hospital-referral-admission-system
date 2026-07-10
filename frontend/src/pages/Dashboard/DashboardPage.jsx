@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Stethoscope, Building2, ClipboardList, FlaskConical,
-  Siren, BedDouble, Users, Repeat,
+  Siren, BedDouble, Users, Repeat, UserPlus, DoorOpen, ChevronRight,
 } from 'lucide-react';
 import { getDashboardStats, getDashboardRecentActivity, getDashboardMyStats } from '../../api/dashboard.api';
 import { useAuth } from '../../context/AuthContext';
@@ -12,6 +12,45 @@ import Alert   from '../../components/ui/Alert';
 import Spinner from '../../components/ui/Spinner';
 import { formatDate } from '../../utils/formatDate';
 import './DashboardPage.css';
+
+// ── Admin workflow stepper ─────────────────────────────────────────────────
+// Registration → Triage → Diagnosis → Referral → Admission → Discharge. Each
+// step shows a live count and clicks through to its page with a filter applied.
+const WORKFLOW_STEPS = [
+  { key: 'registration', label: 'Registration', icon: UserPlus,    statKey: 'patients_today',          caption: 'registered today', to: '/patients',   params: { registered: 'today' } },
+  { key: 'triage',       label: 'Triage',       icon: Siren,       statKey: 'todays_triages',          caption: 'triaged today',    to: '/triage',     params: { date: 'today' } },
+  { key: 'diagnosis',    label: 'Diagnosis',    icon: Stethoscope, statKey: 'todays_diagnoses',        caption: 'diagnosed today',  to: '/patients',   params: {} },
+  { key: 'referral',     label: 'Referral',     icon: Repeat,      statKey: 'pending_referrals',       caption: 'pending',          to: '/referrals',  params: { status: 'Pending' } },
+  { key: 'admission',    label: 'Admission',    icon: BedDouble,   statKey: 'pending_room_admissions', caption: 'awaiting room',    to: '/admissions', params: { status: 'Pending Room' } },
+  { key: 'discharge',    label: 'Discharge',    icon: DoorOpen,    statKey: 'pending_discharges',      caption: 'pending',          to: '/admissions', params: { status: 'Pending Discharge' } },
+];
+
+const WorkflowStepper = ({ stats, navigate }) => (
+  <section className="workflow-stepper" aria-label="Patient workflow overview">
+    {WORKFLOW_STEPS.map((step, i) => {
+      const Icon = step.icon;
+      const count = stats?.[step.statKey] ?? 0;
+      const qs = new URLSearchParams(step.params).toString();
+      return (
+        <div className="workflow-step-wrap" key={step.key}>
+          <button
+            className="workflow-step"
+            onClick={() => navigate(step.to + (qs ? `?${qs}` : ''))}
+            title={`View ${step.label.toLowerCase()} — ${count} ${step.caption}`}
+          >
+            <span className="workflow-step__icon"><Icon size={18} /></span>
+            <span className="workflow-step__count">{count}</span>
+            <span className="workflow-step__label">{step.label}</span>
+            <span className="workflow-step__caption">{step.caption}</span>
+          </button>
+          {i < WORKFLOW_STEPS.length - 1 && (
+            <span className="workflow-step__arrow" aria-hidden="true"><ChevronRight size={18} /></span>
+          )}
+        </div>
+      );
+    })}
+  </section>
+);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const timeAgo = (dateStr) => {
@@ -249,6 +288,7 @@ const DashboardPage = () => {
   const [loadAct,  setLoadAct]  = useState(true);
   const [loadMy,   setLoadMy]   = useState(true);
   const [error,    setError]    = useState('');
+  const [lastUpdated, setLastUpdated] = useState(null); // latest live refresh
 
   useEffect(() => {
     // All requests run in parallel — independent loading states.
@@ -256,7 +296,7 @@ const DashboardPage = () => {
     // their dashboard is my-stats + their own scoped recent activity.
     if (role !== 'doctor') {
       getDashboardStats()
-        .then((r) => { if (r.success) setStats(r.data); })
+        .then((r) => { if (r.success) { setStats(r.data); setLastUpdated(new Date()); } })
         .catch(() => setError('Failed to load stats.'))
         .finally(() => setLoadStat(false));
     } else {
@@ -269,7 +309,7 @@ const DashboardPage = () => {
       .finally(() => setLoadAct(false));
 
     getDashboardMyStats()
-      .then((r) => { if (r.success) setMyData(r.data); })
+      .then((r) => { if (r.success) { setMyData(r.data); setLastUpdated(new Date()); } })
       .catch(() => {}) // non-critical
       .finally(() => setLoadMy(false));
   }, [role]);
@@ -288,6 +328,18 @@ const DashboardPage = () => {
     };
     window.addEventListener('referral-status-updated', handleReferralUpdate);
     return () => window.removeEventListener('referral-status-updated', handleReferralUpdate);
+  }, [role]);
+
+  // Live refresh every 15s — keeps the "Available Rooms" widget (and other
+  // counts) current. Silent: no spinners, transient errors ignored.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (role !== 'doctor') {
+        getDashboardStats().then((r) => { if (r.success) { setStats(r.data); setLastUpdated(new Date()); } }).catch(() => {});
+      }
+      getDashboardMyStats().then((r) => { if (r.success) { setMyData(r.data); setLastUpdated(new Date()); } }).catch(() => {});
+    }, 15000);
+    return () => clearInterval(id);
   }, [role]);
 
   if (loadStat && !stats) return <Spinner />;
@@ -312,10 +364,25 @@ const DashboardPage = () => {
           <h2 className="page-title">{greetings[role] ?? 'Overview'}</h2>
           <p className="page-subtitle">Real-time snapshot of hospital operations</p>
         </div>
-        <span className={`role-badge role-badge--${role}`}>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-2)' }}>
+          <span className={`role-badge role-badge--${role}`}>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
+          {lastUpdated && (
+            <span className="live-indicator" title="Auto-refreshes every 15 seconds">
+              <span className="live-dot" aria-hidden="true" /> Updated {lastUpdated.toLocaleTimeString()}
+            </span>
+          )}
+        </div>
       </div>
 
       {error && <Alert type="error" message={error} />}
+
+      {/* ── Admin workflow overview (Registration → … → Discharge) ── */}
+      {role === 'admin' && (
+        <>
+          <h3 className="workflow-heading">Patient Workflow</h3>
+          <WorkflowStepper stats={stats} navigate={navigate} />
+        </>
+      )}
 
       {/* ── Stat cards — admin sees all 6; others see summary ── */}
       <div className="dashboard-grid">

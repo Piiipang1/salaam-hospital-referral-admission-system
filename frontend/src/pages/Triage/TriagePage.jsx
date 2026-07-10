@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Siren } from 'lucide-react';
-import { getAllTriages, createTriage, createEmergencyTriage } from '../../api/triages.api';
+import { getAllTriages, createTriage, createEmergencyTriage, assignTriageDoctor } from '../../api/triages.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManageTriage, canEmergencyTriage } from '../../utils/roleGuard';
-import { formatDate } from '../../utils/formatDate';
+import { formatDate, todayInput } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
 import Button from '../../components/ui/Button';
@@ -27,10 +27,24 @@ const TriagePage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // ER coordinator = admin or a Doctor-in-Charge. Gets the "Unassigned" filter
+  // and the "Assign doctor" action. Backend enforces the real permission.
+  const isCoordinator = user?.role === 'admin' || (user?.role === 'doctor' && !!user?.is_doctor_in_charge);
+
+  // Pre-apply a filter from the admin workflow stepper (?date=today)
+  const [searchParams] = useSearchParams();
+  const stepDate = searchParams.get('date') === 'today' ? todayInput() : '';
+
   // ── Filter state ─────────────────────────────────────────────
   const [level,    setLevel]    = useState('');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate,   setToDate]   = useState('');
+  const [fromDate, setFromDate] = useState(stepDate);
+  const [toDate,   setToDate]   = useState(stepDate);
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
+
+  // ── Assign-doctor modal state (coordinator) ──────────────────
+  const [assignTarget,   setAssignTarget]   = useState(null); // triage row
+  const [assignDoctorId, setAssignDoctorId] = useState('');
+  const [assignSaving,   setAssignSaving]   = useState(false);
 
   // ── Data / UI state ──────────────────────────────────────────
   const [data,    setData]    = useState([]);
@@ -60,9 +74,10 @@ const TriagePage = () => {
   const load = useCallback(() => {
     setLoading(true);
     const params = {};
-    if (level)    params.level     = level;
-    if (fromDate) params.from_date = fromDate;
-    if (toDate)   params.to_date   = toDate;
+    if (level)          params.level      = level;
+    if (fromDate)       params.from_date  = fromDate;
+    if (toDate)         params.to_date    = toDate;
+    if (unassignedOnly) params.unassigned = 'true';
 
     getAllTriages(params)
       .then((r) => {
@@ -73,7 +88,7 @@ const TriagePage = () => {
       })
       .catch(() => setError('Failed to load triages.'))
       .finally(() => setLoading(false));
-  }, [level, fromDate, toDate]);
+  }, [level, fromDate, toDate, unassignedOnly]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -106,8 +121,28 @@ const TriagePage = () => {
     }
   };
 
-  const clearFilters = () => { setLevel(''); setFromDate(''); setToDate(''); };
-  const hasActiveFilters = level || fromDate || toDate;
+  // Coordinator assigns/changes the attending doctor for a triage's patient.
+  const handleAssignDoctor = async () => {
+    if (!assignTarget || !assignDoctorId) return;
+    setAssignSaving(true);
+    try {
+      const res = await assignTriageDoctor(assignTarget.triage_id, assignDoctorId);
+      setSuccess(res.message || 'Attending doctor assigned.');
+      setAssignTarget(null);
+      setAssignDoctorId('');
+      load(); // patient leaves the coordinator's list once assigned to another doctor
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setError('Doctor-in-Charge coordination is no longer active on your account.');
+        setAssignTarget(null);
+      } else {
+        setError(err.response?.data?.message || 'Assignment failed.');
+      }
+    } finally { setAssignSaving(false); }
+  };
+
+  const clearFilters = () => { setLevel(''); setFromDate(''); setToDate(''); setUnassignedOnly(false); };
+  const hasActiveFilters = level || fromDate || toDate || unassignedOnly;
 
   // ── Table columns ─────────────────────────────────────────────
   const columns = [
@@ -120,12 +155,21 @@ const TriagePage = () => {
         </span>
       ),
     },
-    { key: 'actions', label: '', width: '80px', align: 'right',
+    { key: 'actions', label: '', width: isCoordinator ? '180px' : '80px', align: 'right',
       render: (r) => (
-        <Button size="sm" variant="ghost"
-          onClick={(e) => { e.stopPropagation(); navigate(`/triage/${r.triage_id}`); }}>
-          View
-        </Button>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
+          {isCoordinator && (
+            <Button size="sm" variant="outline"
+              title="Assign or change the attending doctor"
+              onClick={(e) => { e.stopPropagation(); setAssignDoctorId(''); setAssignTarget(r); }}>
+              Assign doctor
+            </Button>
+          )}
+          <Button size="sm" variant="ghost"
+            onClick={(e) => { e.stopPropagation(); navigate(`/triage/${r.triage_id}`); }}>
+            View
+          </Button>
+        </div>
       ),
     },
   ];
@@ -221,6 +265,20 @@ const TriagePage = () => {
           </div>
         </div>
 
+        {/* Unassigned-only toggle — ER coordinators (admin / Doctor-in-Charge) */}
+        {isCoordinator && (
+          <button
+            className={`triage-level-pill${unassignedOnly ? ' triage-level-pill--active' : ''}`}
+            onClick={() => setUnassignedOnly((v) => !v)}
+            style={unassignedOnly
+              ? { background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' }
+              : {}}
+            title="Show only patients with no doctor assigned yet"
+          >
+            Unassigned only
+          </button>
+        )}
+
         {/* Clear button */}
         {hasActiveFilters && (
           <button className="filter-clear-btn" onClick={clearFilters} title="Clear all filters">
@@ -241,6 +299,29 @@ const TriagePage = () => {
       {/* ── Create triage modal ── */}
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Record Triage" size="md">
         <TriageForm onSubmit={handleCreate} loading={saving} />
+      </Modal>
+
+      {/* ── Assign attending doctor modal (ER coordinator) ── */}
+      <Modal isOpen={!!assignTarget} onClose={() => setAssignTarget(null)} title="Assign Attending Doctor" size="sm">
+        <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+          Set the attending doctor for <strong>{assignTarget?.patient_name || 'this patient'}</strong>.
+          Once assigned to another doctor, this patient leaves your coordination list.
+        </p>
+        <div className="form-group" style={{ marginBottom: 'var(--space-6)' }}>
+          <label htmlFor="assign-doctor-select">Doctor *</label>
+          <select id="assign-doctor-select" value={assignDoctorId} onChange={(e) => setAssignDoctorId(e.target.value)} required disabled={etDoctorsFetching}>
+            <option value="">— Select doctor —</option>
+            {etDoctors.map((d) => (
+              <option key={d.doctor_id} value={d.doctor_id}>
+                Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={() => setAssignTarget(null)}>Cancel</Button>
+          <Button variant="primary" onClick={handleAssignDoctor} loading={assignSaving} disabled={!assignDoctorId}>Assign</Button>
+        </div>
       </Modal>
 
       {/* ── Emergency triage modal ── */}

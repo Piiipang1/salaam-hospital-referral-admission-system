@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { getAllReferrals, createReferral, updateReferralStatus, reassignReferral } from '../../api/referrals.api';
 import { getDoctorWorkload, getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
@@ -33,11 +34,15 @@ const STATUS_MEANINGS = {
 const ReferralsPage = () => {
   const { user } = useAuth();
 
+  // Pre-apply a status filter from the admin workflow stepper (?status=Pending)
+  const [searchParams] = useSearchParams();
+  const stepStatus = REFERRAL_STATUSES.includes(searchParams.get('status')) ? searchParams.get('status') : '';
+
   const [data,      setData]      = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState('');
   const [success,   setSuccess]   = useState('');
-  const [filter,    setFilter]    = useState('');
+  const [filter,    setFilter]    = useState(stepStatus);
   const [fromDate,  setFromDate]  = useState('');
   const [toDate,    setToDate]    = useState('');
   const [modal,     setModal]     = useState(null); // 'create' | { type:'status'|'reassign', referral }
