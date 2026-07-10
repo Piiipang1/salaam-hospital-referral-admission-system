@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
+import PhilippineAddressPicker from './PhilippineAddressPicker';
 import { PATIENT_SEX } from '../../utils/constants';
 import { toInputDate } from '../../utils/formatDate';
 
@@ -16,8 +17,18 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
     emergency_contact_number: initial.emergency_contact_number ?? '',
   });
   const [error, setError] = useState('');
+  // Set only while the cascading picker is partially filled (address itself
+  // stays optional) — blocks submit until the levels are consistent.
+  const [addressError, setAddressError] = useState('');
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  // Fires only on user interaction with the picker, so opening an edit modal
+  // and saving without touching the address preserves the stored string.
+  const handleAddress = ({ composed, error: pickerError }) => {
+    setAddressError(pickerError);
+    setForm((f) => ({ ...f, address: composed }));
+  };
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -29,6 +40,10 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
     }
     if (form.date_of_birth > today) {
       setError('Date of birth cannot be in the future.');
+      return;
+    }
+    if (addressError) {
+      setError(addressError);
       return;
     }
     setError('');
@@ -70,8 +85,7 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
       </div>
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-        <label htmlFor="pf-address">Address</label>
-        <textarea id="pf-address" value={form.address} onChange={set('address')} placeholder="Full address" rows={2} />
+        <PhilippineAddressPicker value={initial.address ?? ''} onChange={handleAddress} />
       </div>
 
       <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
