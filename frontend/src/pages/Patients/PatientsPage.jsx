@@ -183,7 +183,7 @@ const PatientsPage = () => {
       {/* ── Header ── */}
       <div className="page-header">
         <div>
-          <h2 className="page-title">Patients</h2>
+          <h1 className="page-title">Patients</h1>
           <p className="page-subtitle">{total} patient{total !== 1 ? 's' : ''} found</p>
         </div>
         {canManagePatients(user?.role) ? (

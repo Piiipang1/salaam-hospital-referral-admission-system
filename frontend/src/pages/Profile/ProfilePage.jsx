@@ -54,7 +54,7 @@ const ProfilePage = () => {
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
       <div className="page-header">
         <div>
-          <h2 className="page-title">My Profile</h2>
+          <h1 className="page-title">My Profile</h1>
           <p className="page-subtitle">Account details and security</p>
         </div>
         <span className={`role-badge role-badge--${me.role}`}>{ROLE_LABELS[me.role] ?? me.role}</span>

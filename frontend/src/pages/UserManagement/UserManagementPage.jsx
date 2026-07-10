@@ -232,7 +232,7 @@ const UserManagementPage = () => {
       <div style={{display:'flex',flexDirection:'column',gap:'var(--space-5)'}}>
         <div className="page-header">
           <div>
-            <h2 className="page-title">User Management</h2>
+            <h1 className="page-title">User Management</h1>
             <p className="page-subtitle">{users.length} user account{users.length!==1?'s':''}</p>
           </div>
           <Button id="create-user-btn" variant="primary" onClick={()=>setModal('new')}>+ Add User</Button>

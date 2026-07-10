@@ -180,7 +180,7 @@ const TriagePage = () => {
       {/* ── Header ── */}
       <div className="page-header">
         <div>
-          <h2 className="page-title">Triage</h2>
+          <h1 className="page-title">Triage</h1>
           <p className="page-subtitle">
             {total} triage record{total !== 1 ? 's' : ''}
             {hasActiveFilters ? ' (filtered)' : ''}

@@ -196,7 +196,7 @@ const AdmissionsPage = () => {
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
       <div className="page-header">
         <div>
-          <h2 className="page-title">{isDoctor ? 'My Patients' : 'Admissions'}</h2>
+          <h1 className="page-title">{isDoctor ? 'My Patients' : 'Admissions'}</h1>
           <p className="page-subtitle">
             {isDoctor
               ? `${currentRows.length} current · ${historyRows.length} discharged`

@@ -4,15 +4,14 @@ import { useNotif } from '../../context/NotifContext';
 import { useTheme } from '../../context/ThemeContext';
 import './TopBar.css';
 
-const TopBar = ({ title }) => {
+const TopBar = () => {
   const { unreadCount } = useNotif();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   return (
     <header className="topbar">
-      <h1 className="topbar__title">{title}</h1>
-
+      {/* Page titles live in each page's own .page-header — no duplicate here */}
       <div className="topbar__actions">
         {/* Theme Toggle */}
         <button

@@ -366,7 +366,7 @@ const DashboardPage = () => {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h2 className="page-title">{greetings[role] ?? 'Overview'}</h2>
+          <h1 className="page-title">{greetings[role] ?? 'Overview'}</h1>
           <p className="page-subtitle">Real-time snapshot of hospital operations</p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 'var(--space-2)' }}>

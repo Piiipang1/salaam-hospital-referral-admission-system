@@ -81,7 +81,7 @@ const NotificationsPage = () => {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h2 className="page-title">Notifications</h2>
+          <h1 className="page-title">Notifications</h1>
           <p className="page-subtitle">
             {unread > 0 ? `${unread} unread` : 'All caught up'} · {notifs.length} total
           </p>

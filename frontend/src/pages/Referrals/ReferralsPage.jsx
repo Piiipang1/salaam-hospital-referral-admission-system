@@ -214,7 +214,7 @@ const ReferralsPage = () => {
       {/* Header */}
       <div className="page-header">
         <div>
-          <h2 className="page-title">Referrals</h2>
+          <h1 className="page-title">Referrals</h1>
           <p className="page-subtitle">{total} referral{total !== 1 ? 's' : ''}</p>
         </div>
         {canCreateReferral(user?.role) && (

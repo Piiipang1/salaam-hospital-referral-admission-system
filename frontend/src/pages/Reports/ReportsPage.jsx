@@ -320,7 +320,7 @@ const ReportsPage = () => {
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'var(--space-5)' }}>
       <div className="page-header">
-        <div><h2 className="page-title">Reports &amp; Analytics</h2></div>
+        <div><h1 className="page-title">Reports &amp; Analytics</h1></div>
       </div>
 
       {/* Tabs */}

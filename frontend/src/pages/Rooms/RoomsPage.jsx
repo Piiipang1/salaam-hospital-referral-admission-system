@@ -128,7 +128,7 @@ const RoomsPage = () => {
         <>
           <div className="page-header">
             <div>
-              <h2 className="page-title">Rooms</h2>
+              <h1 className="page-title">Rooms</h1>
               <p className="page-subtitle">{available} of {rooms.length} available</p>
             </div>
             {lastUpdated && (
@@ -173,9 +173,9 @@ const RoomsPage = () => {
           <div className="page-header">
             <div>
               <button className="ward-back-btn" onClick={() => setSelectedWard(null)}>← Back to rooms</button>
-              <h2 className="page-title" style={{ marginTop: 'var(--space-2)' }}>
+              <h1 className="page-title" style={{ marginTop: 'var(--space-2)' }}>
                 {isRoomBased(selectedWard) ? `${selectedWard}s` : `${selectedWard} beds`}
-              </h2>
+              </h1>
               {lastUpdated && (
                 <span className="live-indicator" title="Auto-refreshes every 15 seconds">
                   <span className="live-dot" aria-hidden="true" /> Last updated {lastUpdated.toLocaleTimeString()}
