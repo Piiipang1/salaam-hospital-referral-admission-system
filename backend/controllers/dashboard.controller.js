@@ -217,7 +217,8 @@ const getMyStats = async (req, res) => {
 
         db.query('SELECT COUNT(*) AS todays_triages FROM triages WHERE DATE(triage_datetime) = CURDATE()'),
         db.query("SELECT COUNT(*) AS available_rooms FROM rooms WHERE availability_status = 'available'"),
-        db.query("SELECT COUNT(*) AS pending_admissions FROM admissions WHERE status = 'Active'"),
+        // "Pending" = admitted but awaiting a room — the admissions nurses/staff act on
+        db.query("SELECT COUNT(*) AS pending_admissions FROM admissions WHERE status = 'Pending Room'"),
 
         // List: today's triages (up to 8, newest first)
         db.query(`
@@ -237,7 +238,7 @@ const getMyStats = async (req, res) => {
           FROM admissions a
           LEFT JOIN patients p ON a.patient_id = p.patient_id
           LEFT JOIN rooms    r ON a.room_id    = r.room_id
-          WHERE a.status = 'Pending'
+          WHERE a.status = 'Pending Room'
           ORDER BY a.admission_date ASC LIMIT 8
         `),
       ]);
