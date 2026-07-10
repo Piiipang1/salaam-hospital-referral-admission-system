@@ -107,20 +107,20 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
         <h3 className="role-section__title">Doctor Overview</h3>
       </div>
 
-      {/* Mini stats */}
+      {/* Mini stats — clickable, replacing the removed top StatCard row */}
       <div className="role-stats-row">
-        <div className="role-stat">
+        <button type="button" className="role-stat role-stat--link" onClick={() => navigate('/referrals')}>
           <span className="role-stat__value role-stat__value--warning">{stats.my_pending_referrals ?? 0}</span>
           <span className="role-stat__label">Pending Referrals</span>
-        </div>
-        <div className="role-stat">
+        </button>
+        <button type="button" className="role-stat role-stat--link" onClick={() => navigate('/patients')}>
           <span className="role-stat__value role-stat__value--primary">{stats.my_active_patients ?? 0}</span>
           <span className="role-stat__label">Active Patients</span>
-        </div>
-        <div className="role-stat">
+        </button>
+        <button type="button" className="role-stat role-stat--link" onClick={() => navigate('/triage')}>
           <span className="role-stat__value role-stat__value--info">{stats.my_todays_diagnoses ?? 0}</span>
           <span className="role-stat__label">Today's Diagnoses</span>
-        </div>
+        </button>
       </div>
 
       {/* Action lists */}
@@ -197,20 +197,20 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
         <h3 className="role-section__title">Today's Workload</h3>
       </div>
 
-      {/* Mini stats */}
+      {/* Mini stats — clickable, replacing the removed top StatCard row */}
       <div className="role-stats-row">
-        <div className="role-stat">
+        <button type="button" className="role-stat role-stat--link" onClick={() => navigate('/triage')}>
           <span className="role-stat__value role-stat__value--danger">{stats.todays_triages ?? 0}</span>
           <span className="role-stat__label">Today's Triages</span>
-        </div>
-        <div className="role-stat">
+        </button>
+        <button type="button" className="role-stat role-stat--link" onClick={() => navigate('/rooms')}>
           <span className="role-stat__value role-stat__value--success">{stats.available_rooms ?? 0}</span>
           <span className="role-stat__label">Available Rooms</span>
-        </div>
-        <div className="role-stat">
+        </button>
+        <button type="button" className="role-stat role-stat--link" onClick={() => navigate('/admissions')}>
           <span className="role-stat__value role-stat__value--warning">{stats.pending_admissions ?? 0}</span>
           <span className="role-stat__label">Pending Admissions</span>
-        </div>
+        </button>
       </div>
 
       {/* Action lists */}
@@ -389,31 +389,20 @@ const DashboardPage = () => {
         </>
       )}
 
-      {/* ── Stat cards — admin sees all 6; others see summary ── */}
+      {/* ── Stat cards — admin only. Doctor/nurse/staff numbers render once,
+          in their role section below (mini-stats + record lists). ── */}
       {/* Admin cards are read-only aggregates (oversight) — only Rooms, which
           admin can actually open, navigates. */}
-      <div className="dashboard-grid">
-        {role === 'admin' && <>
+      {role === 'admin' && (
+        <div className="dashboard-grid">
           <StatCard icon={Users}      label="Total Patients"    value={stats?.total_patients    ?? 0} color="info"    />
           <StatCard icon={Building2}  label="Active Admissions" value={stats?.active_admissions  ?? 0} color="primary" />
           <StatCard icon={BedDouble}  label="Available Rooms"   value={stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')} />
           <StatCard icon={Repeat}     label="Pending Referrals" value={stats?.pending_referrals  ?? 0} color="warning" />
           <StatCard icon={Siren}      label="Today's Triages"   value={stats?.todays_triages     ?? 0} color="danger"  />
           <StatCard icon={Users}      label="Active Doctors"   value={stats?.total_doctors      ?? 0} color="info"    />
-        </>}
-
-        {role === 'doctor' && <>
-          <StatCard icon={ClipboardList} label="Pending Referrals" value={myData?.stats?.my_pending_referrals ?? 0} color="warning" onClick={() => navigate('/referrals')} />
-          <StatCard icon={Users}         label="My Active Patients" value={myData?.stats?.my_active_patients ?? 0} color="primary" onClick={() => navigate('/patients')} />
-          <StatCard icon={FlaskConical}  label="Today's Diagnoses"  value={myData?.stats?.my_todays_diagnoses  ?? 0} color="info"    onClick={() => navigate('/triage')}   />
-        </>}
-
-        {(role === 'nurse' || role === 'staff') && <>
-          <StatCard icon={Siren}     label="Today's Triages"     value={myData?.stats?.todays_triages     ?? 0} color="danger"  onClick={() => navigate('/triage')}      />
-          <StatCard icon={BedDouble} label="Available Rooms"    value={myData?.stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')}       />
-          <StatCard icon={Building2} label="Pending Admissions"  value={myData?.stats?.pending_admissions ?? 0} color="warning" onClick={() => navigate('/admissions')}  />
-        </>}
-      </div>
+        </div>
+      )}
 
       {/* ── Role-specific focus panel ── */}
       {role === 'doctor' && (

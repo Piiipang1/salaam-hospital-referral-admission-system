@@ -105,6 +105,18 @@
   font-weight: 500;
   white-space: nowrap;
 }
+/* Clickable mini-stat (button element) — same look, plus hover affordance */
+.role-stat--link {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+.role-stat--link:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .06);
+  transform: translateY(-1px);
+}
 
 /* ─────────────────────────────────────────────────────────────
    Recent Activity section
