@@ -1,0 +1,1045 @@
+=== PAGE 21 ===
+16  
+  
+ 
+  
+Figure 2.2: CNR Software Systems  
+2.3.3 WAH (We Are Health)  
+The We Are Health (WAH) Platform is a Philippine-based digital health solution designed 
+to support health facilities and local government units (LGUs) in managing patient information, 
+clinical workflows, and health program monitoring. Its primary purpose i s to streamline hospital 
+and clinic operations, improve record-keeping, and enhance patient care through digital solutions.  
+WAH is composed of several modules, including WAH4C for clinics, WAH4H for hospitals, 
+WAH4P for patients, and WAH4Interoperability for sharing patient information across health 
+facilities. These modules enable electronic medical records, laboratory and rad iology result 
+management, pharmacy inventory, patient queuing, automated billing, and health alerts. The system 
+was developed to be cloud -based and accessible, providing real -time data management and 
+integration with national health programs. WAH supports interoperability between multiple health 
+facilities, allowing patient information to be securely shared and coordinated across different clinics 
+and hospitals. Health facility staff such as doctors, nurses, and administrative personnel are the 
+primary user s, while patients can access the platform for appointment reminders, health alerts, 
+queuing, and feedback. The platform employs a “Train Now, Pay Later” scheme for LGUs and 
+
+=== PAGE 22 ===
+17  
+  
+facilities with limited budgets, while some patient-facing features are expected to be free of charge. 
+WAH has been reported to reduce manual documentation, improve workflow efficiency, and 
+enhance patient follow -up, particularly for rural health units imp lementing national health 
+programs. Patients benefit from timely reminders, organized queuing, and better access to their 
+medical history, which can lead to improved clinical outcomes. Overall, the WAH platform 
+demonstrates how an integrated digital health  system can optimize hospital and clinic operations, 
+improve patient engagement, and support efficient healthcare delivery in the Philippine context.  
+  
+ 
+Figure 2.3: WAH (We Are Health)  
+  
+2.3.4 Phreesia Referral Management System  
+The Phreesia Referral Management System, developed by Phreesia, Inc. in the United 
+States, streamlines patient referrals among healthcare providers and hospitals. It centralizes referral 
+information, including demographic data, clinical notes, and supporti ng documents, into a single 
+digital platform. The system can capture referrals sent through traditional methods like fax, 
+
+=== PAGE 23 ===
+18  
+  
+converting them into structured digital records, and integrates with EMR/EHR systems to reduce 
+duplication of patient information.  
+The platform also automates patient outreach through text or email, tracks referral status, and 
+coordinates appointments, reducing administrative workload and improving patient care continuity. 
+Widely used in hospitals and clinics, Phreesia Referral Manage ment enhances efficiency, referral 
+tracking, and inter-provider coordination.  
+By providing real-time visibility of referral status and outcomes, the system supports better clinical 
+decision-making and timely patient care. Healthcare organizations using Phreesia have reported 
+faster referral processing, improved coordination between referring and receiving providers, and 
+increased patient satisfaction. Its functionality is particularly relevant to the proposed Mobile and 
+Web-Based Patient Referral and Admission System for Salaam Hospital, serving as a model for 
+automating and centralizing referral workflows.  
+  
+ 
+Figure 2.4: Phressia referral management system  
+  
+
+=== PAGE 24 ===
+19  
+  
+2.3.5 WellSky Enterprise Referral Manager  
+The Bizbox  Hospital Information System (HIS) is a commercially licensed software 
+platform developed by Bizbox Inc., a Philippine IT company, designed for medium to large 
+hospitals and healthcare facilities in the Philippines. Its primary function is to automate and 
+integrate hospital operations, including patient admissions, medical record management, billing, 
+inventory tracking, and staff coordination. Key features of Bizbox HIS include patient history and 
+medical record tracking which allows doctors and nurses to a ccess a patient’s complete medical 
+history including prior consultations, medications, lab results, and referrals; admission and 
+discharge management which automates the process of patient intake, bed allocation, monitoring, 
+and discharge documentation; bi lling and insurance integration which supports accurate fee 
+computation, PhilHealth claim submission, and reporting for financial departments; and resource 
+coordination and workflow optimization which enables staff to monitor real -time hospital 
+operations and plan resource allocation effectively. Bizbox HIS is used by numerous private 
+hospitals, specialty clinics, and healthcare chains across the country, and its implementation has led 
+to improved operational efficiency, reduced errors, better patient data management, and enhanced 
+decision-making for hospital staff. This system is relevant to the capstone project because it 
+demonstrates how a full-scale hospital management system integrates multiple modules that handle 
+admission, patient tracking, and referr als. The proposed Web and Mobile -Based Hospital 
+Management System draws from these concepts, adding enhanced accessibility, mobile interface, 
+and real-time tracking to further improve patient care and hospital workflow efficiency..  
+=== PAGE 25 ===
+20  
+  
+ 
+Figure 2.5: WellSky Enterprise Referral Manager  
+    
+2.3.6 Summary of Related Systems   
+The review of related systems highlights the growing trend of integrating digital platforms 
+to streamline hospital operations, patient admission, referral management, and clinical workflows. 
+Systems such as iHOMIS, Appoluz HIS, and WAH demonstrate the benefits of centralized digital 
+platforms that combine patient registration, medical record management, laboratory and pharmacy 
+coordination, billing, and reporting, resulting in improved operational efficiency and reduced 
+administrative workload. Meanwhile, r eferral-focused platforms like the Phreesia Referral 
+Management System and WellSky Enterprise Referral Manager emphasize automation, 
+centralization, and real -time tracking of patient referrals, enhancing communication between 
+departments and providers, min imizing delays, and supporting timely clinical decision -making. 
+Collectively, these systems show that the implementation of web - or mobile -based hospital 
+management solutions leads to better accessibility, accurate and up -to-date patient information, 
+improved workflow efficiency, and enhanced patient care. The proposed "Responsive Web-Based 
+
+=== PAGE 26 ===
+21  
+  
+Patient Referral and Admission System for Salaam Hospital" builds upon these concepts by 
+integrating centralized patient admission, history tracking, and internal referral workflows, while 
+providing real-time updates and mobile accessibility to further opt imize hospital operations and 
+service delivery.  
+Table 2.1: Summary of Related Systems  
+Key Features  iHOMIS  
+(PAS)  
+CNR  
+Systems  
+We Are  
+Health  
+WellSky  Phreesia  Proposed  
+System  
+Hospital Workflow Integration                          
+Real-Time Referral / Admission Tracking                          
+Multi-Department Coordination                          
+Web-Based Access                          
+Mobile Access                          
+Automated Notifications (In- 
+App)  
+                        
+User Data Entry (Health Staff)                          
+Centralized Patient Referral Database                          
+Role-Based Access Control (Admin, Doctor,  
+Nurse, Admissions)  
+                        
+Patient Referral Status & History Log                          
+Priority & Triage Level Tagging                          
+Document Upload (Referral Forms, Lab  
+Results)  
+                        
+=== PAGE 27 ===
+22  
+  
+Reporting & Analytics (Referrals,  
+Admissions, Turnaround Time)  
+                        
+Data Security & Privacy Controls                          
+  
+2.4 Technical Background  
+Salaam Hospital is a key healthcare institution serving the local community, offering 
+medical services, outpatient care, emergency response, and patient admissions. Like many midsized 
+hospitals in the Philippines, it caters to a growing population with div erse medical needs. With 
+increasing healthcare demands, efficient management of patient flow, hospital operations, and care 
+provider coordination is critical.  
+Currently, hospital operations at Salaam Hospital are largely manual and paper -based. Patient 
+registration, admission, and care tracking rely on handwritten forms, phone calls, or verbal 
+communication. Records are often incomplete, illegible, or fragmented  across departments, 
+personal devices, and offline logs. This results in delays in patient care, inefficient staff 
+coordination, and difficulty in tracking resource utilization or patient history.  
+A significant challenge is the absence of a centralized digital platform integrating patient 
+admission, medical records, and care provider tracking . Information is scattered, making it 
+difficult to monitor patient status, coordinate staff assignments, and generate accurate reports on 
+hospital performance. Existing digital health systems like PAS, Appoluz HIS, and WAH focus 
+mainly on appointments, ele ctronic medical records, or internal workflows. They lack a unified 
+system that tracks patient admissions whi le monitoring the activities and assignments of doctors, 
+nurses, and other care providers in real time.  
+  
+  
+=== PAGE 28 ===
+23  
+  
+2.4.1 Organizational Chart  
+ 
+Figure 2.6: Organizational Chart of Salaam Hospital  
+  
+  
+  
+  
+  
+  
+
+=== PAGE 29 ===
+24  
+  
+2.5 Workflow  
+   2.5.1 Current Workflow  
+Salaam Hospital primarily manages patient admissions, medical records, and internal 
+referrals through manual and paper -based processes. Upon arrival, patients’ personal information 
+and admission details are recorded by staff using handwritten forms, logbooks, and physical patient 
+charts.  
+Doctors and nurses document medical histories, diagnoses, treatments, and medications on paper 
+records. When an internal referral to an in-house specialist is needed, the process is handled through 
+verbal communication or handwritten referral notes. Patient records are stored physically in folders 
+and filing cabinets, requiring staff to manually search and retrieve files whenever information is 
+needed for treatment or reporting.  
+  
+ 
+  
+ADMISSION WORKFLOW  
+INTERNAL REFERRAL WORKFLOW 
+  
+   
+  
+Figure 2.7: Current Internal Referral Workflow 
+  
+
+=== PAGE 30 ===
+25  
+  
+ 
+  
+  
+2.5.2 Proposed Workflow  
+Salaam Hospital’s proposed system will manage patient admissions, medical records, and  
+internal referrals through a computerized and centralized digital platform. Patient information will 
+be recorded electronically upon admission and stored securely in a centralized database.  
+Medical staff will be able to access and update patient records in real time, including medical 
+history, treatments, and referral details. Internal referrals will be processed digitally, allowing faster 
+coordination among departments and reducing reliance on paper-based documentation.  
+    
+REFERRAL  WORKFLOW  
+Figure 2.8: Current Admission Workflow 
+  
+
+=== PAGE 31 ===
+26  
+  
+ 
+  
+  
+  
+ 
+  
+  
+  
+  
+  
+  
+Chapter 3  
+Figure 2.9: Proposed Referral Workflow 
+  
+ADMISSION WORKFLOW 
+  
+  
+Figure 2.10: Proposed Admission Workflow 
+  
+
+=== PAGE 32 ===
+27  
+  
+METHODOLOGY  
+  This chapter discusses the methodology of the projects, development phase, results of the 
+conducted tests and the diagrams of the different processes involved in the system. 3.1 Agile 
+Model Methodology  
+  
+Figure 3.1 Agile Methodology  
+  The developer used Agile Methodology as development life cycle of this project. Agile is a dynamic 
+and iterative method to software development that emphasizes flexibility, teamwork, and response to new 
+demands. This methodology was chosen for this project entitled "Responsive Web-Based Patient Referral 
+and Admission System for Salaam Hospital" because it allows continuous improvement through iterative 
+development cycles.  
+3.2 Kanban Framework  
+Kanban was selected as the Agile framework for the development of the Responsive Web-Based 
+Patient Referral and Admission System for Salaam Hospital. This framework emphasizes continuous 
+delivery, visual workflow management, and adaptability, making it highly suitable for a small 
+development team working with changing hospital requirements. Since healthcare systems often evolve 
+due to policy updates and user feedback, Kanban allows tasks to be added, modified, and prioritized 
+without the need for fixed-length iterations, ensuring continuous progress throughout the system 
+development.  
+
+=== PAGE 33 ===
+28  
+  
+The implementation of Kanban in this project followed several core Kanban practices that guided the 
+development process:  
+1. Visualize the Workflow  
+A Kanban board was utilized to visually represent all development activities of the system. Tasks 
+were organized into columns such as To Do, In Progress, and Done. This visualization enabled 
+the developers to easily track the status of features such as patient referral processing, admission 
+management, and user interface enhancements, while also providing a clear overview of the 
+project’s progress.  
+2. Limit Work in Progress (WIP)  
+To avoid task overload and ensure quality output, limits were applied to the number of tasks being 
+worked on simultaneously. This practice helped the development team focus on completing 
+critical modules such as referral approval and patient admission records before starting new tasks, 
+thereby improving efficiency and reducing unfinished work.  
+3. Manage Flow  
+The movement of tasks across the Kanban board was continuously monitored to identify delays or 
+bottlenecks in development. This allowed the team to address issues related to system 
+functionality, database integration, or responsiveness early, ensuring a smoother and more 
+efficient development flow.  
+4. Make Process Policies Explicit  
+Clear guidelines were established regarding how tasks moved between columns on the Kanban 
+board. For example, a task could only move from To Do to In Progress once its requirements 
+were clearly defined, and from In Progress to Done only after successful testing and validation.  
+This ensured consistency and quality throughout the development process.  
+=== PAGE 34 ===
+29  
+  
+5. Implement Feedback Loops  
+Regular discussions were conducted among the development team to review completed tasks, 
+assess system performance, and address any issues encountered. Feedback from these discussions 
+was used to refine system features, particularly those related to hospital workflows such as patient 
+referrals, admissions, and record management.  
+6. Improve Collaboratively and Evolve Experimentally  
+The team continuously improved their workflow by identifying areas for enhancement and 
+adjusting their development practices based on experience and feedback. This collaborative and 
+adaptive approach allowed the system to evolve gradually, ensuring that it effectively meets the 
+operational needs of Salaam Hospital.  
+  
+3.3 Plan  
+During the initial phase of the project, the development team conducted a thorough planning 
+process to identify the objectives, scope, and required functionalities of the Responsive Web-Based Patient 
+Referral and Admission System for Salaam Hospital. This phase focused on understanding the existing 
+referral and admission workflow of the hospital and determining how the proposed system could improve 
+efficiency and coordination among hospital staff.  
+Based on the identified requirements, a project plan was created to organize development activities and 
+monitor progress. The plan outlined the sequence of tasks involved in system analysis, design, development, 
+testing, and deployment. This structured planning approach helped ensure that all necessary activities were 
+properly scheduled and that the project could be completed within the defined timeline.  
+3.3.1 Requirement Analysis  
+The requirement analysis phase focused on identifying the functional and non -functional 
+requirements of the system. Requirements were gathered through the review of existing hospital 
+=== PAGE 35 ===
+30  
+  
+referral and admission procedures, relevant documentation, and related studies on healthcare 
+information systems. The development team analyzed how patient referrals are currently processed, 
+how admission records are managed, and the challenges encountered  in coordinating patient 
+information across departments.  
+Instead of relying solely on direct interviews, the study utilized documented workflows, system 
+requirements from similar healthcare systems, and existing records provided by Salaam Hospital as 
+reference points. These sources helped define the system requi rements, including patient referral 
+submission, admission approval, record management, user access control, and system 
+responsiveness across devices.  
+The results of the requirement analysis served as the foundation for designing and developing a 
+responsive web-based system that supports efficient patient referrals and admissions while ensuring 
+data accuracy, accessibility, and usability for hospital staff.  
+  
+  
+  
+  
+  
+  
+  
+3.3.1.1 Empathy Map  
+Below is a complete empathy map for the user of the Patient Referral and Admission  
+System for Salaam Hospital  
+=== PAGE 36 ===
+31  
+  
+ 
+Figure 3.2 Empathy map of the staff/nurse  
+This empathy map illustrates the daily challenges experienced by hospital staff involved in 
+patient referral and admission processes. By analyzing what staff and nurses think, feel, say, and do 
+during the patient referral and admission process, the propone nts gain a deeper understanding of 
+their daily responsibilities, challenges, and workflow pressures. Staff and nurses are often required 
+to manage multiple patients simultaneously while handling documentation, coordination, and 
+
+=== PAGE 37 ===
+32  
+  
+communication tasks, which can become overwhelming when processes are manual and 
+fragmented.  
+Using the empathy map allows the proponents to design system features that directly 
+address these challenges, such as streamlined referral processing, faster access to patient 
+information, and reduced duplication of data entry. This user -centered approach improves 
+efficiency, minimizes errors, and reduces workload stress among staff and nurses. Moreover, the 
+empathy map serves as a shared reference point that enhances communication among the 
+proponents and guides design decisions throughout system developme nt. Ultimately, it helps 
+validate design choices, prioritize essential functions, and ensure that the Patient Referral and 
+Admission System effectively supports staff and nurses in delivering timely, organized, and quality 
+patient care at Salaam Hospital.   
+=== PAGE 38 ===
+33  
+  
+ 
+Figure 3.3 Empathy map of the Doctors  
+By carefully analyzing what doctors think, feel, say, and do during the patient referral and 
+admission process, the proponents gain a deeper understanding of their professional needs, 
+challenges, and expectations. Doctors often require timely access to accurate patient information to 
+make informed clinical decisions, and delays or incomplete records can negatively affect patient 
+care.  
+
+=== PAGE 39 ===
+34  
+  
+Using the empathy map allows the proponents to design system features that directly address real 
+concerns of doctors, such as efficient referral review, quick access to patient medical details, and 
+clear admission status updates. Rather than relying on ass umptions, this approach improves the 
+relevance, usability, and clinical value of the system. Additionally, the empathy map serves as a 
+shared reference among the proponents, strengthening communication and guiding design decisions 
+throughout the development process. Ultimately, it helps validate system design choices, prioritize 
+essential functionalities, and identify opportunities to enhance workflow efficiency, making the 
+Patient Referral and Admission System more effective and supportive of doctors’ clin ical 
+responsibilities.  
+   
+=== PAGE 40 ===
+35  
+  
+ 
+Figure 3.4 Empathy map of the Patient  
+By examining what patients think, feel, say, and do during the referral and admission 
+process, the proponents gain a clearer understanding of the concerns, expectations, and emotional 
+challenges patients face. Patients often experience anxiety and uncertainty while waiting for referral 
+approvals or admission decisions, especially when communication is delayed or unclear.  
+Through the use of the empathy map, the proponents are able to design system features that address 
+patient needs such as clear referral status updates, reduced waiting time, and improved transparency 
+
+=== PAGE 41 ===
+36  
+  
+in the admission process. This approach ensures that the system responds to real patient concerns 
+rather than assumptions, enhancing trust, accessibility, and overall user satisfaction. Furthermore, 
+the empathy map serves as a guide in prioritizing patient -centered functionalities and improving 
+communication between patients and hospital staff. Ultimately, this tool supports the development 
+of a more efficient, responsive, and compassionate patient referral and admission system that 
+improves the overall healthcare experience for patients at Salaam Hospital.  
+Figure 3.5 Empathy map of Admin  
+ 
+
+=== PAGE 42 ===
+37  
+  
+By examining what hospital administrators think, feel, say, and do during the management 
+of referrals, admissions, and hospital operations, the proponents gain a clearer understanding of the 
+responsibilities, pressures, and decision-making challenges faced by administrators. Administrators 
+often deal with high workloads, system inefficiencies, and the need to ensure that hospital policies, 
+resources, and patient flow are properly managed. Delays, incomplete data, and lack of real -time 
+system visibility can lead to stress and operational bottlenecks.  
+Through the use of the empathy map, the proponents are able to design system features that support 
+administrative needs such as centralized data management, real -time monitoring of referral and 
+admission statuses, accurate reporting, and streamlined coordi nation among departments. This 
+approach ensures that the system assists administrators in making informed decisions, improving 
+efficiency, and maintaining compliance with hospital standards. Furthermore, the empathy map 
+helps prioritize administrative func tionalities that enhance oversight, accountability, and 
+communication across the hospital. Ultimately, this tool supports the development of a more 
+organized, efficient, and data-driven patient referral and admission system that strengthens hospital 
+operations and service quality at Salaam Hospital.  
+  
+  
+3.3.1.2 Functional Requirements and Non-Functional Requirements Table 
+3.1 Functional Requirements and Non-Functional Requirements  
+REQUIREMENTS  TYPE  PRIORITY  
+Centralized Patient Information Database  Functional  Mandatory  
+Patient Registration and Admission  
+Management  
+Functional  Mandatory  
+Internal Patient Referral Management  Functional  Mandatory  
+=== PAGE 43 ===
+38  
+  
+Patient Medical History and Record Tracking  Functional  Mandatory  
+Role-Based User Management (Admin,  
+Doctor, Nurse, Staff)  
+Functional  Mandatory  
+Referral Status Tracking and History Log  Functional  Mandatory  
+Search and Filter Patient Records  Functional  Mandatory  
+Admission and Referral Monitoring  
+Dashboard  
+Functional  Mandatory  
+Document Upload (Referral Forms, Medical  
+Records)  
+Functional  Mandatory  
+Automated Notifications (In-App )  Functional  Mandatory  
+Reporting and Analytics (Admissions,  
+Referrals, Turnaround Time)  
+Functional  Mandatory  
+Mobile-Responsive Web Interface  Functional  Mandatory  
+Secure Login and Authentication  Functional  Mandatory  
+System Audit Trail and Activity Logs  Functional  Optional  
+Data Backup and Recovery Module  Functional  Optional  
+     3.3.1.3 Data Gathering  
+ The data required for the development of the Responsive Web-Based Patient Referral and 
+Admission System for Salaam Hospital were not collected through extensive field surveys 
+or external data collection activities. Instead, the developers gathered relevant information 
+through the review of existing hospital documents, records, and documented workflows 
+related to patient admission and internal referral processes.  
+=== PAGE 44 ===
+39  
+  
+Data sources included hospital admission forms, referral slips, patient record templates, 
+and existing documentation used by Salaam Hospital staff in their daily operations. These 
+materials were analyzed to identify the data elements required for patient r egistration, 
+admission tracking, referral processing, and record management. Additionally, the 
+developers reviewed related literature, existing hospital information systems, and best 
+practices in healthcare management systems to ensure that the proposed system aligns with 
+standard hospital workflows and operational requirements.  
+Rather than conducting separate large-scale interviews or surveys, the developers relied on 
+documented procedures and operational practices currently implemented at Salaam 
+Hospital. This approach ensured that the system requirements were grounded in actual  
+hospital processes and user needs. The collected data served as the basis for defining system 
+features, designing database structures, and developing workflows that accurately reflect 
+the hospital’s admission and referral operations.  
+3.3.2 Gantt Chart  
+The Gantt Chart presents the project timeline, showing the sequence and duration of the 
+major tasks involved in developing the "Responsive Web -Based Patient Referral and Admission 
+System for Salaam Hospital". It outlines the activities from requirement gat hering, design, 
+development, and testing up to documentation. This chart provides a clear overview of the project’s 
+progress and ensures that each phase is completed within the planned schedule.  
+   
+
+=== PAGE 45 ===
+40  
+  
+Table 3.2 Kanban Board  
+  
+  
+     2026         
+System 
+Development  
+Jan  
+W4  
+Feb  
+W1  
+Feb  
+W2  
+Feb  
+W3  
+Feb  
+W4  
+Mar  
+W1  
+Mar  
+W2  
+Mar  
+W3  
+Mar  
+W4  
+Apr  
+W1  
+Apr  
+W2  
+Apr 
+W3  
+  
+Apr  
+W4  
+  
+Environment  &  
+Database Setup  
+                          
+  
+Authentication  
+& Account  
+Management  
+                          
+Dashboard &  
+Navigation  
+                          
+Patient  
+Registration  
+                          
+Triage &  
+Referral  
+                          
+Admission &  
+Room  
+Assignment  
+                          
+Integration,  
+Testing, &  
+Optimization  
+                          
+Table 3.3 Gantt chart  
+  
+3.4 Design  
+   3.4.1 Hierarchical Input-Process-Output  
+Developers use draw.io for the HIPO, it shows the hierarchical input-process-output of the  
+system. This is graphic illustration of the data flow diagram. It shows the flow of the data and logic 
+within the system.  
+=== PAGE 46 ===
+41  
+  
+ 
+3.4.2 Input-Process-Output  
+3.4.2.1 Patient Registration and Record Management  
+ 
+Figure 3.7 Input-Process-Output for Researcher Sign-Up / Registration  
+Figure 3.7 shows the process of capturing and managing patient information within the 
+system. Patient personal details such as name, sex, date of birth, contact information, and 
+emergency contact details are entered into the system as inputs. The system va lidates the entered 
+  
+Figure 3.6  
+Hierarchical Input 
+- 
+Process 
+- 
+Output 
+  
+Input 
+• 
+ First name 
+• 
+ Last name 
+• 
+ Sex 
+• 
+ Date of birth 
+• 
+ Contact  
+numbera 
+• 
+ Address 
+• 
+ Emergency  
+contact name  
+• 
+ Emergency  
+contact number 
+Process 
+• 
+Validate patient  
+input data 
+• 
+Generate unique  
+Patient_ID 
+• 
+Store  
+patient 
+information in  
+the Patient Table 
+• 
+Allow viewing  
+and updating of  
+patient records 
+Output 
+• 
+ Registered  
+patient profile 
+• 
+ Stored patient  
+record in the  
+database 
+• 
+ Updated  
+patient  
+information 
+=== PAGE 47 ===
+42  
+  
+data to ensure completeness and correctness before generating a unique Patient_ID. Once validated, 
+the information is stored in the Patient table of the database. The system also allows authorized 
+hospital staff to view and update patient records when nece ssary. As a result, a registered patient 
+profile is created, patient records are securely stored in the database, and updated patient 
+information can be retrieved for future visits.  
+  
+3.4.2.2 Patient Triage and Internal Referral Management  
+  
+ 
+Figure 3.8 Patient Triage and Internal Referral Management   
+Figure 3.8 shows the workflow for patient triage and internal referral within the hospital. 
+The process begins with inputs such as the Patient_ID, employee details, visit room information, 
+triage level, vital signs, diagnosis details, and assigned doctor. The system records triage data and 
+links the patient to the appropriate visit room. Vital signs are saved and associated with the triage 
+record, after which a diagnosis is created by the attending medical professional. The system assigns 
+a doctor in charge and generates an internal referral record, allowing the referral status and date to 
+Input 
+• 
+Patient_ID 
+• 
+Employee_ID 
+• 
+Visit_Room_ID 
+• 
+Triage level 
+• 
+Vital Signs data 
+• 
+Diagnosis details 
+• 
+Assigned doctor 
+Process 
+• 
+Record triage  
+details and visit  
+room 
+• 
+Save vital signs  
+linked to triage  
+record 
+• 
+Create diagnosis  
+record 
+• 
+Assign doctor in  
+charge 
+• 
+Create internal  
+referral record 
+• 
+Track referral date  
+and status 
+Output 
+• 
+ Triage record 
+• 
+ Vital signs  
+record 
+• 
+ Diagnosis  
+record 
+• 
+ Internal  
+referral record 
+• 
+ Referral  
+history log 
+=== PAGE 48 ===
+43  
+  
+be tracked. The outputs of this process include stored triage records, vital signs records, diagnosis 
+information, internal referral records, and a complete referral history for monitoring patient flow.  
+3.4.2.3 Patient Admission and Room Assignment  
+ 
+Figure 3.9 Input-Process-Output for System Homepage  
+Figure 3.9 shows the admission process and room assignment for patients requiring 
+hospitalization. Inputs such as the Patient_ID, diagnosis reference, admission type, room details, 
+assigned doctor, and admission date are submitted to the system. The system validates the admission 
+request and checks the availability of rooms and beds before assigning the appropriate room to the 
+patient. Admission details are then recorded in the database, and room availability status is updated 
+accordingly. The outputs of th is process include a confirmed admission record, room and bed 
+assignment details, and an updated room availability record, ensuring accurate monitoring of 
+hospital resources.  
+  
+  
+  
+Input 
+• 
+ Patient_ID 
+• 
+ Diagnosis_ID 
+• 
+ Admission  
+type 
+• 
+ Room_ID 
+• 
+ Assigned  
+doctor 
+• 
+ Admission  
+date 
+Process 
+• 
+Validate  
+admission request 
+• 
+Check room and  
+bed availability 
+• 
+Assign room and  
+bed to patient 
+• 
+Record  
+admission details 
+• 
+Update room  
+availability status 
+Output 
+• 
+ Admission  
+record 
+• 
+ Room and bed  
+assignment  
+confirmation 
+• 
+ Update room  
+availability 
+=== PAGE 49 ===
+44  
+  
+ 3.4.3 Use Case Diagram    
+Figure 3.18 shows the use case diagram of the "Responsive Web -Based Patient 
+Referral and Admission System for Salaam Hospital". It illustrates how different users 
+interact with the medical appointment system. The system supports four main actors:  
+Nurse/staff, Doctor, and Administrator, each with specific roles and responsibilities.   
+ 
+  
+            
+Figure 3. 
+10 
+  
+Use case 
+  
+Diagra 
+m 
+  
+
+=== PAGE 50 ===
+45  
+  
+3.4.4 Entity-Relationship Diagram   
+ 
+Figure 3.11 Patient Referral and Admission System Entity-Relationship Diagram  
+ Figure 3.11  presents the Entity –Relationship Diagram (ERD) of the "Responsive 
+WebBased Patient Referral and Admission System for Salaam Hospital", illustrating the logical 
+structure of the system’s database and the relationships among its core entities. The ERD 
+demonstrates how patient information, clinical processes, hospital resou rces, and staff roles are 
+interconnected to support efficient emergency care, referral, and admission workflows.  
+The Patient entity serves as one of the central components of the system, storing essential 
+patient information such as Patient_ID, name, sex, date of birth, contact details, address, and 
+emergency contact information. This entity ensures that patient reco rds are accurately maintained 
+  
+
+=== PAGE 51 ===
+46  
+  
+and can be referenced throughout the triage, diagnosis, laboratory, treatment, referral, and 
+admission processes.  
+The Employee and Doctor entities represent hospital personnel involved in patient care and 
+system operations. The Employee entity includes staff such as nurses and other ER personnel, while 
+the Doctor entity stores information about licensed physicians, in cluding specialization, contact 
+details, and employment status. These entities support role-based access and accountability within 
+the system. The Admin entity represents system administrators who manage user accounts and 
+system access, ensuring secure authentication and proper system maintenance.  
+The Triage entity captures initial patient assessment data upon arrival at the emergency 
+room. It is linked to the Patient, Employee, and Visit_Room entities, allowing the system to record 
+triage level (Critical, Urgent, or Non -Urgent), notes, assigned roo m, and date and time of 
+assessment. Associated with triage is the Vital_Signs entity, which stores recorded health indicators 
+such as blood pressure, heart rate, temperature, and respiratory rate, providing clinical data 
+necessary for medical decision-making.  
+Medical evaluation and treatment processes are represented by the Diagnosis, Treatment, 
+and Lab_Results entities. The Diagnosis entity records the identified medical condition, the doctor 
+in charge, laboratory references, and diagnosis date. The Treatment entity is linked to Diagnosis 
+and includes prescribed medications, dosage, frequency, and treatment duration. The Lab_Results 
+entity stores laboratory findings related to the patient, including test type, results, file attachments, 
+and dates conducted, supporting accurate and timely diagnosis.  
+Hospital resource management is handled through the Room, Visit_Room, and Admit 
+entities. The Room entity stores information about room types, bed numbers, and availability status. 
+The Admit entity links patients to assigned doctors and rooms, recording ad mission type and 
+admission date. These entities ensure proper bed allocation and monitoring of patient admissions 
+within the hospital.  
+The Referral/Assign entity manages patient referrals and doctor assignments, linking 
+diagnoses to responsible doctors and documenting referral dates. Additionally, the 
+Doctor_In_Charge entity supports tracking of doctor assignments over time, ensuring continuity of 
+care and clear responsibility for patient management.  
+Overall, the ERD illustrates a well-structured and integrated database design that supports 
+emergency room operations, from patient arrival and assessment to diagnosis, treatment, referral, 
+and admission. The defined relationships ensure data integrity, ef ficient information flow, and 
+=== PAGE 52 ===
+47  
+  
+coordinated collaboration among hospital staff. This design enables the development of a reliable, 
+secure, and efficient emergency referral and admission system that enhances service delivery and 
+patient care at Salaam Hospital.  
+  
+3.4.5 Architectural Design  
+The system architecture of the “Responsive Web -Based Patient Referral and Admission 
+System for Salaam Hospital” provides an overview of how the system’s components work together 
+to support efficient patient referral, triage, admission, and hospital resourc e management. This 
+section presents the arrangement of system layers and the interaction between users, the web-based 
+application, the server-side processing layer, and the centralized database. 
+  
+Figure 3.12 Architectural Design  
+The system follows a layered web -based architecture composed of three main components: the 
+Client Layer, Application Server Layer, and Database Layer. This architectural design ensures clear 
+separation of concerns, efficient data processing, and ease of system maintenance. The Client Layer 
+consists of the web and mobile interfaces used by hospital personnel such as nurses, doctors, and 
+administrators. Through this layer, users can perform tasks such as managing patient records, 
+creating referrals, viewing admission details, and monitoring room availability. The client layer is 
+responsible for presenting information to users and sending user requests to the application server. 
+The Application Server Layer handles the core system logic and business processes. It processes 
+requests received from the client layer, including validating user inputs, managing patient 
+registration, handling referral workflows, assigning doctors, and processing patient admissions.  
+
+=== PAGE 53 ===
+48  
+  
+This layer also enforces system rules and access control before interacting with the database layer. 
+The Database Layer is responsible for securely storing and managing all system data. It contains 
+records related to patients, referrals, diagnoses, admissi ons, rooms, and user accounts. The 
+application server communicates with the database layer to retrieve, insert, update, and maintain 
+data consistency and integrity. Overall, this architectural design supports efficient referral and 
+admission workflows, sec ure data handling, and scalable system expansion. By separating the 
+system into distinct layers, the architecture enhances reliability, simplifies future modifications, and 
+ensures smooth operation within the hospital environment.  
+  
+  
+3.5 Development  
+   3.5.1 Software Specification  
+          
+Requirements  Details  
+Operating System  Windows 11  
+Browser  Google Chrome, Microsoft Edge  
+Local Server  XAMPP  
+Database Management System  
+(DBMS)  MySQL  
+Programming Languages  HTML, CSS, JavaScript  
+Programming Environment  Visual Studio Code  
+Framework  React.js  
+Backend  Node.js  
+Table 3.4 Developer software requirements  
+  
+  
+=== PAGE 54 ===
+49  
+  
+Requirements  Details  
+Operating System  
+Windows 10/11, Android, iOS,  
+macOS, Linux  
+Browser  
+Google Chrome, Microsoft Edge,  
+Safari, Mozilla Firefox (Latest  
+versions)  
+Table 3.5 Client software requirements  
+   3.5.2 Hardware Specification  
+Requirements  Details  
+Processor  Intel Core i5/Ryzen 5  
+RAM  8GB – 16GB  
+Storage  256GB  
+Operating System  Windows 10/11  
+GPU  Integrated or dedicated graphics  
+Peripherals  Mouse, keyboard, monitor  
+Table 3.6 Developer hardware requirements  
+  
+  
+Requirements  Details  
+Processor  Intel Core i3 or equivalent  
+RAM  4GB  
+Storage  120GB  
+GPU  Integrated graphics  
+Device  Desktop, Laptop, Tablet, or  
+Smartphone  
+Processor  Intel Core i3 or equivalent  
+Table 3.7 Client hardware requirements  
+=== PAGE 55 ===
+50  
+  
+  
+3.6 Test Plan  
+The test plan outlines the evaluation process designed to assess the usability, efficiency, and overall 
+functionality of the Responsive Web-Based Patient Referral and Admission System for Salaam Hospital. 
+The primary goal of the testing phase is to ensure that the system is user-friendly, responsive, secure, and 
+capable of supporting accurate patient referral, triage, and admission processes. Testing aims to determine 
+whether the system features meet the operational and informational needs of hospital admin istrators, 
+doctors, nurses, and staff.  
+3.6.1 Respondents and Locale  
+The respondents for the system evaluation will consist of selected hospital personnel and 
+Information Technology students who are familiar with web-based systems. These respondents may include 
+nurses, hospital staff, and BSIT students who can provide both practical and technical feedback. A 
+maximum of 30 respondents will participate in the testing process to ensure a range of user perspectives.  
+The data gathering and system testing will be conducted at Salaam Hospital and within an academic 
+environment where stable internet access and appropriate devices are available, allowing respondents to 
+interact with the system efficiently and conveniently.  
+3.6.2 Procedure  
+The testing procedure will follow a structured and step -by-step approach to collect consistent and 
+measurable feedback. First, respondents will be given a brief orientation and demonstration of the system’s 
+features, including login, patient registration, triage recording, referral handling, and admission 
+management.  
+Second, respondents will be asked to perform specific tasks such as entering patient data, updating referral 
+status, assigning doctors or rooms, and viewing admission records. After completing the assigned tasks, 
+respondents will answer a usability evaluation questionnaire. Qualitative feedback and suggestions will also 
+be collected to identify areas for system improvement.  
+  
+  
+  
+  
+=== PAGE 56 ===
+51  
+  
+3.6.3 Tools (Questionnaire)  
+System Usability Scale (SUS) Questionnaire  
+  Participants rated the following statements using a five -point Likert scale: 1 = Strongly Disagree, 2 = 
+Disagree, 3 = Neutral, 4 = Agree, 5 = Strongly Agree.  
+Table 3.8 System Usability Scale (SUS) Questionnaire  
+No.  Statement  1  2  3  4  5  
+1.  I think that I would like to use this system frequently.  
+  
+          
+2.  I found the system unnecessarily complex.  
+  
+          
+3.  I thought the system was easy to use.  
+  
+          
+4.  I think that I would need the support of a technical person to be able 
+to use this system.  
+          
+5.  I found the various functions in this system were well integrated.            
+6.  I thought there was too much inconsistency in this system.            
+7.  I would imagine that most people would learn to use this system very 
+quickly.  
+          
+8.  I found the system very cumbersome to use.  
+  
+          
+9.  I felt very confident using the system.  
+  
+          
+10.  I needed to learn a lot of things before I could get going with this 
+system.  
+          
+  
+  
+  
+  
+=== PAGE 57 ===
+52  
+  
+REFERENCES  
+Al-Shorbaji, N., Atun , R., & Car, J. (2016). eHealth and health system strengthening: Evidence, 
+challenges and opportunities. Bulletin of the World Health Organization, 94(10), 703–705.  
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5040494/  
+Alemu, T., Mekonnen, Z., & Getachew, M. (2023). Challenges of manual health record management 
+systems and the need for digital solutions in hospitals. Journal of Health Informatics in Developing 
+Countries, 17(1).  
+Department of Health. (n.d.). Integrated Hospital Operations and Management Information System  
+(iHOMIS).  
+https://doh.gov.ph/  
+Epizitone, A. (2023). A systematic literature review of health information systems. Healthcare, 11(7),  
+959.  
+https://www.mdpi.com/2227-9032/11/7/959  
+Influence of health information management practices on the quality of healthcare. (2023).  
+Healthcare Management Review.  
+Khosravi, A., Kazemi, A., & Hosseini, M. (2023). Hospital information systems and their impact on 
+clinical decision-making and service quality. Journal of Medical Systems, 47(2).  
+Mohammadpour, A., et al. (2021). Hospital information systems and their role in improving 
+healthcare quality. Journal of Healthcare Engineering, 2021. 
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC8123921/  
+Ortiga, B., Capistrano, E., & Macalinao, M. (2012). Improving hospital admission and discharge 
+processes to enhance operational efficiency. Asian Hospital & Healthcare Management.  
+Phreesia, Inc. (n.d.). Phreesia referral management system.  
+https://www.phreesia.com/  
+Shah, R., Patel, S., & Mehta, N. (2024). Design and development of a web-based patient management 
+information system. International Journal of Computer Applications, 185(12).  
+=== PAGE 58 ===
+53  
+  
+Shiferaw, K., Zewdu, S., & Sisay, A. (2023). Assessment of manual versus electronic patient record 
+systems in hospitals. BMC Medical Informatics and Decision Making, 23, 45.  
+https://bmcmedinformdecismak.biomedcentral.com/  
+Tung, F.-C., Chang, S. -C., & Chou, C. -M. (2016). An acceptance model of hospital information 
+systems. International Journal of Medical Informatics, 95, 1–14.  
+https://pubmed.ncbi.nlm.nih.gov/27573316/  
+We Are Health. (n.d.). We Are Health digital hospital platform.  
+https://www.wearehealth.ph/  
+WellSky Corporation. (n.d.). WellSky enterprise referral manager.  
+https://wellsky.com/  
+Zhao, P., Yoo, I., Lavoie, J., Lavoie, B. J., & Simoes, E. (2017). Web-based medical appointment 
+systems: A systematic review. Journal of Medical Internet Research, 19(4), e134. 
+https://www.jmir.org/2017/4/e134/  
+  
+  

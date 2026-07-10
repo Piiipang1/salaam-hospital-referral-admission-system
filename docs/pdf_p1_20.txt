@@ -1,0 +1,596 @@
+=== PAGE 1 ===
+ 
+"RESPONSIVE WEB-BASED PATIENT REFERRAL AND ADMISSION SYSTEM 
+FOR SALAAM HOSPITAL"  
+  
+  
+COLLEGE OF INFORMATION AND COMPUTING STUDIES 
+Mindanao State University – Main Campus  
+  
+  
+  
+A Capstone Project 1  
+Presented to the Faculty of  
+College of Information and Computing Sciences  
+  
+  
+  
+  
+In Partial Fulfillment of the Requirements for the Degree of 
+Bachelor of Science in Information Technology  
+  
+  
+  
+  
+By:  
+Abdul Naafi A. Macapodi  
+Alimar B. Datunaim Al-raafi 
+C. Indanan  
+  
+  
+  
+  
+  
+  
+January 2025  
+  
+i  
+=== PAGE 2 ===
+ii  
+  
+TABLE OF CONTENTS  
+  
+TITLE PAGE……………………………...…………………………………………..i  
+LIST OF FIGURES………………………………………………………………….iii  
+LIST OF TABLES……...……………………………………………………………iv  
+  
+Chapter 1 INTRODUCTION……………………………………………………...1  
+1.1 Project Context……………………………………………………….....................2  
+1.2 Purpose and Description………….………….……………………….....................3  
+1.3 Objectives……………………………………………..…………...………………5  
+1.3.1 General Objectives……………………….……………………………………..5  
+1.3.2 Specific Objectives………………………………………..…….........................5  
+1.4 Scope and Limitation………………………………………………………...5 
+CHAPTER 2 REVIEW OF RELATED LITERATURE AND SYSTEMS………7  
+2.1 Review of Related Concepts……………………………………………………….7  
+2.1.1 Hospital Management System...…………………………………………………7  
+2.1.2 Patient Admission and Discharge Systems………….……………………………….8  
+2.1.3 Integration of EMR/EHR with Hospital Management 
+Systems……………..…….......8  
+2.1.4 Digital Admission Management Systems in Hospital Operations 
+………………..……9  
+2.2 Review of Related 
+Studies………………………………………………………………...10  
+2.3 Review of Related Systems……………………………………………………………..13  
+2.3.1 Integrated Hospital Operations and Management Information 
+System(iHOMIS)………13  
+2.3.2 CNR Software Systems………...……………………………………………………….15  
+2.3.3 WAH (We are Health)…………………………………………………………………..16  
+2.3.4 Phreesia Referral Management 
+System…………………………………………………17  
+2.3.5 WellSky Enterprise Referral 
+Manager…………………………………………………..19  
+2.3.6 Summary of Related System…………………………………………………………..20  
+2.4 Technical Background………………….….……………………………………..22  
+2.4.1 Organizational Chart………………………………...………………………… 23  
+2.5 Workflow…………………………………………………………………………24  
+2.5.1 Current Workflow……………………………………………………...………24  
+2.5.2 Proposed Workflow…………………………………………………………… 25  
+CHAPTER 3 METHODLOGY……………………………………………………27  
+3.1 Agile Model Methodology……………………………………………………...27  
+3.2 Kanban Framework……………………………………………………………...27  
+3.3 Plan……………………………………….………………………………………29  
+3.3.1 Requirements Analysis…………………………………………………………30  
+3.3.1.1 Empathy Map…………………………….…………………………………..31  
+3.3.1.2 Functional Requirements and Non-Functional Requirements……………………..…37  
+3.3.1.3 Data Gathering…………………………………………………………….………….38  
+3.3.2 Gantt 
+Chart……………………...………………………………………………………39  
+=== PAGE 3 ===
+iii  
+  
+3.4 Design ……………………………………………………………………………40  
+3.4.1 HIPO (Hierarchy Input-Process-Output)……………………………………….40  
+3.4.2 IPO (Input-Process-Output)……………………….………………..…………..41  
+3.4.3 Use Case 
+Diagram………………………………………………………………44  
+3.4.4 ERD (Entity-Relationship 
+Diagram)……………………………………………45  
+3.4.5 Architectural Design……………………………………………………………47  
+3.5 Development……………………………………………………………………...48 
+3.6 Test Plan………………………………………………………………………….50  
+REFERENCES…………………………………………..………………………….52 
+LIST OF FIGURES  
+  
+Figure 2.1: Integrated Hospital Operations and Management Information 
+System(iHOMIS)………...14  
+Figure 2.2 CNR Software Systems………………………………………………………….16  
+Figure 2.3: WAH (We Are Health)…………………………………………………………17  
+Figure 2.4: Phressia referral management system 
+…………………………..…………………...18  
+Figure 2.5: WellSky Enterprise Referral Manager ……………………………………………20  
+Figure 2.6: Organizational Chart of Salaam Hospital ……………………………………………23  
+Figure 2.7: Current Internal Referral Workflow……………………………………………………….24  
+Figure 2.8: Current Admission 
+Workflow……………………………………………………………...25  
+Figure 2.9: Proposed Referral 
+Workflow………………………………………………………………26  
+Figure  2.10:Proposed Admission 
+Workflow…………………………………………………………..26  
+Figure 3.1: Agile 
+Methodology……………………………………………………………….27  
+Figure 3.2 Empathy map of the 
+staff/nurse……………………………………………………31  
+Figure 3.3 Empathy map of the Doctors……………………………………………………………….33  
+Figure 3.4 Empathy map of the 
+Patient………………………………………………………………...35  
+Figure 3.5 Empathy map of Admin…………………………………………………………………..36  
+Figure 3.6 Hierarchical Input -Process-
+Output……………………………………………………..…..41  
+Figure 3.7 Input -Process-Output for Researcher Sign -Up / 
+Registration………………………………41  
+Figure 3.8 Patient Triage and Internal Referral Management……………………………….………42  
+Figure 3.9 Input -Process-Output for System 
+Homepage………………………………………………43  
+Figure 3.10 Use case 
+Diagram…………………………………………………………………………44  
+Figure 3.11 Patient Referral and Admission System Entity -Relationship 
+Diagram……………………45  
+Figure 3.12 Architectural 
+Design………………………………………………………………………47  
+=== PAGE 4 ===
+iv  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+LIST OF TABLES  
+  
+Table 2.1: Summary of related systems……………………………………………,,………..21  
+Table 3.1 Functional Requirements and Non-Functional Requirements……………………37  
+Table 3.2 Kanban Board……………………………………………………………………39  
+Table 3.3 Gantt 
+Chart…………………………………………………………………………40  
+Table 3.4 Developer software 
+requirements…………………………………………………..48  
+Table 3.5 Client software requirements………………………………………………………49  
+Table 3.6 Developer hardware requirements…………………………………………………49  
+Table 3.7 Client hardware requirements……………………………………………………...49  
+Table 3.8 System Usability Scale (SUS) 
+Questionnaire………………………………………51  
+  
+    
+  
+  
+  
+  
+  
+  
+=== PAGE 5 ===
+v  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    
+=== PAGE 6 ===
+1  
+  
+Chapter 1  
+Introduction  
+  
+The Hospital management involves the overall administration and coordination of hospital 
+operations to ensure the efficient delivery of healthcare services, including the management of staff, 
+facilities, patient records, and operational workflows. One important component of hospital management is 
+the admission process, which focuses on registering patients, handling referrals, assigning appropriate 
+departments or wards, and ensuring accurate documentation of patient information. Effective management 
+of admission procedures is essential to reduce delays, minimize errors, and improve patient flow within the 
+hospital. Studies have shown that standardizing and improving hospital admission and discharge processes 
+can significantly enhance operational efficiency and reduce patient waiting time, thereby improving overall 
+hospital performance and patient outcomes (Ortiga et al., 2012).  
+Salaam Hospital, located in Blis Papandayan, Marawi City, currently operates without a formal  
+digital system for managing patient records, admissions, and referrals. Because the hospital’s processes are 
+largely manual, essential tasks such as tracking patient history, identifying which doctor or nurse assisted a 
+patient, recording administered medi cations, and managing patient admissions are time -consuming and 
+prone to human error. The lack of a central system hinders staff efficiency and negatively impacts patient 
+care; therefore, a comprehensive hospital management and admission system is critically needed to support 
+daily operations and improve the quality of services provided to patients.  
+The absence of an effective system at Salaam Hospital has resulted in several operational 
+challenges. With manual documentation, staff struggle to retrieve accurate historical patient information 
+quickly, which can delay treatment decisions and complicate referrals among in -house specialists. In 
+traditional paper-based record systems, healthcare providers often spend significant time searching for 
+misfiled or missing patient folders, which negatively affects the timely delivery of healthcare services and 
+the standard of care (Influence of Health Information Management Practices on the Quality of Healthcare, 
+2023).  
+=== PAGE 7 ===
+2  
+  
+This study focuses on the development of a Hospital Management and Admission System aimed at  
+modernizing hospital operations. The system is designed to handle various aspects of patient care, including 
+medical history tracking, specialist referrals, treatment and medication documentation, and admission 
+processes. By digitizing records and automati ng key functions, the system provides hospital staff with 
+timely access to accurate patient information, facilitates communication among healthcare providers, and 
+streamlines administrative tasks. Hospital Information Systems (HIS) have been shown to improve clinical 
+workflows, reduce administrative delays, and enhance the quality of care by supporting efficient 
+decisionmaking and effective management of patient data (Mohammadpour et al., 2021; Influence of Health 
+Information Management Practices on the Quality of Healthcare, 2023).   
+  
+1.1 Project Context   
+This capstone project entitled “Responsive Web-Based Patient Referral and Admission System for 
+Salaam Hospital” focuses on addressing the inefficiencies in the hospital’s current manual processes for 
+patient admission, medical record tracking, and internal  specialist referrals. At present, activities such as 
+recording patient information, managing admission details, tracking medical history, and coordinating 
+referrals among specialist doctors are conducted using handwritten forms, logbooks, or verbal 
+communication. These manual processes are often time -consuming and prone to human error, leading to 
+misplaced or incomplete records, delayed decision -making, miscommunication between staff, and 
+difficulties in retrieving accurate patient histories. Such ineffici encies not only hinder smooth hospital 
+operations but can also compromise patient safety and the overall quality of care (Shiferaw, Zewdu, & 
+Sisay, 2023; Alemu, Mekonnen, & Getachew, 2023).  
+To address these challenges, the project proposes the development of a computerized Hospital 
+Management and Admission System that automates patient registration, admission tracking, medical history 
+management, and internal referrals, while providing accessible digital records through both web and mobile 
+platforms. By digitizing records and streamlining workflows, the system is expected to reduce 
+=== PAGE 8 ===
+3  
+  
+administrative bottlenecks, minimize errors, and facilitate timely access to critical patient information. The 
+system supports patient admission workflows, including initial triage and internal referrals, particularly for 
+patients requiring urgent or inpat ient care. Hospital Information Systems have been demonstrated to 
+significantly improve operational efficiency, enhance interdepartmental communication, support clinical 
+decision-making, and ultimately improve the quality of patient care (Al -Shorbaji, Atun, & Car, 2016; 
+Khosravi, Kazemi, & Hosseini, 2023).  
+  
+1.2  Purpose and Description  
+This project entitled “Responsive Web-Based Patient Referral and Admission System for Salaam 
+Hospital” is intended to design and develop an integrated hospital management and admission system that 
+will automate and improve the hospital’s current manual pro cesses of patient admission, medical record 
+management, and in-house specialist referrals. The main purpose of this study is to provide an efficient, 
+accurate, and organized digital system that will support hospital staff in managing patient information, 
+reduce delays in admission and referral processes, and improve overall healthcare service delivery.  
+This study aims to computerize the hospital’s existing paper -based operations, where patient 
+information, medical history, treatment records, and referrals are manually documented and tracked. The 
+researchers seek to address the inefficiencies, errors, and delays caused by these manual and timeconsuming 
+tasks through the development of a web -based and mobile -based Hospital Management and Admission 
+System. By implementing this system, Salaam Hospital can improve coordination among departments, 
+minimize admin istrative workload, and ensure that patient records are accurate, complete, and easily 
+accessible.  
+Through the proposed system, it will enable healthcare providers to access real -time patient 
+information, support better clinical decision -making, and enhance workflow efficiency. Ultimately, the 
+=== PAGE 9 ===
+4  
+  
+system is expected to improve the quality of patient care, reduce waiting times, and increase patient 
+satisfaction.  
+Beneficiaries of the Study  
+• Hospital Administration  
+The system will help hospital administrators efficiently monitor admissions, patient records, and internal 
+referrals. It will provide access to accurate and real-time data, enabling better planning, reporting, and 
+decision-making for hospital operations.  
+• Medical Staff (Doctors and Nurses)  
+Doctors and nurses will benefit from quick and easy access to patient medical histories, treatment records, 
+and referral details. The system will reduce paperwork, improve coordination among in-house specialists, 
+and help ensure timely and accurate patient care.  
+• Administrative Staff  
+The system will simplify admission processes, record management, and documentation tasks. Automating 
+these processes will reduce workload, minimize errors, and speed up daily hospital operations.  
+• Patients  
+Patients will experience faster admissions, smoother referrals among specialist doctors, and improved 
+healthcare services. Accurate record-keeping will also ensure better continuity of care and reduced 
+waiting times.  
+• Researchers  
+The researchers will gain practical experience in system analysis, design, and development within a 
+healthcare environment. This study will enhance their technical skills and understanding of real-world 
+hospital workflows.  
+  
+=== PAGE 10 ===
+5  
+  
+1.3 Objectives   
+1.3.1 General Objective  
+This capstone project aims to design and develop a hospital management and admission system  
+that will assist the beneficiaries in their hospital operation.  
+1.3.2 Specific Objectives  
+To achieve the general objective of the study, the following specific objectives are identified:  
+1. To gather data and conduct requirements analysis by assessing the current manual processes of  
+Salaam Hospital, including patient admission, medical record and internal referral workflows.  
+2. To design the system processes, user interface, and database structure that will be use on the system 
+development.  
+3. To develop a responsive web application, based on the approved design and requirements.  
+4. To test and evaluate the developed system through functional testing and usability evaluation to 
+ensure that it meets the required performance, reliability, and usability standards of Salaam 
+Hospital.  
+1.4 Scope and Limitations  
+This capstone project focuses on the design and development of a computerized system intended  
+to assist the hospital’s patient referral and admission processes. The study covers only the activities related 
+to recording, managing, and monitoring of patient referral and admission information within Salaam 
+Hospital. It also includes the coordination between hospital departments involved in referring and admitting 
+patients. The project is primarily concerned with data management, documentation, and communication 
+related to the referral and admission workflow of the hospital.  
+The system includes basic medical record management related to patient admission, internal  
+=== PAGE 11 ===
+6  
+  
+referral, diagnosis, triage, and treatment documentation but does not support full laboratory systems, billing, 
+or external health system integration.  
+This study is limited to the administrative and operational aspects of handling patient referrals and 
+admissions. It does not include financial transactions, and billing. External hospital networks outside 
+Salaam Hospital and third -party health institution s are also not covered in this project. The proposed 
+system’s focus is on improving internal hospital efficiency in processing referrals and admissions, without 
+addressing broader health information systems or government-level health data integration.  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+Chapter 2  
+Review of Related Literature and Systems  
+=== PAGE 12 ===
+7  
+  
+This chapter presents the theoretical foundations that underpin the development of the "Responsive 
+Web-Based Patient Referral and Admission System for Salaam Hospital". It organizes the discussion into 
+local, national, and international theories to provide a comprehensive scientific and conceptual basis for the 
+study. By examining these theoretical frameworks, the chapter establishes the relevance, justification, and 
+scholarly grounding of the proposed system within the broader context of healthcare, inform ation 
+technology, and systems development.  
+  
+2.1 Review of Related Concepts   
+2.1.1 Hospital Management Systems (HMS)  
+Hospital Management Systems (HMS) are comprehensive software platforms that 
+automate and streamline the operational, administrative, and clinical processes of healthcare 
+facilities. HMS integrates multiple modules, including patient registration, appointment scheduling, 
+billing, laboratory management, pharmacy, and human resource management. By centralizing all 
+hospital operations, HMS reduces paperwork, prevents duplication of records, and improves 
+communication between departments. the implementation of HMS enhances hospital efficiency by 
+allowing staff to access patient and operational data in real time, enabling informed decision -
+making and timely response to patient needs. For instance, a patient admitted through the HMS can 
+have their medical history, lab results, and billing details immediately available to doctors, nurses, 
+and administrative staff, which reduces delays and errors. Moreover, HMS supports reporting and 
+analytics functions that help hospital management monitor resource utilization, track performance, 
+and plan improvements in healthcare delivery. This system ultimately contributes to higher quality 
+patient care and smoother hospital workflows.  
+  
+=== PAGE 13 ===
+8  
+  
+2.1.2 Patient Admission and Discharge Systems  
+Patient Admission and Discharge Systems are specialized software solutions that manage 
+the complete lifecycle of a patient’s stay in a healthcare facility, from admission to discharge. These 
+systems handle patient intake, bed allocation, recording of medic al histories, generation of 
+discharge summaries, and coordination with billing departments. By automating these processes, 
+hospitals can reduce patient waiting times, minimize errors in documentation, and improve 
+workflow efficiency among healthcare staff.  According to research, such systems enhance 
+operational management by providing real -time updates on bed availability, patient status, and 
+required treatments. For example, when a patient is admitted, the system can automatically notify 
+nurses, doctors, and lab personnel about the patient’s condition and scheduled tests, ensuring timely 
+care. Additionally, centralized recordkeeping ensures that all patient information is securely stored 
+and easily accessible for future reference, supporting continuity of c are and informed 
+decisionmaking.  
+  
+2.1.3 Integration of EMR/EHR with Hospital Management Systems  
+The integration of Electronic Medical Records (EMR) and Electronic Health Records 
+(EHR) with Hospital Management Systems (HMS) allows hospitals to create a seamless, 
+centralized digital platform that connects administrative and clinical processes. This int egration 
+enables real -time synchronization of medical histories, diagnostic reports, treatment plans, and 
+billing information across departments. Studies indicate that such integration improves operational 
+efficiency, reduces redundant testing, and enhances continuity of care by ensuring that all healthcare 
+providers have access to accurate and up-to-date patient information. For example, when a patient 
+is transferred from one department to another, doctors and nurses can immediately access previous 
+test re sults, medications, and referral notes, minimizing delays and potential errors. Moreover, 
+=== PAGE 14 ===
+9  
+  
+integrating EMR/EHR with HMS supports advanced analytics, enabling hospitals to monitor 
+performance, plan resource allocation, and improve service delivery.  
+  
+2.1.4 Digital Admission Management Systems in Hospital Operations   
+Digital admission management systems in hospitals provide a centralized electronic 
+platform that streamlines patient intake and replaces traditional manual or paper -based admission 
+workflows. These systems often include features such as online pre-registration, real-time tracking 
+of patient admissions, and integrated data capture at the point of service, allowing administrative 
+and clinical staff to manage admissions efficiently. Research indicates that digital admission 
+systems improve operational efficien cy, reduce patient waiting times, and enhance coordination 
+among registration, clinical, and administrative units.   
+Hospitals implementing such systems report faster patient turnaround, while patients and 
+families benefit from greater convenience and reduced waiting. Electronic admission platforms also 
+minimize administrative workload, decrease documentation errors, and provide real-time access to 
+bed availability, admission progress, and patient flow. For example, when a patient is admitted 
+through the digital system, all relevant staff can immediately access their registration details and 
+medical information, ensuring smooth transitions between departments. Integrating digital 
+admission management into the proposed Hospital Management and Admission System for Salaam 
+Hospital can therefore optimize patient flow, improve data accuracy, and support higher -quality 
+service delivery.  
+  
+  
+2.2 Review of Related Studies  
+2.2.1 Design and Development of a Web-Based Patient Management Information System   
+=== PAGE 15 ===
+10  
+  
+The study titled “Design and Development of a Web -Based Patient Management 
+Information System” by Shah et al. (2024) explored the implementation of a web -based hospital 
+management system designed to streamline patient registration, queue management, medical record 
+tracking, and automated reminders. The system aimed to enhance operational efficiency by 
+reducing reliance on manual processes and providing centralized access to patient data.  
+Findings indicated that web-based management improved hospital workflow, minimized delays in  
+ patient  processing,  and  reduced  administrative  errors.  
+This study is directly relevant to the proposed system for Salaam Hospital as it demonstrates the 
+benefits of digitalizing patient admission and record management processes. By adopting a similar 
+web- and mobile-based approach, Salaam Hospital can reduce manual errors, improve coordination 
+among staff, and provide faster access to patient information.  
+  
+2.2.2 Acceptance Model of a Hospital Information System   
+The study “Acceptance Model of a Hospital Information System” by Tung et al. (2016) examined 
+factors influencing the adoption of Hospital Information Systems (HIS) among hospital staff, 
+focusing on technological, human, and organizational determinants. Usi ng survey and case study 
+methods, the research found that staff engagement, ease of use, and perceived usefulness 
+significantly impacted HIS acceptance.  
+This research highlights that user acceptance is as important as technical design. For Salaam  
+Hospital, ensuring that doctors, nurses, and administrative staff find the system easy and beneficial  
+to use will determine its success. The proposed system should prioritize usability and stakeholder 
+involvement to encourage adoption and maximize its operational impact.   
+=== PAGE 16 ===
+11  
+  
+2.2.3 Integration of Electronic Medical Records Between Primary and Specialist Care Institutions   
+The study entitled “The Benefits of Integrating Electronic Medical Record Systems 
+Between Primary and Specialist Care Institutions” analyzed how shared and integrated EMR 
+systems influence patient referrals, medical record tracking, and coordination of care. The 
+findings revealed that EMR integration improves continuity of care by allowing healthcare 
+providers from different departments or specialties to access unified patient information. The 
+study emphasized that centralized medical records reduce redundant testing, minimize 
+information gaps, and enhance collaboration among healthcare professionals.  
+This study is relevant to the current capstone project because it supports the development of a 
+centralized hospital management system that integrates patient medical records and referral 
+information. By enabling seamless access to patient data across departments, the proposed system 
+improves referral efficiency, enhances coordination between specialist doctors and other healthcare 
+staff, and supports effective hospital service delivery.  
+  
+2.2.4 Improving the Inpatient Referral System in Acute Medical Care   
+The article “Improving the inpatient referral system in the acute medical setting” focused 
+on an electronic referral system designed to replace traditional paper -based referral processes for 
+all medical specialties. The findings revealed that the system fa cilitated faster submission of 
+referrals, better data accuracy, reduced paperwork, and improved shared access to referral 
+information across departments. Users also reported a reduction in errors and enhanced overall 
+workflow as compared to manual referral tracking.  
+This study supports the rationale for your project by highlighting that electronic referral systems 
+streamline internal hospital referrals — a core component of your proposed system for Salaam 
+=== PAGE 17 ===
+12  
+  
+Hospital. By digitizing referral forms and automating communication between departments, your 
+system can achieve similar improvements in accuracy, speed, and coordination of patient care.  
+  
+2.2.5 Real-Life Implementation and Evaluation of an Electronic Referral System   
+A study titled “Real Life Implementation and Evaluation of the e-Referral System 
+SIPILINK” examined the deployment and early outcomes of an electronic referral platform 
+designed to streamline intra-hospital referral workflows, enhance communication among clinical 
+staff within the same hospital, and improve patient care pathways. The research found that 
+SIPILINK significantly improved the efficiency of the referral process by enabling faster 
+communication between physicians and specialists, reducing delays in internal care coordination. 
+The system also demonstrated effectiveness in supporting direct admissions within the hospital by 
+facilitating rapid acceptance and processing of internal specialist referrals.  
+This study is particularly relevant to the proposed Hospital Management and Admission 
+System for Salaam Hospital because it validates the practical advantages of implementing a 
+hospital-based electronic referral system in real clinical settings. The findings demonstrate how 
+digital referral features can improve communication and coordination among departments and 
+healthcare providers within a single hospital, reduce waiting times, minimize miscommunication, 
+and enhance overall operational efficiency in managing internal referrals and admissions.  
+2.2.6 Lessons from a Web-Based Referral System for Acute Neurosurgical Referrals   
+The article “Lessons from a Web-Based Referral System for Acute Neurosurgical 
+Referrals. Part 1: System Features and Evaluation” examined the implementation and evaluation 
+of a web-based electronic referral system designed to replace informal paper-based referral 
+processes within a single hospital, particularly among departments referring patients to the 
+neurosurgical unit. The system was developed to support intra-hospital specialist referrals, 
+=== PAGE 18 ===
+13  
+  
+enabling physicians from different departments within the same hospital to electronically submit 
+and track neurosurgical referral requests.  
+The study found that transitioning to an electronic referral platform resulted in more 
+organized and searchable referral records, improved documentation quality, and reduced reliance 
+on incomplete or illegible paper referrals. The system provided a centralized database where each 
+internal referral contained detailed patient information and timestamps, thereby improving 
+communication, traceability, and coordination among hospital departments involved in the 
+referral process.  
+This study supports the objectives of the proposed Hospital Management and Admission System 
+for Salaam Hospital by demonstrating the effectiveness of a hospital-based digital referral 
+workflow. By centralizing referral data and automating communication within the hospital, the 
+system can reduce documentation errors, improve response times, and enhance coordination 
+among in-house specialists. These outcomes align with the proposed system’s goals of 
+streamlining internal referral processes, improving patient management, and increasing overall 
+operational efficiency.  
+2.3 Review of Related Systems  
+   2.3.1 Integrated Hospital Operations and Management Information System(iHOMIS)  
+ The Integrated Hospital Operations and Management Information System (iHOMIS) was 
+developed by the Department of Health (DOH), Philippines, to modernize hospital operations and 
+optimize healthcare service delivery in public hospitals. Its main objective is to digitally centralize 
+hospital processes such as patient admission, registration, billing, laboratory management, 
+pharmacy coordination, and medical record maintenance. By doing so, the system allows healthcare 
+staff to access real-time patient information, track the status of admissions, and make data -driven 
+decisions efficiently. iHOMIS operates through a centralized database that integrates multiple 
+=== PAGE 19 ===
+14  
+  
+modules, including admission and registration which collects patient personal information, assigns 
+beds, and schedules treatments; medical record management which maintains electronic health 
+records including past consultations, lab results, and referral history; billing and PhilHealth claims 
+processing which automates fee computation, payment tracking, and insurance documentation; and 
+reporting and analytics which generates operational and clinical reports to support hospital 
+management and government comp liance. The system has been implemented in several DOH 
+public hospitals, improving operational efficiency, reducing human errors caused by manual 
+documentation, and facilitating timely patient care. It is widely used by hospital administrators, 
+doctors, nurses, and clerical staff, making it an essential tool for public hospital operations. This 
+system is highly relevant to the capstone project because it exemplifies the integration of patient 
+admission and history tracking in a centralized platform. The pro posed Web and Mobile -Based 
+Hospital Management System builds upon these concepts, providing web and mobile accessibility, 
+real-time updates, and a user-friendly interface for tracking patient records and admissions  
+efficiently.  
+ 
+
+=== PAGE 20 ===
+15  
+  
+Figure 2.1: Integrated Hospital Operations and Management Information System(iHOMIS)  
+2.3.2 CNR Software Systems  
+The CNR Software Systems developed the Appoluz Hospital Information System (HIS) 
+and Electronic Medical Records (EMR) to automate hospital operations and improve the efficiency 
+of patient care in Philippine health facilities. Its primary purpose is to stre amline workflows, 
+including patient registration, admissions, medical records management, laboratory and radiology 
+processes, pharmacy inventory, and billing, thereby reducing manual paperwork and minimizing 
+errors. The system was designed as a comprehensi ve digital platform that integrates all major 
+hospital departments and supports real -time data management. Patients’ medical information is 
+digitized through EMR, allowing doctors and nurses to access historical records, vital signs, 
+diagnoses, and e-prescriptions easily. The system also supports ICD-10 coding, automated billing, 
+and PhilHealth or HMO processing to ensure regulatory compliance and accurate documentation. 
+CNR Software Systems developed the platform locally in the Philippines, focusing on costeffective 
+solutions accessible to hospitals of various sizes. The Appoluz HIS incorporates features such as 
+smart pharmacy inventory, laboratory and radiology result management, patient queuing, and 
+financial reporting modules. It is DOH -accredited, which ensures that it meets national standards 
+for e-health systems. Many hospitals and clinics in the Philippines, including Clinica  
+Antipolo, Soriano -Leyble Medical and Maternity Hospital, St. Therese Hospital, San Isidro 
+Hospital, and Taytay Maternity and Child Care Center, have implemented the system. Reported 
+benefits include improved workflow efficiency, reduced paperwork, better c oordination among 
+departments, accurate and faster billing, and streamlined access to patient information. The system 
+allows hospital staff to monitor patient progress, track laboratory and pharmacy usage, and maintain 
+a centralized database for easier dec ision-making. While there is no formal peer -reviewed study 
+quantifying its impact, the adoption of Appoluz HIS has reportedly enhanced operational efficiency, 
+improved documentation, and supported hospitals in providing more organized and reliable patient 
+care.  
