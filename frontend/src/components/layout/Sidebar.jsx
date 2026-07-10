@@ -9,13 +9,15 @@ import { ROLE_LABELS } from '../../utils/constants';
 import logo from '../../assets/logo.png';
 import './Sidebar.css';
 
+// Admins are oversight-only: no clinical pages (Patients, Triage, Referrals,
+// Admissions) — those routes are also blocked in AppRouter and on the backend.
 const NAV_ITEMS = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard'       },
-  { to: '/patients',      icon: Users,           label: 'Patients'        },
-  { to: '/triage',        icon: Siren,           label: 'Triage'           },
-  { to: '/referrals',     icon: Repeat,          label: 'Referrals',       roles: ['doctor', 'admin'] },
+  { to: '/patients',      icon: Users,           label: 'Patients',        roles: ['doctor', 'nurse', 'staff'] },
+  { to: '/triage',        icon: Siren,           label: 'Triage',          roles: ['doctor', 'nurse', 'staff'] },
+  { to: '/referrals',     icon: Repeat,          label: 'Referrals',       roles: ['doctor'] },
   // For doctors, Admissions is their merged "My Patients" page (Current + History tabs)
-  { to: '/admissions',    icon: BedDouble,       label: 'Admissions',      doctorLabel: 'My Patients' },
+  { to: '/admissions',    icon: BedDouble,       label: 'Admissions',      doctorLabel: 'My Patients', roles: ['doctor', 'nurse', 'staff'] },
   // Room grid is for admin/nurse/staff only — doctors use "My Patients" instead
   { to: '/rooms',         icon: DoorOpen,        label: 'Rooms',           roles: ['admin', 'nurse', 'staff'] },
   { to: '/notifications', icon: Bell,            label: 'Notifications'    },
@@ -27,12 +29,13 @@ const NAV_ITEMS = [
 
 const ITEM_BY_PATH = Object.fromEntries(NAV_ITEMS.map((i) => [i.to, i]));
 
-// Admins get a grouped nav so the clinical data flow reads top-to-bottom,
-// with administrative tools separated out. Dashboard stays ungrouped on top.
+// Admins get a grouped oversight nav. Dashboard stays ungrouped on top;
+// Oversight = read-only visibility (rooms grid, reports, audit trail),
+// Administration = account/system management.
 const ADMIN_SECTIONS = [
   { header: null,             paths: ['/dashboard'] },
-  { header: 'Clinical Flow',  paths: ['/patients', '/triage', '/referrals', '/admissions', '/rooms'] },
-  { header: 'Administration', paths: ['/reports', '/users', '/audit', '/notifications', '/profile'] },
+  { header: 'Oversight',      paths: ['/rooms', '/reports', '/audit'] },
+  { header: 'Administration', paths: ['/users', '/notifications', '/profile'] },
 ];
 
 const Sidebar = ({ collapsed, onClose, mobileOpen }) => {

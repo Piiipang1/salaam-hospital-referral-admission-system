@@ -15,34 +15,33 @@ import './DashboardPage.css';
 
 // ── Admin workflow stepper ─────────────────────────────────────────────────
 // Registration → Triage → Diagnosis → Referral → Admission → Discharge. Each
-// step shows a live count and clicks through to its page with a filter applied.
+// step shows a live aggregate count. Read-only: admins are oversight-only and
+// have no access to the clinical pages behind these numbers.
 const WORKFLOW_STEPS = [
-  { key: 'registration', label: 'Registration', icon: UserPlus,    statKey: 'patients_today',          caption: 'registered today', to: '/patients',   params: { registered: 'today' } },
-  { key: 'triage',       label: 'Triage',       icon: Siren,       statKey: 'todays_triages',          caption: 'triaged today',    to: '/triage',     params: { date: 'today' } },
-  { key: 'diagnosis',    label: 'Diagnosis',    icon: Stethoscope, statKey: 'todays_diagnoses',        caption: 'diagnosed today',  to: '/patients',   params: {} },
-  { key: 'referral',     label: 'Referral',     icon: Repeat,      statKey: 'pending_referrals',       caption: 'pending',          to: '/referrals',  params: { status: 'Pending' } },
-  { key: 'admission',    label: 'Admission',    icon: BedDouble,   statKey: 'pending_room_admissions', caption: 'awaiting room',    to: '/admissions', params: { status: 'Pending Room' } },
-  { key: 'discharge',    label: 'Discharge',    icon: DoorOpen,    statKey: 'pending_discharges',      caption: 'pending',          to: '/admissions', params: { status: 'Pending Discharge' } },
+  { key: 'registration', label: 'Registration', icon: UserPlus,    statKey: 'patients_today',          caption: 'registered today' },
+  { key: 'triage',       label: 'Triage',       icon: Siren,       statKey: 'todays_triages',          caption: 'triaged today'    },
+  { key: 'diagnosis',    label: 'Diagnosis',    icon: Stethoscope, statKey: 'todays_diagnoses',        caption: 'diagnosed today'  },
+  { key: 'referral',     label: 'Referral',     icon: Repeat,      statKey: 'pending_referrals',       caption: 'pending'          },
+  { key: 'admission',    label: 'Admission',    icon: BedDouble,   statKey: 'pending_room_admissions', caption: 'awaiting room'    },
+  { key: 'discharge',    label: 'Discharge',    icon: DoorOpen,    statKey: 'pending_discharges',      caption: 'pending'          },
 ];
 
-const WorkflowStepper = ({ stats, navigate }) => (
+const WorkflowStepper = ({ stats }) => (
   <section className="workflow-stepper" aria-label="Patient workflow overview">
     {WORKFLOW_STEPS.map((step, i) => {
       const Icon = step.icon;
       const count = stats?.[step.statKey] ?? 0;
-      const qs = new URLSearchParams(step.params).toString();
       return (
         <div className="workflow-step-wrap" key={step.key}>
-          <button
-            className="workflow-step"
-            onClick={() => navigate(step.to + (qs ? `?${qs}` : ''))}
-            title={`View ${step.label.toLowerCase()} — ${count} ${step.caption}`}
+          <div
+            className="workflow-step workflow-step--static"
+            title={`${count} ${step.caption}`}
           >
             <span className="workflow-step__icon"><Icon size={18} /></span>
             <span className="workflow-step__count">{count}</span>
             <span className="workflow-step__label">{step.label}</span>
             <span className="workflow-step__caption">{step.caption}</span>
-          </button>
+          </div>
           {i < WORKFLOW_STEPS.length - 1 && (
             <span className="workflow-step__arrow" aria-hidden="true"><ChevronRight size={18} /></span>
           )}
@@ -303,10 +302,16 @@ const DashboardPage = () => {
       setLoadStat(false);
     }
 
-    getDashboardRecentActivity()
-      .then((r) => { if (r.success) setActivity(r.data); })
-      .catch(() => {}) // non-critical — don't surface this error
-      .finally(() => setLoadAct(false));
+    // Admins are oversight-only — no row-level clinical activity feed
+    // (the backend returns empty lists for them anyway).
+    if (role !== 'admin') {
+      getDashboardRecentActivity()
+        .then((r) => { if (r.success) setActivity(r.data); })
+        .catch(() => {}) // non-critical — don't surface this error
+        .finally(() => setLoadAct(false));
+    } else {
+      setLoadAct(false);
+    }
 
     getDashboardMyStats()
       .then((r) => { if (r.success) { setMyData(r.data); setLastUpdated(new Date()); } })
@@ -380,19 +385,21 @@ const DashboardPage = () => {
       {role === 'admin' && (
         <>
           <h3 className="workflow-heading">Patient Workflow</h3>
-          <WorkflowStepper stats={stats} navigate={navigate} />
+          <WorkflowStepper stats={stats} />
         </>
       )}
 
       {/* ── Stat cards — admin sees all 6; others see summary ── */}
+      {/* Admin cards are read-only aggregates (oversight) — only Rooms, which
+          admin can actually open, navigates. */}
       <div className="dashboard-grid">
         {role === 'admin' && <>
-          <StatCard icon={Users}      label="Total Patients"    value={stats?.total_patients    ?? 0} color="info"    onClick={() => navigate('/patients')}   />
-          <StatCard icon={Building2}  label="Active Admissions" value={stats?.active_admissions  ?? 0} color="primary" onClick={() => navigate('/admissions')}  />
-          <StatCard icon={BedDouble}  label="Available Rooms"   value={stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')}       />
-          <StatCard icon={Repeat}     label="Pending Referrals" value={stats?.pending_referrals  ?? 0} color="warning" onClick={() => navigate('/referrals')}   />
-          <StatCard icon={Siren}      label="Today's Triages"   value={stats?.todays_triages     ?? 0} color="danger"  onClick={() => navigate('/triage')}      />
-          <StatCard icon={Users}      label="Active Doctors"   value={stats?.total_doctors      ?? 0} color="info"                                            />
+          <StatCard icon={Users}      label="Total Patients"    value={stats?.total_patients    ?? 0} color="info"    />
+          <StatCard icon={Building2}  label="Active Admissions" value={stats?.active_admissions  ?? 0} color="primary" />
+          <StatCard icon={BedDouble}  label="Available Rooms"   value={stats?.available_rooms    ?? 0} color="success" onClick={() => navigate('/rooms')} />
+          <StatCard icon={Repeat}     label="Pending Referrals" value={stats?.pending_referrals  ?? 0} color="warning" />
+          <StatCard icon={Siren}      label="Today's Triages"   value={stats?.todays_triages     ?? 0} color="danger"  />
+          <StatCard icon={Users}      label="Active Doctors"   value={stats?.total_doctors      ?? 0} color="info"    />
         </>}
 
         {role === 'doctor' && <>
@@ -416,7 +423,8 @@ const DashboardPage = () => {
         <NurseStaffPanel myData={myData} loading={loadMy} navigate={navigate} />
       )}
 
-      {/* ── Recent Activity (all roles) ── */}
+      {/* ── Recent Activity (clinical roles only — admins see aggregates above) ── */}
+      {role !== 'admin' && (
       <section className="activity-section">
         <h3 className="activity-section__heading">Recent Activity</h3>
         <div className="activity-grid">
@@ -440,8 +448,8 @@ const DashboardPage = () => {
               </button>
             )}
           />
-          {/* Referrals are clinical — hidden from nurse/staff */}
-          {(role === 'doctor' || role === 'admin') && (
+          {/* Referrals are clinical — doctors only */}
+          {role === 'doctor' && (
             <ActivityPanel
               title="Recent Referrals" icon={<Repeat size={18} />} loading={loadAct}
               items={recentReferrals} emptyMsg="No referrals recorded yet."
@@ -465,10 +473,13 @@ const DashboardPage = () => {
           )}
         </div>
       </section>
+      )}
 
       <div className="dashboard-footer">
         <p className="text-muted text-sm">
-          Stats refresh on page load · Click any card or activity item to navigate.
+          {role === 'admin'
+            ? 'Aggregate counts refresh automatically · Detailed clinical records are available to clinical staff only.'
+            : 'Stats refresh on page load · Click any card or activity item to navigate.'}
         </p>
       </div>
     </div>

@@ -59,19 +59,57 @@ const AppRouter = () => {
 
           {/* All roles */}
           <Route path="dashboard"     element={<DashboardPage />} />
-          <Route path="patients"      element={<PatientsPage />} />
-          <Route path="patients/:id"  element={<PatientDetailPage />} />
-          <Route path="triage"        element={<TriagePage />} />
-          <Route path="triage/:id"    element={<TriageDetailPage />} />
+
+          {/* Clinical pages — admins are oversight-only and have no access */}
+          <Route
+            path="patients"
+            element={
+              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+                <PatientsPage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="patients/:id"
+            element={
+              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+                <PatientDetailPage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="triage"
+            element={
+              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+                <TriagePage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="triage/:id"
+            element={
+              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+                <TriageDetailPage />
+              </RoleRoute>
+            }
+          />
           <Route
             path="referrals"
             element={
-              <RoleRoute roles={['doctor', 'admin']}>
+              <RoleRoute roles={['doctor']}>
                 <ReferralsPage />
               </RoleRoute>
             }
           />
-          <Route path="admissions"    element={<AdmissionsPage />} />
+          <Route
+            path="admissions"
+            element={
+              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+                <AdmissionsPage />
+              </RoleRoute>
+            }
+          />
+
           <Route path="rooms"         element={<RoomsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="profile"       element={<ProfilePage />} />

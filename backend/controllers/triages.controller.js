@@ -517,7 +517,7 @@ const getVisitRoomOptions = async (req, res) => {
 
 // PUT /api/triages/:id/assign-doctor
 // ER-coordinator power: set (or change) the attending doctor for a triage's
-// patient by writing doctor_in_charge. Allowed for admin or a live-checked
+// patient by writing doctor_in_charge. Allowed only for a live-checked
 // Doctor-in-Charge. Once assigned, the patient leaves the unassigned pool.
 const assignTriageDoctor = async (req, res) => {
   const { doctor_id } = req.body;
@@ -527,8 +527,7 @@ const assignTriageDoctor = async (req, res) => {
   }
 
   try {
-    const allowed = req.user.role === 'admin'
-      || (req.user.role === 'doctor' && await isDoctorInCharge(req.user.user_id));
+    const allowed = req.user.role === 'doctor' && await isDoctorInCharge(req.user.user_id);
     if (!allowed) {
       return res.status(403).json({ success: false, message: 'Doctor-in-Charge mode required.' });
     }

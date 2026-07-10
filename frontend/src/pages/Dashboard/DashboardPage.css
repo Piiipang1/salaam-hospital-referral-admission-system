@@ -331,6 +331,14 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, .06);
   transform: translateY(-1px);
 }
+/* Read-only variant — admin oversight tiles are not links */
+.workflow-step--static,
+.workflow-step--static:hover {
+  cursor: default;
+  border-color: var(--color-border);
+  box-shadow: none;
+  transform: none;
+}
 .workflow-step__icon  { color: var(--color-primary); display: inline-flex; }
 .workflow-step__count { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
 .workflow-step__label { font-weight: 600; font-size: var(--font-size-sm); }

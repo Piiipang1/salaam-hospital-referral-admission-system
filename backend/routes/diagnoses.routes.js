@@ -8,8 +8,10 @@ const { upload }  = require('../middleware/upload');
 // POST /api/diagnoses
 router.post('/', auth, requireRole('doctor'), diagnosesController.createDiagnosis);
 
+// Diagnosis data is clinical — admins are oversight-only and have no access.
+
 // GET /api/diagnoses/:id
-router.get('/:id', auth, diagnosesController.getDiagnosisById);
+router.get('/:id', auth, requireRole('doctor', 'nurse', 'staff'), diagnosesController.getDiagnosisById);
 
 // PUT /api/diagnoses/:id
 router.put('/:id', auth, requireRole('doctor'), diagnosesController.updateDiagnosis);
@@ -18,18 +20,18 @@ router.put('/:id', auth, requireRole('doctor'), diagnosesController.updateDiagno
 router.post('/:id/treatments', auth, requireRole('doctor'), diagnosesController.addTreatment);
 
 // GET /api/diagnoses/:id/treatments
-router.get('/:id/treatments', auth, diagnosesController.getTreatments);
+router.get('/:id/treatments', auth, requireRole('doctor', 'nurse', 'staff'), diagnosesController.getTreatments);
 
 // POST /api/diagnoses/:id/assessment
 router.post('/:id/assessment', auth, requireRole('doctor'), diagnosesController.saveAssessment);
 
 // GET /api/diagnoses/:id/assessment
-router.get('/:id/assessment', auth, diagnosesController.getAssessment);
+router.get('/:id/assessment', auth, requireRole('doctor', 'nurse', 'staff'), diagnosesController.getAssessment);
 
 // POST /api/diagnoses/:id/lab-results  (with file upload — clinical staff only)
 router.post('/:id/lab-results', auth, requireRole('doctor', 'nurse'), upload.single('file_attachment'), diagnosesController.addLabResult);
 
 // GET /api/diagnoses/:id/lab-results
-router.get('/:id/lab-results', auth, diagnosesController.getLabResults);
+router.get('/:id/lab-results', auth, requireRole('doctor', 'nurse', 'staff'), diagnosesController.getLabResults);
 
 module.exports = router;

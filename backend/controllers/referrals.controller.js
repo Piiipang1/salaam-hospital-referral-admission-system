@@ -239,19 +239,19 @@ const updateReferralStatus = async (req, res) => {
     // 2. Ownership
     //   - Accepted / Completed: only the assigned doctor (takes responsibility /
     //     finishes the consultation).
-    //   - Cancelled: only the referring doctor or an admin (the assigned doctor
-    //     never cancels; they either accept+complete or leave it).
+    //   - Cancelled: only the referring doctor (the assigned doctor never
+    //     cancels; they either accept+complete or leave it). Admins are
+    //     oversight-only and cannot touch referrals.
     const isAssignedDoctor  = req.user.role === 'doctor' && referral.assigned_doctor_id  === req.user.linked_id;
     const isReferringDoctor = req.user.role === 'doctor' && referral.referring_doctor_id === req.user.linked_id;
-    const isAdmin           = req.user.role === 'admin';
 
     if (status === 'Accepted' || status === 'Completed') {
       if (!isAssignedDoctor) {
         return res.status(403).json({ success: false, message: `Only the assigned doctor may set a referral to ${status}.` });
       }
     } else if (status === 'Cancelled') {
-      if (!isReferringDoctor && !isAdmin) {
-        return res.status(403).json({ success: false, message: 'Only the referring doctor or an admin may cancel a referral.' });
+      if (!isReferringDoctor) {
+        return res.status(403).json({ success: false, message: 'Only the referring doctor may cancel a referral.' });
       }
     }
 
@@ -346,7 +346,7 @@ const getReferralHistory = async (req, res) => {
   }
 };
 
-// PUT /api/referrals/:id/reassign — admin or Doctor-in-Charge (checked live)
+// PUT /api/referrals/:id/reassign — Doctor-in-Charge only (checked live)
 const reassignReferral = async (req, res) => {
   const { assigned_doctor_id } = req.body;
 
@@ -355,8 +355,7 @@ const reassignReferral = async (req, res) => {
   }
 
   try {
-    const allowed = req.user.role === 'admin'
-      || (req.user.role === 'doctor' && await isDoctorInCharge(req.user.user_id));
+    const allowed = req.user.role === 'doctor' && await isDoctorInCharge(req.user.user_id);
     if (!allowed) {
       return res.status(403).json({ success: false, message: 'Doctor-in-Charge mode required.' });
     }

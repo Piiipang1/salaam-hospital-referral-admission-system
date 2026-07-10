@@ -50,12 +50,22 @@ const getStats = async (req, res) => {
 // referring — same OR-scope as referrals.controller getAllReferrals so the
 // dashboard and Referrals page always show the same population); nurses see
 // activity for patients they personally registered (same activity_logs
-// pattern as patients.controller); admin/staff see hospital-wide.
+// pattern as patients.controller); staff see hospital-wide; admins get none
+// (oversight-only — aggregates via getStats).
 const getRecentActivity = async (req, res) => {
   try {
-    // Referrals are clinical — only doctors and admins ever see them. Nurses
-    // and staff receive none, matching the referral route/nav restrictions.
-    const canSeeReferrals = req.user.role === 'doctor' || req.user.role === 'admin';
+    // Admins are oversight-only: they get aggregate counts (getStats) but no
+    // row-level clinical data — no patient-named admission or referral rows.
+    if (req.user.role === 'admin') {
+      return res.status(200).json({
+        success: true,
+        data: { recent_admissions: [], recent_referrals: [] },
+      });
+    }
+
+    // Referrals are clinical — only doctors ever see them. Nurses and staff
+    // receive none, matching the referral route/nav restrictions.
+    const canSeeReferrals = req.user.role === 'doctor';
 
     let admissionWhere = '';
     let referralWhere  = '';

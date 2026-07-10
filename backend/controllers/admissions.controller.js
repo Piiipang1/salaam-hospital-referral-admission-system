@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
+const { doctorCanAccessPatient, doctorInChargeCanAccessPatient } = require('../utils/scoping');
 
 // GET /api/admissions
 const getAllAdmissions = async (req, res) => {
@@ -96,38 +97,39 @@ const getAdmissionById = async (req, res) => {
 
 // POST /api/admissions
 const createAdmission = async (req, res) => {
-  // ── Role guard: only doctors and admins may admit patients (issue #8) ────────
-  if (!['doctor', 'admin'].includes(req.user.role)) {
+  // Route guard restricts this to doctors; the check here is defense in depth.
+  if (req.user.role !== 'doctor') {
     return res.status(403).json({
       success: false,
       message: 'Only doctors may admit patients.',
     });
   }
 
-  const { patient_id, diagnosis_id, doctor_id, admission_type, admission_date } = req.body;
+  const { patient_id, diagnosis_id, admission_type, admission_date } = req.body;
 
-  // A doctor always admits as themselves (cannot spoof another doctor); an
-  // admin may admit on behalf of a doctor via doctor_id in the body.
-  const admittingDoctorId = req.user.role === 'doctor' ? req.user.linked_id : doctor_id;
+  // A doctor always admits as themselves (cannot spoof another doctor).
+  const admittingDoctorId = req.user.linked_id;
 
-  if (!patient_id || !admission_type || (req.user.role !== 'doctor' && !admittingDoctorId)) {
+  if (!patient_id || !admission_type) {
     return res.status(400).json({
       success: false,
-      message: 'patient_id, doctor_id, and admission_type are required.',
+      message: 'patient_id and admission_type are required.',
     });
   }
 
   try {
-    // ── Guard: only ER-assigned doctors may admit (fresh DB read — admins
-    // toggle the flag at runtime; admins themselves are unaffected) ───────────
-    if (req.user.role === 'doctor') {
-      const [[doc]] = await db.query(
-        'SELECT is_er_assigned FROM doctors WHERE doctor_id = ?',
-        [req.user.linked_id]
-      );
-      if (!doc?.is_er_assigned) {
-        return res.status(403).json({ success: false, message: 'Only ER-assigned doctors can admit patients.' });
-      }
+    // ── Guard: a doctor may only admit patients assigned or referred to them.
+    // A Doctor-in-Charge (live-checked, never from the JWT) may additionally
+    // admit currently-unassigned patients — that is the ER-coordinator flow
+    // for new/unidentified emergency arrivals.
+    const allowed = (await isDoctorInCharge(req.user.user_id))
+      ? await doctorInChargeCanAccessPatient(req.user.linked_id, patient_id)
+      : await doctorCanAccessPatient(req.user.linked_id, patient_id);
+    if (!allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only admit patients assigned or referred to you.',
+      });
     }
 
     // ── Fast-fail: reject if the patient already has an ongoing admission ─────
@@ -550,7 +552,7 @@ const confirmDischarge = async (req, res) => {
   }
 };
 
-// Escape hatch: a mistaken initiation returns to Active (doctor or admin).
+// Escape hatch: a mistaken initiation returns to Active (assigned doctor).
 const cancelDischarge = async (req, res) => {
   try {
     const [[adm]] = await db.query(
