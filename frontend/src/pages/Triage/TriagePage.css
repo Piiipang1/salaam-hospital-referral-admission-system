@@ -13,6 +13,7 @@
 /* ── Triage level pill group ────────────────────────────────── */
 .triage-level-pills {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
   flex-wrap: wrap;
 }
@@ -20,7 +21,8 @@
 .triage-level-pill {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-2) var(--space-4);
+  height: 38px; /* match .filter-date / .filter-clear-btn so the filter row shares one baseline */
+  padding: 0 var(--space-4);
   border-radius: var(--radius-full);
   border: 1px solid var(--color-border);
   background: transparent;
@@ -56,5 +58,5 @@
 /* ── Small mobile ≤480px ────────────────────────────────────── */
 @media (max-width: 480px) {
   .triage-level-pills { gap: var(--space-1); }
-  .triage-level-pill  { padding: var(--space-1) var(--space-3); font-size: var(--font-size-xs); }
+  .triage-level-pill  { padding: 0 var(--space-3); font-size: var(--font-size-xs); }
 }
