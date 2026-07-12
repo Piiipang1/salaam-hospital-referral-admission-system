@@ -4,16 +4,25 @@
 
 .patients-page { display: flex; flex-direction: column; gap: var(--space-5); }
 
-/* Toolbar: search bar takes all available width before filters */
+/* Toolbar: full-width search on top, one aligned filter row below */
 .patients-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.patients-toolbar .search-bar {
+  width: 100%;
+}
+.patients-filter-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
 }
-.patients-toolbar .search-bar {
-  flex: 1;
-  min-width: 200px;
+/* Sex select sizes to its content instead of stretching */
+.patients-filter-row .filter-select {
+  width: auto;
+  flex: 0 0 auto;
 }
 
 /* Pagination row */
@@ -37,8 +46,10 @@
 
 /* ── Mobile ≤767px ──────────────────────────────────────────── */
 @media (max-width: 767px) {
-  .patients-toolbar { gap: var(--space-2); }
-  .patients-toolbar .search-bar { min-width: 100%; }
+  .patients-toolbar   { gap: var(--space-2); }
+  .patients-filter-row { gap: var(--space-2); }
+  /* restore the shared full-width mobile behavior for the sex select */
+  .patients-filter-row .filter-select { width: 100%; }
   .patients-pagination { justify-content: center; }
   .patients-pagination__info {
     width: 100%;

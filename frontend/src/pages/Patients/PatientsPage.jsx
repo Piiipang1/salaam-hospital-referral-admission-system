@@ -217,6 +217,8 @@ const PatientsPage = () => {
               onChange={setSearch}
               placeholder="Search by patient name…"
             />
+            {/* Second toolbar line: all remaining filters share one baseline */}
+            <div className="patients-filter-row">
             <select
               id="patient-sex-filter"
               className="filter-select"
@@ -278,6 +280,7 @@ const PatientsPage = () => {
                 ✕ Clear
               </button>
             )}
+            </div>
           </div>
 
           {/* ── Patient list table ── */}
