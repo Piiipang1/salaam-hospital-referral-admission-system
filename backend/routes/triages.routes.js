@@ -5,7 +5,7 @@ const auth = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
 
 // POST /api/triages/emergency  — must be declared before /:id routes
-router.post('/emergency', auth, requireRole('doctor', 'nurse', 'staff'), triagesController.createEmergencyTriage);
+router.post('/emergency', auth, requireRole('nurse', 'staff'), triagesController.createEmergencyTriage);
 
 // GET /api/triages/visit-rooms/options — must also precede /:id
 router.get('/visit-rooms/options', auth, requireRole('doctor', 'nurse', 'staff'), triagesController.getVisitRoomOptions);
