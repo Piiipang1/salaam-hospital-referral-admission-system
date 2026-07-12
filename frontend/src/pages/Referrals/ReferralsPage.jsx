@@ -157,7 +157,7 @@ const ReferralsPage = () => {
     { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date) },
     { key: 'status',         label: 'Status',   render: (r) => <Badge status={r.status} /> },
     {
-      key: 'actions', label: '', width: '260px', align: 'right',
+      key: 'actions', label: '', width: '280px', align: 'right',
       render: (r) => {
         // Mirror the backend lifecycle: assigned doctor accepts/completes; the
         // referring doctor or an admin may cancel a non-terminal referral.
@@ -165,8 +165,11 @@ const ReferralsPage = () => {
         const isReferring = user?.role === 'doctor' && r.referring_doctor_id === user?.linked_id;
         const isAdmin     = user?.role === 'admin';
         const openStatus = (target) => (e) => { e.stopPropagation(); setNewStatus(target); setModal({ type:'status', referral:r }); };
+        // minWidth keeps the auto-layout table from crushing the column below
+        // two buttons per line; on narrow viewports the buttons wrap inside
+        // the cell instead of overflowing it
         return (
-          <div style={{ display:'flex', gap:'var(--space-2)', justifyContent:'flex-end', flexWrap:'wrap' }}>
+          <div style={{ display:'flex', gap:'var(--space-2)', justifyContent:'flex-end', alignItems:'center', flexWrap:'wrap', minWidth:'180px' }}>
             {isAssigned && r.status === 'Pending' && (
               <Button size="sm" variant="primary" title="Take responsibility for this patient" onClick={openStatus('Accepted')}>Accept</Button>
             )}
@@ -190,7 +193,8 @@ const ReferralsPage = () => {
     display: 'inline-flex',
     alignItems: 'center',
     gap: 'var(--space-2)',
-    padding: 'var(--space-2) var(--space-5)',
+    height: '38px', /* match .filter-date / .filter-clear-btn so the filter row shares one baseline */
+    padding: '0 var(--space-5)',
     borderRadius: 'var(--radius-full)',
     border: '1px solid var(--color-border)',
     background: 'transparent',
