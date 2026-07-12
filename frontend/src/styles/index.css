@@ -345,16 +345,18 @@ hr {
   box-shadow: 0 0 0 3px var(--color-primary-muted);
 }
 
-/* Labeled date input group — From / To */
-.filter-date-group { display: flex; flex-direction: column; gap: 2px; }
-.filter-date-label { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: 500; }
+/* Labeled date input group — From / To (label inline, left of input,
+   so the group stays one control-height tall and centers with pills) */
+.filter-date-group { display: inline-flex; align-items: center; gap: var(--space-2); }
+.filter-date-label { font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: 500; white-space: nowrap; }
 
 /* Clear-filters button — appears only when filters are active */
 .filter-clear-btn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
+  height: 38px; /* match .filter-select / .filter-date so filter rows align */
+  padding: 0 var(--space-3);
   background: none;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -382,8 +384,9 @@ hr {
 /* ── Mobile: stack filter controls full-width at ≤767px ──────── */
 @media (max-width: 767px) {
   .filter-toolbar     { gap: var(--space-2); }
-  .filter-select,
-  .filter-date        { width: 100%; height: 40px; }
+  .filter-select      { width: 100%; height: 40px; }
+  /* Date input flexes to fill its group beside the inline label */
+  .filter-date        { flex: 1; min-width: 0; height: 40px; }
 }
 
 
