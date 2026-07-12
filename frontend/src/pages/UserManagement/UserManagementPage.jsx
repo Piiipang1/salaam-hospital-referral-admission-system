@@ -206,9 +206,11 @@ const UserManagementPage = () => {
     { key:'is_active', label:'Status',  render:(r)=>r.is_active ? <Badge status="Completed" label="Active" /> : <Badge status="Cancelled" label="Inactive" /> },
     { key:'created_at',label:'Created', render:(r)=>formatDate(r.created_at), hideMobile: true },
     {
-      key:'actions', label:'', width:'230px', align:'right',
+      key:'actions', label:'', width:'300px', align:'right',
       render:(r)=>(
-        <div style={{display:'flex',gap:'var(--space-2)',justifyContent:'flex-end',flexWrap:'wrap'}}>
+        // minWidth fits the widest case (Edit / Disable DIC / Deactivate) on one
+        // line; below it the wrapper scrolls or the buttons wrap inside the cell
+        <div style={{display:'flex',gap:'var(--space-2)',justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap',minWidth:'280px'}}>
           <Button size="sm" variant="outline" onClick={(e)=>{e.stopPropagation();setModal(r);}}>Edit</Button>
           {r.role === 'doctor' && r.is_active && (
             <Button size="sm" variant={r.is_doctor_in_charge ? 'secondary' : 'outline'}
