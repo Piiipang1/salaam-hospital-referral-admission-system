@@ -169,11 +169,14 @@ const getReferralById = async (req, res) => {
               p.date_of_birth, p.sex, p.contact_number,
               CONCAT(ad.first_name, ' ', ad.last_name) AS assigned_doctor_name,
               ad.specialization,
+              CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name,
+              rd.specialization AS referring_specialization,
               diag.medical_condition
        FROM referrals r
        LEFT JOIN diagnoses diag ON r.diagnosis_id = diag.diagnosis_id
        LEFT JOIN patients p ON diag.patient_id = p.patient_id
        LEFT JOIN doctors ad ON r.assigned_doctor_id = ad.doctor_id
+       LEFT JOIN doctors rd ON r.referring_doctor_id = rd.doctor_id
        WHERE r.referral_id = ?`,
       [req.params.id]
     );
