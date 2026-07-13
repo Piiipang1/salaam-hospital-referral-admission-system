@@ -4,7 +4,6 @@ import Alert from '../ui/Alert';
 import { TRIAGE_LEVELS } from '../../utils/constants';
 import { useAuth } from '../../context/AuthContext';
 import { getActiveEmployees } from '../../api/employees.api';
-import { getActiveDoctors } from '../../api/doctors.api';
 import { getAllPatients } from '../../api/patients.api';
 import { getVisitRoomOptions } from '../../api/triages.api';
 import { patientLabel } from '../../utils/patientLabels';
@@ -17,28 +16,20 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
     notes:               initial.notes               ?? '',
     visit_room_id:       initial.visit_room_id       ?? '',
     employee_id:         initial.employee_id         ?? '',
-    assigned_doctor_id:  initial.assigned_doctor_id  ?? '',
   });
   const [error, setError] = useState('');
   const [employees,         setEmployees]         = useState([]);
   const [employeesFetching, setEmployeesFetching] = useState(true);
-  const [doctors,           setDoctors]           = useState([]);
-  const [doctorsFetching,   setDoctorsFetching]   = useState(true);
   const [patients,          setPatients]          = useState([]);
   const [visitRooms,        setVisitRooms]        = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  // Load active employees, doctors, and (standalone only) patients on mount
+  // Load active employees and (standalone only) patients on mount
   useEffect(() => {
     getActiveEmployees()
       .then((res) => { if (res.success) setEmployees(res.data); })
       .catch(() => setError('Failed to load employees list.'))
       .finally(() => setEmployeesFetching(false));
-
-    getActiveDoctors()
-      .then((res) => { if (res.success) setDoctors(res.data); })
-      .catch(() => {})
-      .finally(() => setDoctorsFetching(false));
 
     if (!patientId) {
       getAllPatients({ limit: 1000 }).then((res) => { if (res.success) setPatients(res.data); });
@@ -55,7 +46,6 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
     e.preventDefault();
     if (!patientId && !form.patient_id) { setError('Patient is required.'); return; }
     if (!form.triage_level) { setError('Triage level is required.'); return; }
-    if (!form.assigned_doctor_id) { setError('An attending doctor must be assigned.'); return; }
     setError('');
 
     if (user?.role === 'nurse' || user?.role === 'staff') {
@@ -136,18 +126,6 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
         <label htmlFor="tf-notes">Clinical Notes</label>
         <textarea id="tf-notes" value={form.notes} onChange={set('notes')} rows={4} placeholder="Describe chief complaint, initial assessment..." />
-      </div>
-
-      <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-        <label htmlFor="tf-doctor">Attending Doctor *</label>
-        <select id="tf-doctor" value={form.assigned_doctor_id} onChange={set('assigned_doctor_id')} disabled={doctorsFetching} required>
-          <option value="">— Select doctor —</option>
-          {doctors.map((d) => (
-            <option key={d.doctor_id} value={d.doctor_id}>
-              Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
-            </option>
-          ))}
-        </select>
       </div>
 
       <div className="form-actions">
