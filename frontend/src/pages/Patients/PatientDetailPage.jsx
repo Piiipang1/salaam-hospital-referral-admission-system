@@ -403,6 +403,9 @@ const PatientDetailPage = () => {
                 <Badge status={r.status} />
               </div>
               <p className="text-sm text-muted">Date: {formatDate(r.referral_date, true)}</p>
+              <p className="text-sm text-muted">
+                Referred by: {r.referring_doctor_name ? `Dr. ${r.referring_doctor_name} (${r.referring_specialization || 'General'})` : '—'}
+              </p>
               {r.assigned_doctor_name && (
                 <p className="text-sm text-muted">Assigned to: {r.assigned_doctor_name} ({r.specialization || 'General'})</p>
               )}
