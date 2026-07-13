@@ -57,18 +57,19 @@ const TriagePage = () => {
 
   // ── Emergency triage modal state ─────────────────────────────
   const [emergencyModal,  setEmergencyModal]  = useState(false);
-  const [emergencyForm,   setEmergencyForm]   = useState({ triage_level: 'Critical', notes: '', assigned_doctor_id: '' });
+  const [emergencyForm,   setEmergencyForm]   = useState({ triage_level: 'Critical', notes: '' });
   const [emergencySaving, setEmergencySaving] = useState(false);
   const [etDoctors,       setEtDoctors]       = useState([]);
   const [etDoctorsFetching, setEtDoctorsFetching] = useState(true);
 
-  // Fetch active doctors once for the emergency modal doctor dropdown
+  // Fetch active doctors for the coordinator's assign-doctor modal dropdown
   useEffect(() => {
+    if (!isCoordinator) return;
     getActiveDoctors()
       .then((r) => { if (r.success) setEtDoctors(r.data); })
       .catch(() => {})
       .finally(() => setEtDoctorsFetching(false));
-  }, []);
+  }, [isCoordinator]);
 
   // ── Data fetching ─────────────────────────────────────────────
   const load = useCallback(() => {
@@ -105,10 +106,6 @@ const TriagePage = () => {
   };
 
   const handleEmergencyTriage = async () => {
-    if (!emergencyForm.assigned_doctor_id) {
-      setError('An attending doctor must be assigned.');
-      return;
-    }
     setEmergencySaving(true);
     try {
       const result = await createEmergencyTriage(emergencyForm);
@@ -190,7 +187,7 @@ const TriagePage = () => {
           {canEmergencyTriage(user?.role) && (
             <Button
               variant="danger"
-              onClick={() => { setEmergencyForm({ triage_level: 'Critical', notes: '', assigned_doctor_id: '' }); setEmergencyModal(true); }}
+              onClick={() => { setEmergencyForm({ triage_level: 'Critical', notes: '' }); setEmergencyModal(true); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
             >
               <Siren size={16} /> Emergency Triage
@@ -345,23 +342,6 @@ const TriagePage = () => {
             onChange={(e) => setEmergencyForm((f) => ({ ...f, notes: e.target.value }))}
             placeholder="Describe presenting complaint or condition…"
           />
-        </div>
-        <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-          <label htmlFor="et-doctor">Attending Doctor *</label>
-          <select
-            id="et-doctor"
-            value={emergencyForm.assigned_doctor_id}
-            onChange={(e) => setEmergencyForm((f) => ({ ...f, assigned_doctor_id: e.target.value }))}
-            disabled={etDoctorsFetching}
-            required
-          >
-            <option value="">— Select doctor —</option>
-            {etDoctors.map((d) => (
-              <option key={d.doctor_id} value={d.doctor_id}>
-                Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
-              </option>
-            ))}
-          </select>
         </div>
         <div className="form-actions">
           <Button type="button" variant="secondary" onClick={() => setEmergencyModal(false)}>Cancel</Button>
