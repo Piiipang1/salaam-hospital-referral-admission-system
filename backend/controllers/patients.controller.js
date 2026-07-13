@@ -2,6 +2,20 @@ const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
 const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition } = require('../utils/scoping');
 
+// Philippine mobile number — exactly 11 digits starting with 09. Both phone
+// fields are optional; only non-empty values are validated. Mirrors the
+// frontend check in frontend/src/utils/validators.js — never trust the client.
+const PH_MOBILE_REGEX = /^09\d{9}$/;
+const validatePhoneFields = ({ contact_number, emergency_contact_number }) => {
+  if (contact_number && !PH_MOBILE_REGEX.test(contact_number)) {
+    return 'Contact number must be 11 digits starting with 09 (e.g., 09171234567).';
+  }
+  if (emergency_contact_number && !PH_MOBILE_REGEX.test(emergency_contact_number)) {
+    return 'Emergency contact number must be 11 digits starting with 09 (e.g., 09171234567).';
+  }
+  return null;
+};
+
 // GET /api/patients
 const getAllPatients = async (req, res) => {
   const { search, sex, from_date, to_date, page = 1, limit = 20 } = req.query;
@@ -234,9 +248,12 @@ const getPatientHistory = async (req, res) => {
 
     const [referrals] = await db.query(
       `SELECT r.*, CONCAT(d.first_name, ' ', d.last_name) AS assigned_doctor_name,
-              d.specialization
+              d.specialization,
+              CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name,
+              rd.specialization AS referring_specialization
        FROM referrals r
        LEFT JOIN doctors d ON r.assigned_doctor_id = d.doctor_id
+       LEFT JOIN doctors rd ON r.referring_doctor_id = rd.doctor_id
        WHERE r.diagnosis_id IN (SELECT diagnosis_id FROM diagnoses WHERE patient_id = ?)
        ORDER BY r.referral_date DESC`,
       [id]
@@ -274,6 +291,11 @@ const createPatient = async (req, res) => {
   // emergency patients (createEmergencyTriage) — not user-selectable.
   if (sex !== 'Male' && sex !== 'Female') {
     return res.status(400).json({ success: false, message: 'Sex must be Male or Female.' });
+  }
+
+  const phoneError = validatePhoneFields({ contact_number, emergency_contact_number });
+  if (phoneError) {
+    return res.status(400).json({ success: false, message: phoneError });
   }
 
   if (date_of_birth) {
@@ -347,6 +369,11 @@ const updatePatient = async (req, res) => {
   // for the COALESCE partial-update pattern below.
   if (sex != null && sex !== 'Male' && sex !== 'Female') {
     return res.status(400).json({ success: false, message: 'Sex must be Male or Female.' });
+  }
+
+  const phoneError = validatePhoneFields({ contact_number, emergency_contact_number });
+  if (phoneError) {
+    return res.status(400).json({ success: false, message: phoneError });
   }
 
   // When completing registration of an unidentified patient, the real identity
