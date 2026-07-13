@@ -148,6 +148,13 @@ const ReferralsPage = () => {
   const columns = [
     { key: 'patient_name',   label: 'Patient'   },
     { key: 'medical_condition', label: 'Condition', hideMobile: true, render: (r) => <span className="truncate" style={{ maxWidth:'200px', display:'block' }}>{r.medical_condition ?? '—'}</span> },
+    { key: 'referring_doctor_name', label: 'Referred By', hideMobile: true, render: (r) => {
+        // "You" makes incoming vs outgoing referrals obvious at a glance
+        if (user?.role === 'doctor' && r.referring_doctor_id === user?.linked_id) {
+          return <span style={{ fontWeight: 600 }}>You</span>;
+        }
+        return r.referring_doctor_name ? `Dr. ${r.referring_doctor_name}` : '—';
+      } },
     { key: 'assigned_doctor_name', label: 'Assigned To', render: (r) => r.assigned_doctor_name
         ? <span style={{ display:'flex', flexDirection:'column' }}>
             <span>{r.assigned_doctor_name}</span>
