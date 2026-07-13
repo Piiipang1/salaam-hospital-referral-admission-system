@@ -4,6 +4,7 @@ import Alert from '../ui/Alert';
 import PhilippineAddressPicker from './PhilippineAddressPicker';
 import { PATIENT_SEX } from '../../utils/constants';
 import { toInputDate } from '../../utils/formatDate';
+import { isValidPHMobile, sanitizePHMobileInput } from '../../utils/validators';
 
 const PatientForm = ({ initial = {}, onSubmit, loading }) => {
   const [form, setForm] = useState({
@@ -22,6 +23,8 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
   const [addressError, setAddressError] = useState('');
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  // Phone fields accept digits only and cap at 11 as the user types/pastes
+  const setPhone = (k) => (e) => setForm((f) => ({ ...f, [k]: sanitizePHMobileInput(e.target.value) }));
 
   // Fires only on user interaction with the picker, so opening an edit modal
   // and saving without touching the address preserves the stored string.
@@ -44,6 +47,15 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
     }
     if (addressError) {
       setError(addressError);
+      return;
+    }
+    // Both phone fields are optional, but a non-empty value must be a valid PH mobile
+    if (form.contact_number && !isValidPHMobile(form.contact_number)) {
+      setError('Contact number must be 11 digits starting with 09 (e.g., 09171234567).');
+      return;
+    }
+    if (form.emergency_contact_number && !isValidPHMobile(form.emergency_contact_number)) {
+      setError('Emergency contact number must be 11 digits starting with 09 (e.g., 09171234567).');
       return;
     }
     setError('');
@@ -81,7 +93,9 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
         <label htmlFor="pf-contact">Contact Number</label>
-        <input id="pf-contact" value={form.contact_number} onChange={set('contact_number')} placeholder="09XX XXX XXXX" />
+        {/* No native maxLength: it would truncate formatted pastes like "0912-345-6789"
+            before sanitizePHMobileInput can strip the separators — the sanitizer caps at 11 */}
+        <input id="pf-contact" value={form.contact_number} onChange={setPhone('contact_number')} placeholder="09XX XXX XXXX" inputMode="numeric" />
       </div>
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
@@ -95,7 +109,7 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
         </div>
         <div className="form-group">
           <label htmlFor="pf-ecnum">Emergency Contact Number</label>
-          <input id="pf-ecnum" value={form.emergency_contact_number} onChange={set('emergency_contact_number')} placeholder="09XX XXX XXXX" />
+          <input id="pf-ecnum" value={form.emergency_contact_number} onChange={setPhone('emergency_contact_number')} placeholder="09XX XXX XXXX" inputMode="numeric" />
         </div>
       </div>
 
