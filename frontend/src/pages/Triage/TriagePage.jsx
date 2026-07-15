@@ -27,9 +27,13 @@ const TriagePage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // ER coordinator = admin or a Doctor-in-Charge. Gets the "Unassigned" filter
-  // and the "Assign doctor" action. Backend enforces the real permission.
+  // ER coordinator = admin or a Doctor-in-Charge. Gets read visibility of
+  // assignment state and the "Unassigned only" filter.
   const isCoordinator = user?.role === 'admin' || (user?.role === 'doctor' && !!user?.is_doctor_in_charge);
+
+  // Only a DIC can actually assign/reassign — assignTriageDoctor 403s admins
+  // ("Doctor-in-Charge mode required"), so admins must not see the button.
+  const canAssignDoctor = user?.role === 'doctor' && !!user?.is_doctor_in_charge;
 
   // Pre-apply a filter from the admin workflow stepper (?date=today)
   const [searchParams] = useSearchParams();
@@ -152,22 +156,45 @@ const TriagePage = () => {
         </span>
       ),
     },
-    { key: 'actions', label: '', width: isCoordinator ? '180px' : '80px', align: 'right',
-      render: (r) => (
-        <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-          {isCoordinator && (
-            <Button size="sm" variant="outline"
-              title="Assign or change the attending doctor"
-              onClick={(e) => { e.stopPropagation(); setAssignDoctorId(''); setAssignTarget(r); }}>
-              Assign doctor
+    { key: 'actions', label: '', width: isCoordinator ? '220px' : '80px', align: 'right',
+      render: (r) => {
+        const openAssign = (e) => { e.stopPropagation(); setAssignDoctorId(''); setAssignTarget(r); };
+        return (
+          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', alignItems: 'center' }}>
+            {/* Coordinators (admin + DIC) see assignment state. Only a DIC gets
+                the actionable button; admins see read-only labels. */}
+            {isCoordinator && (
+              r.attending_doctor_id ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                  <span style={{ color: 'var(--color-text-muted)' }}>
+                    {r.attending_doctor_id === user?.linked_id ? 'You (attending)' : (r.attending_doctor_name || 'Assigned')}
+                  </span>
+                  {canAssignDoctor && (
+                    <button
+                      onClick={openAssign}
+                      title="Reassign the attending doctor"
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                               color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
+                    >
+                      Reassign
+                    </button>
+                  )}
+                </span>
+              ) : canAssignDoctor ? (
+                <Button size="sm" variant="outline" title="Assign the attending doctor" onClick={openAssign}>
+                  Assign doctor
+                </Button>
+              ) : (
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>Unassigned</span>
+              )
+            )}
+            <Button size="sm" variant="ghost"
+              onClick={(e) => { e.stopPropagation(); navigate(`/triage/${r.triage_id}`); }}>
+              View
             </Button>
-          )}
-          <Button size="sm" variant="ghost"
-            onClick={(e) => { e.stopPropagation(); navigate(`/triage/${r.triage_id}`); }}>
-            View
-          </Button>
-        </div>
-      ),
+          </div>
+        );
+      },
     },
   ];
 
