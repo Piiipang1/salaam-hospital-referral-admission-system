@@ -424,7 +424,7 @@ const PatientDetailPage = () => {
                 Referred by: {r.referring_doctor_name ? `Dr. ${r.referring_doctor_name} (${r.referring_specialization || 'General'})` : '—'}
               </p>
               {r.assigned_doctor_name && (
-                <p className="text-sm text-muted">Assigned to: {r.assigned_doctor_name} ({r.specialization || 'General'})</p>
+                <p className="text-sm text-muted">Refer to: {r.assigned_doctor_name} ({r.specialization || 'General'})</p>
               )}
               {r.medical_condition && (
                 <p className="text-sm text-muted">Condition: {r.medical_condition}</p>

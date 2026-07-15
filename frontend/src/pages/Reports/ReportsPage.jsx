@@ -173,7 +173,7 @@ const admColumns = [
 const refColumns = [
   { key:'patient_name',         label:'Patient'    },
   { key:'medical_condition',    label:'Condition'  },
-  { key:'assigned_doctor_name', label:'Assigned To'},
+  { key:'assigned_doctor_name', label:'Refer To'},
   { key:'specialization',       label:'Specialty'  },
   { key:'referral_date',        label:'Date',      render:(r)=>formatDate(r.referral_date) },
   { key:'status',               label:'Status',    render:(r)=><Badge status={r.status} /> },

@@ -47,6 +47,14 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
   const diagnosisOptions = standalone ? patientDiagnoses : diagnoses;
   const selfDoctor = doctors.find((d) => d.doctor_id === user?.linked_id);
 
+  // A referral must go to a DIFFERENT doctor, so hide the impossible option from
+  // "Refer To": a doctor's own id, or (for an admin) whoever is selected in
+  // "Referred By". Backend enforces this too — the filter is just UX.
+  const excludedReferToId = user?.role === 'doctor'
+    ? user?.linked_id
+    : (form.referring_doctor_id !== '' ? Number(form.referring_doctor_id) : null);
+  const referToDoctors = doctors.filter((d) => Number(d.doctor_id) !== Number(excludedReferToId));
+
   const fileRef     = useRef(null);
   const canvasRef   = useRef(null);
   const drawingRef  = useRef(false);
@@ -257,15 +265,32 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
       {/* Referring doctor — a doctor is always their own referrer; only admin can pick one */}
       {user?.role === 'doctor' ? (
         <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-          <label htmlFor="rf-refdr">Referring Doctor</label>
+          <label htmlFor="rf-refdr">Referred By</label>
           <span id="rf-refdr" className="text-sm">
             {selfDoctor ? `Dr. ${selfDoctor.first_name} ${selfDoctor.last_name} (You)` : 'Loading...'}
           </span>
         </div>
       ) : (
         <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-          <label htmlFor="rf-refdr">Referring Doctor</label>
-          <select id="rf-refdr" value={form.referring_doctor_id} onChange={set('referring_doctor_id')}>
+          <label htmlFor="rf-refdr">Referred By</label>
+          <select
+            id="rf-refdr"
+            value={form.referring_doctor_id}
+            onChange={(e) => {
+              // Admin edge case: if the new referrer is already selected in
+              // "Refer To", clear it so the two can never be equal (the option
+              // filter alone would leave a stale value behind).
+              const newReferrer = e.target.value;
+              setForm((f) => ({
+                ...f,
+                referring_doctor_id: newReferrer,
+                assigned_doctor_id:
+                  newReferrer !== '' && Number(f.assigned_doctor_id) === Number(newReferrer)
+                    ? ''
+                    : f.assigned_doctor_id,
+              }));
+            }}
+          >
             <option value="">— None / Unknown —</option>
             {doctors.map((d) => (
               <option key={d.doctor_id} value={d.doctor_id}>
@@ -276,12 +301,12 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
         </div>
       )}
 
-      {/* Assigned doctor */}
+      {/* Refer To — the doctor who receives the referral (must differ from Referred By) */}
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-        <label htmlFor="rf-assdr">Assigned Doctor *</label>
+        <label htmlFor="rf-assdr">Refer To *</label>
         <select id="rf-assdr" value={form.assigned_doctor_id} onChange={set('assigned_doctor_id')} required>
           <option value="">— Select doctor to receive referral —</option>
-          {doctors.map((d) => (
+          {referToDoctors.map((d) => (
             <option key={d.doctor_id} value={d.doctor_id}>
               Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
             </option>

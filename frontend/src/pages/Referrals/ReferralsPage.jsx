@@ -155,7 +155,7 @@ const ReferralsPage = () => {
         }
         return r.referring_doctor_name ? `Dr. ${r.referring_doctor_name}` : '—';
       } },
-    { key: 'assigned_doctor_name', label: 'Assigned To', render: (r) => r.assigned_doctor_name
+    { key: 'assigned_doctor_name', label: 'Refer To', render: (r) => r.assigned_doctor_name
         ? <span style={{ display:'flex', flexDirection:'column' }}>
             <span>{r.assigned_doctor_name}</span>
             <span className="text-xs text-muted">{r.specialization || 'General'}</span>
@@ -403,7 +403,7 @@ const ReferralsPage = () => {
           Both the new assignee and the referring doctor will be notified.
         </p>
         <div className="form-group" style={{ marginBottom:'var(--space-6)' }}>
-          <label htmlFor="ref-reassign-sel">New Assigned Doctor *</label>
+          <label htmlFor="ref-reassign-sel">Refer To *</label>
           <select id="ref-reassign-sel" value={reassignDoctorId} onChange={(e) => setReassignDoctorId(e.target.value)} required>
             <option value="">— Select doctor —</option>
             {doctors.map((d) => (

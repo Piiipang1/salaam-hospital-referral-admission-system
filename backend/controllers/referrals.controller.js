@@ -17,6 +17,17 @@ const createReferral = async (req, res) => {
     return res.status(400).json({ success: false, message: 'diagnosis_id and assigned_doctor_id are required.' });
   }
 
+  // A referral hands a patient to a DIFFERENT doctor — a self-referral is
+  // meaningless. Authoritative check: it must hold even if the UI is bypassed,
+  // and covers both the doctor flow (referrer forced to self) and the admin flow
+  // (referrer chosen in the body). Compare as Numbers so '3' === 3.
+  if (referring_doctor_id != null && Number(referring_doctor_id) === Number(assigned_doctor_id)) {
+    return res.status(400).json({
+      success: false,
+      message: 'You cannot refer a patient to yourself. Choose a different doctor to receive the referral.',
+    });
+  }
+
   try {
     const [result] = await db.query(
       `INSERT INTO referrals
