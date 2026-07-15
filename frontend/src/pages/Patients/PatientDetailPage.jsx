@@ -8,8 +8,10 @@ import { createReferral } from '../../api/referrals.api';
 import { createAdmission } from '../../api/admissions.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral, canUserAdmit, canUploadLabResult } from '../../utils/roleGuard';
-import { formatDate, calcAge } from '../../utils/formatDate';
+import { formatDate } from '../../utils/formatDate';
+import { formatPatientAge, formatPatientDob, formatPatientSex } from '../../utils/patientLabels';
 import Badge from '../../components/ui/Badge';
+import UnidentifiedBadge from '../../components/ui/UnidentifiedBadge';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Modal from '../../components/ui/Modal';
@@ -28,15 +30,6 @@ import './PatientDetailPage.css';
 
 const TABS = ['Triage', 'Diagnoses', 'Treatment Plan', 'Referrals', 'Admissions', 'Documents'];
 
-const UnidentifiedBadge = () => (
-  <span style={{
-    fontSize: 'var(--font-size-xs)', padding: '2px 8px',
-    borderRadius: 'var(--radius-full)',
-    background: 'var(--color-danger-muted)', color: 'var(--color-danger)',
-    border: '1px solid var(--color-danger)', fontWeight: 600, whiteSpace: 'nowrap',
-    flexShrink: 0,
-  }}>⚠ Unidentified</span>
-);
 
 // Build the public URL for an uploaded file
 const fileUrl = (filename) =>
@@ -248,9 +241,9 @@ const PatientDetailPage = () => {
         }
       >
         <div className="patient-info-grid">
-          <div><span className="info-label">Sex</span><span>{patient.sex === 'Other' ? '—' : patient.sex}</span></div>
-          <div><span className="info-label">Age</span><span>{(() => { const a = calcAge(patient.date_of_birth); return /^\d+$/.test(a) ? `${a} yrs` : a; })()}</span></div>
-          <div><span className="info-label">Date of Birth</span><span>{formatDate(patient.date_of_birth)}</span></div>
+          <div><span className="info-label">Sex</span><span>{formatPatientSex(patient)}</span></div>
+          <div><span className="info-label">Age</span><span>{(() => { const a = formatPatientAge(patient); return /^\d+$/.test(a) ? `${a} yrs` : a; })()}</span></div>
+          <div><span className="info-label">Date of Birth</span><span>{formatPatientDob(patient)}</span></div>
           <div><span className="info-label">Attending Doctor</span><span>{patient.attending_doctor ? `Dr. ${patient.attending_doctor}` : '—'}</span></div>
           <div><span className="info-label">Room</span><span>{patient.room_type ? `${patient.room_type} — ${patient.bed_number}` : patient.admission_status === 'Pending Room' ? 'Awaiting room' : '—'}</span></div>
           <div><span className="info-label">Contact</span><span>{patient.contact_number || '—'}</span></div>

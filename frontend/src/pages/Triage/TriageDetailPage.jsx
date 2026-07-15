@@ -3,8 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getTriageById, updateTriage, addVitalSigns } from '../../api/triages.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManageTriage } from '../../utils/roleGuard';
+import { isUnidentifiedName } from '../../utils/patientLabels';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
+import UnidentifiedBadge from '../../components/ui/UnidentifiedBadge';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
@@ -59,10 +61,11 @@ const TriageDetailPage = () => {
         )
       }>
         <div className="patient-info-grid">
-          <div><span className="info-label">Patient</span><span>{triage.patient_name ?? '—'}</span></div>
+          <div><span className="info-label">Patient</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>{triage.patient_name ?? '—'}{isUnidentifiedName(triage.patient_name) && <UnidentifiedBadge />}</span></div>
           <div><span className="info-label">Triage Level</span><Badge status={triage.triage_level} /></div>
           <div><span className="info-label">Date/Time</span><span>{formatDate(triage.triage_datetime, true)}</span></div>
           <div><span className="info-label">Recorded By</span><span>{triage.employee_name ?? '—'}</span></div>
+          <div><span className="info-label">Attending Doctor</span><span>{triage.attending_doctor_name ?? '—'}</span></div>
           <div><span className="info-label">Visit Room</span><span>{triage.visit_room_label ?? '—'}</span></div>
         </div>
         {triage.notes && <p style={{ marginTop:'var(--space-4)', color:'var(--color-text-muted)', fontSize:'var(--font-size-sm)' }}>{triage.notes}</p>}
