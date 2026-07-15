@@ -1,5 +1,6 @@
 const mysql = require('mysql2');
-require('dotenv').config();
+// Env vars are loaded once by server.js (the only entry point) before this
+// module is required — no dotenv.config() here.
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,

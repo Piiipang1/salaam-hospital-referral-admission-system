@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-require('dotenv').config();
+// Env vars are loaded centrally by server.js — see backend/server.js.
 
 // Resolve a user's real name from doctors/employees based on role + linked_id.
 // admin has no linked name record, so both come back null.

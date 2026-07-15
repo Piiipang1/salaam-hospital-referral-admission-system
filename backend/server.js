@@ -1,7 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+// Single source of truth for env vars: backend/.env. Loaded here, before any
+// module that reads process.env is required, so no other file needs its own
+// dotenv.config(). Absolute path keeps `node backend/server.js` and
+// `cd backend && node server.js` identical regardless of CWD.
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // ─── Route Imports ────────────────────────────────────────────────────────────
 const authRoutes          = require('./routes/auth.routes');
