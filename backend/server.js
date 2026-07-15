@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 // Single source of truth for env vars: backend/.env. Loaded here, before any
 // module that reads process.env is required, so no other file needs its own
@@ -38,6 +39,11 @@ if (missingEnv.length > 0) {
   console.error('─────────────────────────────────────────');
   process.exit(1);
 }
+
+// ─── Security Headers ─────────────────────────────────────────────────────────
+// helmet defaults, except cross-origin-resource-policy: the frontend at a
+// different origin (localhost:5173) must be able to load /uploads images/PDFs.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 app.use(

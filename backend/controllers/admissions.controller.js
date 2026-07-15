@@ -11,9 +11,16 @@ const getAllAdmissions = async (req, res) => {
     const conditions = [];
     const params = [];
 
+    // status may be a single value or a comma-separated list — the doctor
+    // "Current" tab needs Pending Room,Active,Pending Discharge in one query so
+    // its pagination + total are correct. A single value yields IN (?) which is
+    // equivalent to the old '='. data + count share this WHERE and its params.
     if (status) {
-      conditions.push('a.status = ?');
-      params.push(status);
+      const statuses = String(status).split(',').map((s) => s.trim()).filter(Boolean);
+      if (statuses.length) {
+        conditions.push(`a.status IN (${statuses.map(() => '?').join(',')})`);
+        params.push(...statuses);
+      }
     }
 
     // Date range filter on admission_date
@@ -34,24 +41,38 @@ const getAllAdmissions = async (req, res) => {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    const [rows] = await db.query(
-      `SELECT a.*, a.discharge_notes,
-              CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-              CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
-              r.room_type, r.bed_number,
-              CONCAT(e_conf.first_name, ' ', e_conf.last_name) AS confirmed_by_name
-       FROM admissions a
-       LEFT JOIN patients p ON a.patient_id = p.patient_id
-       LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
-       LEFT JOIN rooms r ON a.room_id = r.room_id
-       LEFT JOIN users u_conf ON a.discharge_confirmed_by = u_conf.user_id
-       LEFT JOIN employees e_conf ON u_conf.linked_id = e_conf.employee_id
-       ${where}
-       ORDER BY a.admission_date DESC LIMIT ? OFFSET ?`,
-      [...params, parseInt(limit), offset]
-    );
+    // Run data + count in parallel. Every condition references a.* only, so the
+    // count needs no joins. (Mirrors getAllReferrals / getAllTriages.)
+    const [[rows], [[{ total }]]] = await Promise.all([
+      db.query(
+        `SELECT a.*, a.discharge_notes,
+                CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+                CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
+                r.room_type, r.bed_number,
+                CONCAT(e_conf.first_name, ' ', e_conf.last_name) AS confirmed_by_name
+         FROM admissions a
+         LEFT JOIN patients p ON a.patient_id = p.patient_id
+         LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
+         LEFT JOIN rooms r ON a.room_id = r.room_id
+         LEFT JOIN users u_conf ON a.discharge_confirmed_by = u_conf.user_id
+         LEFT JOIN employees e_conf ON u_conf.linked_id = e_conf.employee_id
+         ${where}
+         ORDER BY a.admission_date DESC LIMIT ? OFFSET ?`,
+        [...params, parseInt(limit), offset]
+      ),
+      db.query(
+        `SELECT COUNT(*) AS total FROM admissions a ${where}`,
+        params
+      ),
+    ]);
 
-    return res.status(200).json({ success: true, data: rows });
+    return res.status(200).json({
+      success: true,
+      data: rows,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+    });
   } catch (err) {
     console.error('getAllAdmissions error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
