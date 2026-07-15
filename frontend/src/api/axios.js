@@ -15,11 +15,16 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// On 401 — clear session and redirect to login
+// On 401 — clear the (now-invalid) session and bounce to login. This is for
+// EXPIRED/REVOKED tokens on authenticated calls. The login request itself is
+// excluded: a failed sign-in (401 bad credentials, 429 rate-limited) must stay
+// on the page so LoginPage can show the message in its Alert instead of the
+// browser silently reloading and swallowing it.
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isLoginRequest = (error.config?.url || '').includes('/api/auth/login');
+    if (error.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('salaam_token');
       localStorage.removeItem('salaam_user');
       window.location.href = '/login';

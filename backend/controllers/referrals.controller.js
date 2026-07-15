@@ -17,18 +17,43 @@ const createReferral = async (req, res) => {
     return res.status(400).json({ success: false, message: 'diagnosis_id and assigned_doctor_id are required.' });
   }
 
-  // A referral hands a patient to a DIFFERENT doctor — a self-referral is
-  // meaningless. Authoritative check: it must hold even if the UI is bypassed,
-  // and covers both the doctor flow (referrer forced to self) and the admin flow
-  // (referrer chosen in the body). Compare as Numbers so '3' === 3.
-  if (referring_doctor_id != null && Number(referring_doctor_id) === Number(assigned_doctor_id)) {
-    return res.status(400).json({
-      success: false,
-      message: 'You cannot refer a patient to yourself. Choose a different doctor to receive the referral.',
-    });
-  }
-
   try {
+    // 1. Resolve the diagnosis and its patient. Without this a typo'd diagnosis_id
+    //    reaches the FK and the user gets a generic 500 instead of a clear 400.
+    const [[diag]] = await db.query(
+      'SELECT patient_id FROM diagnoses WHERE diagnosis_id = ?',
+      [diagnosis_id]
+    );
+    if (!diag) {
+      return res.status(400).json({ success: false, message: 'Diagnosis not found.' });
+    }
+
+    // 2. The referring doctor must have a relationship with this patient — same
+    //    per-patient scoping used across the clinical endpoints.
+    const denied = await assertCanAccessPatient(req, diag.patient_id);
+    if (denied) {
+      return res.status(denied.status).json({ success: false, message: denied.message });
+    }
+
+    // 3. The assigned doctor must exist and be employed (mirrors reassignReferral).
+    const [[targetDoctor]] = await db.query(
+      "SELECT doctor_id FROM doctors WHERE doctor_id = ? AND employment_status = 'Active'",
+      [assigned_doctor_id]
+    );
+    if (!targetDoctor) {
+      return res.status(400).json({ success: false, message: 'Assigned doctor must exist and be Active.' });
+    }
+
+    // 4. A referral hands a patient to a DIFFERENT doctor — reject self-referral.
+    //    Authoritative check (must hold even if the UI is bypassed); the referrer
+    //    is always req.user.linked_id for doctors. Compare as Numbers so '3' === 3.
+    if (referring_doctor_id != null && Number(referring_doctor_id) === Number(assigned_doctor_id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot refer a patient to yourself. Choose a different doctor to receive the referral.',
+      });
+    }
+
     const [result] = await db.query(
       `INSERT INTO referrals
          (diagnosis_id, referring_doctor_id, assigned_doctor_id, referral_date, status, file_attachment, e_signature)
