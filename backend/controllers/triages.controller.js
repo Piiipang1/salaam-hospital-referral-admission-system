@@ -169,11 +169,24 @@ const getAllTriages = async (req, res) => {
     // Run data + count in parallel
     const [[rows], [[{ total }]]] = await Promise.all([
       db.query(
+        // adoc = the patient's CURRENT attending doctor (doctor_in_charge). The
+        // ordered single-row subquery guarantees at most one doctor per triage
+        // row even when doctor_in_charge holds stale duplicate rows for a patient
+        // — a plain LEFT JOIN doctor_in_charge would multiply triage rows.
         `SELECT t.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
-                vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate
+                vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate,
+                adoc.doctor_id AS attending_doctor_id,
+                CASE WHEN adoc.doctor_id IS NOT NULL
+                     THEN CONCAT('Dr. ', adoc.first_name, ' ', adoc.last_name)
+                END AS attending_doctor_name
          FROM triages t
          LEFT JOIN patients p ON t.patient_id = p.patient_id
          LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
+         LEFT JOIN doctors adoc ON adoc.doctor_id = (
+           SELECT dc.doctor_id FROM doctor_in_charge dc
+           WHERE dc.patient_id = t.patient_id
+           ORDER BY dc.assigned_at DESC LIMIT 1
+         )
          ${where}
          ORDER BY t.triage_datetime DESC LIMIT ? OFFSET ?`,
         [...params, parseInt(limit), offset]
@@ -204,12 +217,21 @@ const getTriageById = async (req, res) => {
       `SELECT t.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
               CONCAT(e.first_name, ' ', e.last_name) AS employee_name,
               vr.room_label AS visit_room_label,
-              vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate, vs.recorded_at, vs.updated_at
+              vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate, vs.recorded_at, vs.updated_at,
+              adoc.doctor_id AS attending_doctor_id,
+              CASE WHEN adoc.doctor_id IS NOT NULL
+                   THEN CONCAT('Dr. ', adoc.first_name, ' ', adoc.last_name)
+              END AS attending_doctor_name
        FROM triages t
        LEFT JOIN patients p ON t.patient_id = p.patient_id
        LEFT JOIN employees e ON t.employee_id = e.employee_id
        LEFT JOIN visit_rooms vr ON t.visit_room_id = vr.visit_room_id
        LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
+       LEFT JOIN doctors adoc ON adoc.doctor_id = (
+         SELECT dc.doctor_id FROM doctor_in_charge dc
+         WHERE dc.patient_id = t.patient_id
+         ORDER BY dc.assigned_at DESC LIMIT 1
+       )
        WHERE t.triage_id = ?`,
       [req.params.id]
     );
