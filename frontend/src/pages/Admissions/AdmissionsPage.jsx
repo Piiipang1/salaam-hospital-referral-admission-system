@@ -16,6 +16,29 @@ import AdmissionForm from '../../components/forms/AdmissionForm';
 // Ongoing (non-discharged) admission statuses — the doctor "Current" tab.
 const CURRENT_STATUSES = ['Pending Room', 'Active', 'Pending Discharge'];
 
+const LIMIT = 20; // rows per page — matches the backend default
+
+// Inline pill-style pagination button (matches Patients / Referrals pages)
+const PillBtn = ({ onClick, disabled, children }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    style={{
+      display: 'inline-flex', alignItems: 'center',
+      padding: 'var(--space-2) var(--space-5)',
+      borderRadius: 'var(--radius-full)',
+      border: '1px solid var(--color-border)',
+      background: 'transparent',
+      color: disabled ? 'var(--color-text-disabled)' : 'var(--color-text-muted)',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      fontSize: 'var(--font-size-sm)', fontWeight: 500,
+      opacity: disabled ? 0.4 : 1, transition: 'all 0.15s',
+    }}
+  >
+    {children}
+  </button>
+);
+
 const AdmissionsPage = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
@@ -23,6 +46,8 @@ const AdmissionsPage = () => {
   const [tab,      setTab]      = useState('Current');    // doctor "My Patients" tab
   const [nurseTab, setNurseTab] = useState('Admissions'); // nurse view tab
   const [data,    setData]    = useState([]);
+  const [total,   setTotal]   = useState(0);
+  const [page,    setPage]    = useState(1);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState('');
@@ -46,13 +71,33 @@ const AdmissionsPage = () => {
   const [selectedRoom, setSelectedRoom] = useState('');
   const [roomsLoading, setRoomsLoading] = useState(false);
 
+  // The active view maps to a server-side status filter, so pagination + total
+  // are correct per view (the server returns exactly the rows the tab shows).
+  //   doctor  → Current: the three ongoing statuses · History: Discharged
+  //   nurse   → Admissions: all · Discharge History: Discharged
+  //   staff/admin → the status chip from the workflow stepper (or all)
+  const statusParam = isDoctor
+    ? (tab === 'Current' ? CURRENT_STATUSES.join(',') : 'Discharged')
+    : isNurse
+      ? (nurseTab === 'Discharge History' ? 'Discharged' : '')
+      : statusFilter;
+
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  // Reset to page 1 whenever the effective view or date range changes
+  useEffect(() => { setPage(1); }, [statusParam, fromDate, toDate]);
+
   const load = useCallback(() => {
     setLoading(true);
-    const params = {};
-    if (fromDate) params.from_date = fromDate;
-    if (toDate)   params.to_date   = toDate;
-    getAllAdmissions(params).then((r) => { if (r.success) setData(r.data); }).catch(() => setError('Failed to load admissions.')).finally(() => setLoading(false));
-  }, [fromDate, toDate]);
+    const params = { page, limit: LIMIT };
+    if (statusParam) params.status    = statusParam;
+    if (fromDate)    params.from_date = fromDate;
+    if (toDate)      params.to_date   = toDate;
+    getAllAdmissions(params)
+      .then((r) => { if (r.success) { setData(r.data); setTotal(r.total ?? r.data.length); } })
+      .catch(() => setError('Failed to load admissions.'))
+      .finally(() => setLoading(false));
+  }, [page, statusParam, fromDate, toDate]);
   useEffect(() => { load(); }, [load]);
 
   const handleAdmit = async (form) => {
@@ -176,9 +221,9 @@ const AdmissionsPage = () => {
     { key: 'confirmed_by', label: 'Confirmed By', render: (r) => r.confirmed_by_name ?? '—' },
   ];
 
-  // Tab data (the fetched list is already role-scoped by the backend)
-  const currentRows = data.filter((d) => CURRENT_STATUSES.includes(d.status));
-  const historyRows = data.filter((d) => d.status === 'Discharged');
+  // `data` is already the current page for the active view — the server applies
+  // the role scope, the tab's status filter, and pagination. No client-side
+  // splitting (that would only ever see one page's worth of rows).
 
   const tabButtonStyle = (active) => ({
     padding: 'var(--space-2) var(--space-5)',
@@ -199,8 +244,8 @@ const AdmissionsPage = () => {
           <h1 className="page-title">{isDoctor ? 'My Patients' : 'Admissions'}</h1>
           <p className="page-subtitle">
             {isDoctor
-              ? `${currentRows.length} current · ${historyRows.length} discharged`
-              : `${data.filter(d=>d.status==='Active').length} active admission${data.filter(d=>d.status==='Active').length !== 1?'s':''}`}
+              ? `${total} ${tab === 'Current' ? 'current' : 'discharged'} record${total !== 1 ? 's' : ''}`
+              : `${total} admission${total !== 1 ? 's' : ''}`}
           </p>
         </div>
         {canUserAdmit(user) && (
@@ -249,18 +294,15 @@ const AdmissionsPage = () => {
         <>
           {/* Current / History tabs */}
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            {['Current', 'History'].map((t) => {
-              const count = t === 'Current' ? currentRows.length : historyRows.length;
-              return (
-                <button key={t} onClick={() => setTab(t)} style={tabButtonStyle(tab === t)}>
-                  {t} ({count})
-                </button>
-              );
-            })}
+            {['Current', 'History'].map((t) => (
+              <button key={t} onClick={() => setTab(t)} style={tabButtonStyle(tab === t)}>
+                {t}
+              </button>
+            ))}
           </div>
           <Table
             columns={tab === 'Current' ? doctorCurrentColumns : doctorHistoryColumns}
-            data={tab === 'Current' ? currentRows : historyRows}
+            data={data}
             loading={loading}
             emptyMessage={tab === 'Current' ? 'No current admissions.' : 'No discharge history.'}
           />
@@ -269,18 +311,15 @@ const AdmissionsPage = () => {
         <>
           {/* Admissions / Discharge History tabs */}
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-            {[
-              { key: 'Admissions',        count: data.length },
-              { key: 'Discharge History', count: historyRows.length },
-            ].map((t) => (
-              <button key={t.key} onClick={() => setNurseTab(t.key)} style={tabButtonStyle(nurseTab === t.key)}>
-                {t.key} ({t.count})
+            {['Admissions', 'Discharge History'].map((k) => (
+              <button key={k} onClick={() => setNurseTab(k)} style={tabButtonStyle(nurseTab === k)}>
+                {k}
               </button>
             ))}
           </div>
           <Table
             columns={nurseTab === 'Discharge History' ? nurseHistoryColumns : columns}
-            data={nurseTab === 'Discharge History' ? historyRows : data}
+            data={data}
             loading={loading}
             emptyMessage={nurseTab === 'Discharge History' ? 'No discharge history yet.' : 'No admission records found.'}
           />
@@ -302,11 +341,25 @@ const AdmissionsPage = () => {
           )}
           <Table
             columns={columns}
-            data={statusFilter ? data.filter((d) => d.status === statusFilter) : data}
+            data={data}
             loading={loading}
             emptyMessage={statusFilter ? `No admissions with status “${statusFilter}”.` : 'No admission records found.'}
           />
         </>
+      )}
+
+      {/* ── Pagination (server-driven, matches Patients / Referrals) ── */}
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-4)', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>
+            Page <strong style={{ color: 'var(--color-text)' }}>{page}</strong> of <strong style={{ color: 'var(--color-text)' }}>{totalPages}</strong>
+            &nbsp;·&nbsp;{total} total
+          </span>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <PillBtn onClick={() => setPage((p) => p - 1)} disabled={page <= 1}>← Previous</PillBtn>
+            <PillBtn onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}>Next →</PillBtn>
+          </div>
+        </div>
       )}
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Admit Patient" size="md">
         <AdmissionForm onSubmit={handleAdmit} loading={saving} />

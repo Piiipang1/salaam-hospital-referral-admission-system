@@ -3,13 +3,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getAllPatients, createPatient, updatePatient } from '../../api/patients.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManagePatients } from '../../utils/roleGuard';
-import { formatDate, calcAge, todayInput } from '../../utils/formatDate';
+import { formatDate, todayInput } from '../../utils/formatDate';
+import { formatPatientAge, formatPatientSex } from '../../utils/patientLabels';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
 import SearchBar from '../../components/ui/SearchBar';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Alert from '../../components/ui/Alert';
+import UnidentifiedBadge from '../../components/ui/UnidentifiedBadge';
 import PatientForm from '../../components/forms/PatientForm';
 import './PatientsPage.css';
 
@@ -37,16 +39,6 @@ const PillBtn = ({ onClick, disabled, children }) => (
   >
     {children}
   </button>
-);
-
-// Shared inline badge for unidentified patients
-const UnidentifiedBadge = () => (
-  <span style={{
-    fontSize: 'var(--font-size-xs)', padding: '2px 8px',
-    borderRadius: 'var(--radius-full)',
-    background: 'var(--color-danger-muted)', color: 'var(--color-danger)',
-    border: '1px solid var(--color-danger)', fontWeight: 600, whiteSpace: 'nowrap',
-  }}>⚠ Unidentified</span>
 );
 
 const PatientsPage = () => {
@@ -153,8 +145,8 @@ const PatientsPage = () => {
       </span>
     )},
     { key: 'room', label: 'Room', render: (r) => r.room_type ? `${r.room_type} — ${r.bed_number}` : '—' },
-    { key: 'sex',            label: 'Sex',       width: '80px', render: (r) => r.sex === 'Other' ? '—' : r.sex },
-    { key: 'age',            label: 'Age',       width: '70px', render: (r) => calcAge(r.date_of_birth) },
+    { key: 'sex',            label: 'Sex',       width: '80px', render: (r) => formatPatientSex(r) },
+    { key: 'age',            label: 'Age',       width: '70px', render: (r) => formatPatientAge(r) },
     { key: 'contact_number', label: 'Contact', hideMobile: true },
     { key: 'created_at',     label: 'Registered', render: (r) => formatDate(r.created_at), hideMobile: true },
     {
