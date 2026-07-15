@@ -106,11 +106,39 @@ patient-referral-admission-system/
 
 ##How to run it
 
-1. Make sure both servers are running:
+1. Create the backend environment file from the template and fill in your values
+   (see the Security notes below for JWT_SECRET):
+```
+cd backend
+cp .env.example .env
+# then edit .env with your DB credentials and a freshly generated JWT_SECRET
+```
+
+2. Make sure both servers are running:
+```
 # Terminal 1 — Backend
 cd backend
 node server.js
 
-# Terminal 2 — Frontend (already running)
+# Terminal 2 — Frontend
 cd frontend
 npm run dev
+```
+
+## Security notes
+
+- **Secrets are environment-only.** All secrets (`JWT_SECRET`, database
+  credentials) live in `backend/.env`, which is git-ignored and must never be
+  committed. Only `backend/.env.example` — a template with placeholder values —
+  is tracked. `server.js` is the single loader of this file; no other module
+  calls `dotenv.config()`.
+- **Rotate `JWT_SECRET` on every deployment.** Generate a fresh 64-hex-char
+  value per environment (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`).
+  Rotating it invalidates all active sessions, forcing everyone to log in
+  again — this is expected, and is the intended way to revoke all outstanding
+  tokens at once.
+- **Backups and uploads contain PHI.** `backend/backups/` (mysqldump exports)
+  and `backend/uploads/` (patient documents) hold protected health information
+  and are git-ignored — they must never be committed. Only an empty
+  `backend/uploads/.gitkeep` is tracked so the directory exists on a fresh
+  clone.

@@ -1,3 +1,20 @@
+# Dependencies
 node_modules/
+
+# Environment files — secrets live here, never commit.
+# The bare `.env` pattern matches .env in any directory; the explicit
+# entries below are kept for clarity.
 .env
-uploads/
+.env.local
+backend/.env
+frontend/.env
+
+# Database backups — contain patient data (PHI), never commit.
+backend/backups/
+
+# Uploaded patient files (PHI) — keep the directory, ignore its contents.
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Frontend build output
+frontend/dist/
