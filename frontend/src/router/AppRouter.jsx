@@ -110,7 +110,14 @@ const AppRouter = () => {
             }
           />
 
-          <Route path="rooms"         element={<RoomsPage />} />
+          <Route
+            path="rooms"
+            element={
+              <RoleRoute roles={['admin', 'nurse', 'staff']}>
+                <RoomsPage />
+              </RoleRoute>
+            }
+          />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="profile"       element={<ProfilePage />} />
 

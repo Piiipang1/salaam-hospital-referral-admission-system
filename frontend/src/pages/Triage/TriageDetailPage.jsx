@@ -48,8 +48,10 @@ const TriageDetailPage = () => {
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
+      {/* Reads are open to all nurses/staff, but only the recording employee may
+          edit or add vitals (backend enforces the same rule) — hide the buttons otherwise */}
       <Card title={triage.patient_name ? `Triage — ${triage.patient_name}` : 'Triage Details'} action={
-        canManageTriage(user?.role) && (
+        canManageTriage(user?.role) && triage.employee_id === user?.linked_id && (
           <div style={{ display:'flex', gap:'var(--space-2)' }}>
             <Button size="sm" variant="outline" onClick={() => setModal('edit')}>Edit Triage</Button>
             <Button size="sm" variant="primary" onClick={() => setModal('vitals')}>Update Vitals</Button>

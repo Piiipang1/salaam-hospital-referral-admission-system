@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Navigate } from 'react-router-dom';
 import { BedDouble, DoorClosed, HeartPulse, Baby, Building2, Pencil, Trash2, ChevronRight } from 'lucide-react';
 import { getAllRooms, createRoom, updateRoom, deleteRoom } from '../../api/rooms.api';
 import { useAuth } from '../../context/AuthContext';
@@ -116,9 +115,8 @@ const RoomsPage = () => {
       ? rooms.filter(r => r.room_type === selectedWard).sort((a, b) => a.bed_number.localeCompare(b.bed_number))
       : rooms.filter(r => r.room_type === selectedWard);
 
-  // Doctors' room/patient view is merged into the "My Patients" page — send
-  // any direct /rooms navigation there. Admin/nurse/staff keep the room grid.
-  if (user?.role === 'doctor') return <Navigate to="/admissions" replace />;
+  // Doctors never reach this page — the /rooms route is wrapped in a
+  // RoleRoute (admin/nurse/staff) that bounces them to /dashboard.
 
   if (loading) return <Spinner />;
 
@@ -281,14 +279,20 @@ const RoomsPage = () => {
             <p className="bed-modal__empty">This bed is available.</p>
           ) : (
             <div className="bed-modal">
-              <div className="bed-modal__row">
-                <span className="bed-modal__patient-name">{selectedBed.patient_name || 'Unknown patient'}</span>
-                {selectedBed.triage_level && <Badge status={selectedBed.triage_level} />}
-              </div>
-              <div className="bed-modal__field">
-                <span className="bed-modal__label">Condition</span>
-                <p className="bed-modal__value">{selectedBed.patient_condition || 'No diagnosis on record'}</p>
-              </div>
+              {/* Clinical fields are nulled by the API for admins (oversight-only)
+                  — show them only when present so admins see occupancy, not blanks */}
+              {selectedBed.patient_name != null && (
+                <>
+                  <div className="bed-modal__row">
+                    <span className="bed-modal__patient-name">{selectedBed.patient_name}</span>
+                    {selectedBed.triage_level && <Badge status={selectedBed.triage_level} />}
+                  </div>
+                  <div className="bed-modal__field">
+                    <span className="bed-modal__label">Condition</span>
+                    <p className="bed-modal__value">{selectedBed.patient_condition || 'No diagnosis on record'}</p>
+                  </div>
+                </>
+              )}
               <div className="bed-modal__grid">
                 <div className="bed-modal__field">
                   <span className="bed-modal__label">Admission Type</span>

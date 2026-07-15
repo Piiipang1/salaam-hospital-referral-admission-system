@@ -64,6 +64,9 @@ const PatientDetailPage = () => {
   const [success,  setSuccess]  = useState('');
   const [modal,    setModal]    = useState(null); // 'edit'|'triage'|'diagnosis'|'referral'|'admission'|'vitals'
   const [saving,   setSaving]   = useState(false);
+  // Triage reads are hospital-wide for nurses/staff but patient registration
+  // records stay scoped to the registering nurse — a 403 here is expected, not a bug.
+  const [accessDenied, setAccessDenied] = useState(false);
   const [vitalTriageId, setVitalTriageId] = useState(null);
 
   // Doctor assessment (disposition + clinical notes) for the patient's latest diagnosis
@@ -96,7 +99,10 @@ const PatientDetailPage = () => {
           }
         }
       })
-      .catch(() => setError('Failed to load patient data.'))
+      .catch((err) => {
+        if (err.response?.status === 403) setAccessDenied(true);
+        else setError('Failed to load patient data.');
+      })
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, [id]);
@@ -166,6 +172,17 @@ const PatientDetailPage = () => {
   };
 
   if (loading) return <Spinner />;
+  if (accessDenied) {
+    return (
+      <div className="patient-detail">
+        <button className="back-link" onClick={() => navigate(-1)}>← Back</button>
+        <Alert
+          type="warning"
+          message="You don't have access to this patient's registration record — it was registered by another staff member."
+        />
+      </div>
+    );
+  }
   if (!patient) return <Alert type="error" message="Patient not found." />;
 
   // Placeholder sentinel values used by createEmergencyTriage — clear them so
