@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/db');
-require('dotenv').config();
+// Env vars are loaded centrally by server.js — see backend/server.js.
 
 const auth = async (req, res, next) => {
   const authHeader = req.headers['authorization'];

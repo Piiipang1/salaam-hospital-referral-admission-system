@@ -4,8 +4,10 @@ const roomsController = require('../controllers/rooms.controller');
 const auth = require('../middleware/auth');
 const requireRole = require('../middleware/roleGuard');
 
-// GET /api/rooms
-router.get('/', auth, roomsController.getAllRooms);
+// GET /api/rooms — room grid with occupancy. Admin/nurse/staff only (matches
+// the sidebar and the /rooms RoleRoute); doctors use My Patients instead.
+// The controller additionally strips clinical fields for admins.
+router.get('/', auth, requireRole('admin', 'nurse', 'staff'), roomsController.getAllRooms);
 
 // GET /api/rooms/available
 router.get('/available', auth, roomsController.getAvailableRooms);
