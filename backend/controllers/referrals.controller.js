@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
+const { assertCanAccessPatient } = require('../utils/scoping');
 
 // POST /api/referrals
 const createReferral = async (req, res) => {
@@ -330,6 +331,13 @@ const updateReferralStatus = async (req, res) => {
 // GET /api/referrals/history/:patient_id
 const getReferralHistory = async (req, res) => {
   try {
+    // Same per-patient scoping as the diagnoses/patient detail endpoints — only
+    // doctors reach this route, so the doctor branch of the guard applies.
+    const denied = await assertCanAccessPatient(req, req.params.patient_id);
+    if (denied) {
+      return res.status(denied.status).json({ success: false, message: denied.message });
+    }
+
     const [rows] = await db.query(
       `SELECT r.*,
               CONCAT(ad.first_name, ' ', ad.last_name) AS assigned_doctor_name,

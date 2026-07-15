@@ -1,4 +1,26 @@
 const db = require('../config/db');
+const { assertCanAccessPatient } = require('../utils/scoping');
+
+// Resolve a diagnosis's patient_id and enforce per-patient access. Returns the
+// patient_id when allowed, or sends the 404/403 response and returns null so the
+// caller can bail out. The diagnosis's own patient_id is the authoritative link
+// (never trust a patient_id from the request body/query).
+const guardDiagnosisAccess = async (req, res) => {
+  const [[diag]] = await db.query(
+    'SELECT patient_id FROM diagnoses WHERE diagnosis_id = ?',
+    [req.params.id]
+  );
+  if (!diag) {
+    res.status(404).json({ success: false, message: 'Diagnosis not found.' });
+    return null;
+  }
+  const denied = await assertCanAccessPatient(req, diag.patient_id);
+  if (denied) {
+    res.status(denied.status).json({ success: false, message: denied.message });
+    return null;
+  }
+  return diag.patient_id;
+};
 
 // POST /api/diagnoses
 const createDiagnosis = async (req, res) => {
@@ -52,6 +74,8 @@ const createDiagnosis = async (req, res) => {
 // GET /api/diagnoses/:id
 const getDiagnosisById = async (req, res) => {
   try {
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     const [diagnosis] = await db.query(
       `SELECT d.*, CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name,
               CONCAT(p.first_name, ' ', p.last_name) AS patient_name
@@ -88,6 +112,8 @@ const getDiagnosisById = async (req, res) => {
 const updateDiagnosis = async (req, res) => {
   const { medical_condition, doctor_id } = req.body;
   try {
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     await db.query(
       `UPDATE diagnoses SET
         medical_condition = COALESCE(?, medical_condition),
@@ -117,6 +143,8 @@ const addTreatment = async (req, res) => {
   }
 
   try {
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     const [result] = await db.query(
       `INSERT INTO treatments (diagnosis_id, prescribed_medications, dosage, frequency, treatment_duration)
        VALUES (?, ?, ?, ?, ?)`,
@@ -174,6 +202,8 @@ const addTreatment = async (req, res) => {
 // GET /api/diagnoses/:id/treatments
 const getTreatments = async (req, res) => {
   try {
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     const [rows] = await db.query(
       'SELECT * FROM treatments WHERE diagnosis_id = ? ORDER BY created_at DESC',
       [req.params.id]
@@ -198,6 +228,8 @@ const saveAssessment = async (req, res) => {
   }
 
   try {
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     const [existing] = await db.query(
       'SELECT assessment_id FROM doctor_assessments WHERE diagnosis_id = ?',
       [req.params.id]
@@ -295,6 +327,8 @@ const saveAssessment = async (req, res) => {
 // GET /api/diagnoses/:id/assessment
 const getAssessment = async (req, res) => {
   try {
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     const [rows] = await db.query(
       `SELECT da.*, CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name
        FROM doctor_assessments da
@@ -319,6 +353,11 @@ const addLabResult = async (req, res) => {
   }
 
   try {
+    // Access is checked against the diagnosis's own patient (the authoritative
+    // link) — not the patient_id in the body. nurse is allowed on this route,
+    // so the guard applies the nurse "personally registered" rule to them too.
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     const [result] = await db.query(
       `INSERT INTO lab_results (patient_id, diagnosis_id, test_type, results, file_attachment, date_conducted)
        VALUES (?, ?, ?, ?, ?, ?)`,
@@ -373,6 +412,8 @@ const addLabResult = async (req, res) => {
 // GET /api/diagnoses/:id/lab-results
 const getLabResults = async (req, res) => {
   try {
+    if ((await guardDiagnosisAccess(req, res)) === null) return;
+
     const [rows] = await db.query(
       'SELECT * FROM lab_results WHERE diagnosis_id = ? ORDER BY date_conducted DESC',
       [req.params.id]

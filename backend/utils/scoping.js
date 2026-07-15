@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { isDoctorInCharge } = require('./dic');
 
 // The canonical definition of the patients a doctor is "assigned" to, used
 // across access-control checks: patients they are doctor-in-charge of, patients
@@ -110,6 +111,44 @@ const isPatientUnassigned = async (patientId) => {
 const doctorInChargeCanAccessPatient = async (doctorId, patientId) =>
   (await doctorCanAccessPatient(doctorId, patientId)) || (await isPatientUnassigned(patientId));
 
+/**
+ * Per-patient access guard, mirroring patients.controller getPatientById exactly,
+ * for any detail/mutation handler that has already resolved a patient_id. Keeps
+ * the same policy (and the same two 403 messages) in one place instead of
+ * copy-pasting it across the diagnoses/referrals handlers.
+ *
+ * Returns null when access is allowed, or a { status, message } object to send
+ * when denied. Roles other than doctor/nurse/staff fall through as allowed —
+ * the clinical routes already gate which roles can reach these handlers.
+ *
+ * @param {object} req        Express request (reads req.user.role/user_id/linked_id)
+ * @param {number|string} patientId
+ * @returns {Promise<null | { status: number, message: string }>}
+ */
+const assertCanAccessPatient = async (req, patientId) => {
+  if (req.user.role === 'doctor') {
+    // ASSIGNED_PATIENTS_SUBQUERY includes referral-assigned patients regardless
+    // of referral status, so a doctor can open a diagnosis attached to a referral
+    // assigned to them before accepting it.
+    const allowed = (await isDoctorInCharge(req.user.user_id))
+      ? await doctorInChargeCanAccessPatient(req.user.linked_id, patientId)
+      : await doctorCanAccessPatient(req.user.linked_id, patientId);
+    return allowed ? null : { status: 403, message: 'You are not assigned to this patient.' };
+  }
+
+  if (req.user.role === 'nurse' || req.user.role === 'staff') {
+    const [[nurseAccess]] = await db.query(
+      `SELECT 1 AS allowed FROM activity_logs
+       WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
+      [req.user.user_id, patientId]
+    );
+    return nurseAccess ? null : { status: 403, message: 'You do not have access to this patient record.' };
+  }
+
+  return null;
+};
+
 module.exports = {
   ASSIGNED_PATIENTS_SUBQUERY,
   UNASSIGNED_PATIENTS_SUBQUERY,
@@ -119,4 +158,5 @@ module.exports = {
   unassignedPatientsCondition,
   isPatientUnassigned,
   doctorInChargeCanAccessPatient,
+  assertCanAccessPatient,
 };
