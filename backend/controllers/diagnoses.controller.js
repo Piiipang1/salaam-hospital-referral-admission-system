@@ -12,29 +12,41 @@ const createDiagnosis = async (req, res) => {
     return res.status(400).json({ success: false, message: 'patient_id, doctor_id, and medical_condition are required.' });
   }
 
+  const connection = await db.getConnection();
+  await connection.beginTransaction();
+
+  let diagnosisId;
   try {
-    const [result] = await db.query(
+    const [result] = await connection.query(
       `INSERT INTO diagnoses (patient_id, triage_id, doctor_id, medical_condition, diagnosis_date)
        VALUES (?, ?, ?, ?, CURDATE())`,
       [patient_id, triage_id || null, doctor_id, medical_condition]
     );
+    diagnosisId = result.insertId;
 
-    // Set Doctor_In_Charge
-    await db.query(
+    // Invariant: at most one doctor_in_charge row per patient — the current
+    // attending doctor. Replace, same semantics as assignTriageDoctor.
+    await connection.query('DELETE FROM doctor_in_charge WHERE patient_id = ?', [patient_id]);
+    await connection.query(
       'INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at) VALUES (?, ?, NOW())',
       [doctor_id, patient_id]
     );
 
-    await db.query(
+    await connection.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'diagnoses', ?)",
-      [req.user.user_id, result.insertId]
+      [req.user.user_id, diagnosisId]
     );
 
-    return res.status(201).json({ success: true, message: 'Diagnosis created.', diagnosis_id: result.insertId });
+    await connection.commit();
+    connection.release();
   } catch (err) {
+    await connection.rollback();
+    connection.release();
     console.error('createDiagnosis error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
+
+  return res.status(201).json({ success: true, message: 'Diagnosis created.', diagnosis_id: diagnosisId });
 };
 
 // GET /api/diagnoses/:id

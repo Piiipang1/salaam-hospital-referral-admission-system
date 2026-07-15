@@ -3,13 +3,13 @@ const db = require('../config/db');
 // GET /api/rooms
 const getAllRooms = async (req, res) => {
   try {
-    const [rows] = await db.query(
-      `SELECT
-         r.*,
-         a.admission_id,
-         a.admission_type,
-         a.admission_date,
-         CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+    // Admins are oversight-only: they get occupancy + admission metadata for
+    // bed planning, but never row-level clinical data (patient name, latest
+    // condition, triage level) — same policy as the dashboard and the
+    // clinical route guards. Nurses/staff need the patient context to manage
+    // beds, so they get the full payload.
+    const clinicalColumns = (req.user.role === 'nurse' || req.user.role === 'staff')
+      ? `CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
          (
            SELECT d.medical_condition
            FROM diagnoses d
@@ -23,7 +23,18 @@ const getAllRooms = async (req, res) => {
            WHERE t.patient_id = a.patient_id
            ORDER BY t.triage_datetime DESC
            LIMIT 1
-         ) AS triage_level
+         ) AS triage_level`
+      : `NULL AS patient_name,
+         NULL AS patient_condition,
+         NULL AS triage_level`;
+
+    const [rows] = await db.query(
+      `SELECT
+         r.*,
+         a.admission_id,
+         a.admission_type,
+         a.admission_date,
+         ${clinicalColumns}
        FROM rooms r
        LEFT JOIN admissions a ON a.room_id = r.room_id AND a.status = 'Active'
        LEFT JOIN patients p ON p.patient_id = a.patient_id

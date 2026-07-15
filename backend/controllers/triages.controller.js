@@ -159,11 +159,10 @@ const getAllTriages = async (req, res) => {
       conditions.push(cond.sql);
     }
 
-    // Nurses and staff only see triages they personally recorded.
-    if (req.user.role === 'nurse' || req.user.role === 'staff') {
-      conditions.push('t.employee_id = ?');
-      params.push(req.user.linked_id);
-    }
+    // Nurses and staff see ALL triages (operational policy — any nurse can act
+    // on any patient's room assignment/discharge, and the dashboard already
+    // shows hospital-wide triage counts). Writes stay strict: updateTriage and
+    // addVitalSigns still require being the recording employee.
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
@@ -229,11 +228,8 @@ const getTriageById = async (req, res) => {
       }
     }
 
-    // Nurses and staff may only view triages they personally recorded.
-    if ((req.user.role === 'nurse' || req.user.role === 'staff')
-        && rows[0].employee_id !== req.user.linked_id) {
-      return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
-    }
+    // Nurses and staff may view any triage (operational policy — matches
+    // getAllTriages and the hospital-wide dashboard). Writes stay strict.
 
     return res.status(200).json({ success: true, data: rows[0] });
   } catch (err) {
@@ -260,7 +256,8 @@ const updateTriage = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Triage not found.' });
     }
 
-    // Nurses and staff may only edit triages they personally recorded.
+    // Reads are open to all nurses/staff, but edits stay strict: only the
+    // employee who recorded the triage may change it.
     if ((req.user.role === 'nurse' || req.user.role === 'staff')
         && triage.employee_id !== req.user.linked_id) {
       return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
@@ -304,7 +301,8 @@ const addVitalSigns = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Triage not found.' });
     }
 
-    // Nurses and staff may only record vitals on triages they personally created.
+    // Reads are open to all nurses/staff, but vitals writes stay strict: only
+    // the employee who recorded the triage may add/update them.
     if ((req.user.role === 'nurse' || req.user.role === 'staff')
         && triage.employee_id !== req.user.linked_id) {
       return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
