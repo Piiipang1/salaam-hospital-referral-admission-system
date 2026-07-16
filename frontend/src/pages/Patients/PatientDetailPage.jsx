@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FileText, Image, Paperclip, FlaskConical, ClipboardList } from 'lucide-react';
 import { getPatientById, getPatientHistory, updatePatient } from '../../api/patients.api';
-import { createTriage } from '../../api/triages.api';
+import { createTriage, assignTriageDoctor } from '../../api/triages.api';
+import { getActiveDoctors } from '../../api/doctors.api';
 import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessment } from '../../api/diagnoses.api';
 import { createReferral } from '../../api/referrals.api';
 import { createAdmission } from '../../api/admissions.api';
@@ -61,6 +62,14 @@ const PatientDetailPage = () => {
   // records stay scoped to the registering nurse — a 403 here is expected, not a bug.
   const [accessDenied, setAccessDenied] = useState(false);
   const [vitalTriageId, setVitalTriageId] = useState(null);
+
+  // Attending-doctor assignment (Doctor-in-Charge only). Reuses the existing
+  // assignTriageDoctor endpoint, keyed by the patient's latest triage_id taken
+  // from the already-loaded history — no new backend surface, no extra fetch.
+  const [assignOpen,     setAssignOpen]     = useState(false);
+  const [assignDoctorId, setAssignDoctorId] = useState('');
+  const [assignSaving,   setAssignSaving]   = useState(false);
+  const [assignDoctors,  setAssignDoctors]  = useState([]);
 
   // Doctor assessment (disposition + clinical notes) for the patient's latest diagnosis
   const [assessment, setAssessment] = useState(null);
@@ -192,6 +201,36 @@ const PatientDetailPage = () => {
   const diagnoses = history.diagnoses ?? [];
   const referrals = history.referrals ?? [];
   const admissions= history.admissions?? [];
+
+  // assignTriageDoctor is keyed by triage_id, so assignment needs a triage —
+  // which matches the precondition (a patient is triaged before being routed to
+  // an attending doctor). history.triages is ordered newest-first.
+  const latestTriageId = triages[0]?.triage_id ?? null;
+  // Only a Doctor-in-Charge may assign; the backend 403s admins and non-DIC doctors.
+  const canAssignAttending =
+    user?.role === 'doctor' && !!user?.is_doctor_in_charge && !!latestTriageId;
+
+  const openAssignAttending = () => {
+    setAssignDoctorId('');
+    setAssignOpen(true);
+    if (assignDoctors.length === 0) {
+      getActiveDoctors().then((r) => { if (r.success) setAssignDoctors(r.data); }).catch(() => {});
+    }
+  };
+
+  const handleAssignAttending = async () => {
+    if (!assignDoctorId || !latestTriageId) return;
+    setAssignSaving(true);
+    try {
+      const res = await assignTriageDoctor(latestTriageId, assignDoctorId);
+      setSuccess(res.message || 'Attending doctor updated.');
+      setAssignOpen(false);
+      load(); // refresh so the Attending Doctor field reflects the change
+    } catch (err) {
+      setError(err.response?.data?.message || 'Assignment failed.');
+      setAssignOpen(false);
+    } finally { setAssignSaving(false); }
+  };
   const treatments = diagnoses.flatMap((d) =>
     (d.treatments ?? []).map((tx) => ({ ...tx, medical_condition: d.medical_condition }))
   );
@@ -244,7 +283,28 @@ const PatientDetailPage = () => {
           <div><span className="info-label">Sex</span><span>{formatPatientSex(patient)}</span></div>
           <div><span className="info-label">Age</span><span>{(() => { const a = formatPatientAge(patient); return /^\d+$/.test(a) ? `${a} yrs` : a; })()}</span></div>
           <div><span className="info-label">Date of Birth</span><span>{formatPatientDob(patient)}</span></div>
-          <div><span className="info-label">Attending Doctor</span><span>{patient.attending_doctor ? `Dr. ${patient.attending_doctor}` : '—'}</span></div>
+          {/* Attending doctor = the patient's primary doctor (doctor_in_charge),
+              set by a Doctor-in-Charge at triage. Distinct from the admitting
+              doctor below and from any specialist referral. */}
+          <div>
+            <span className="info-label">Attending Doctor</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+              {patient.attending_doctor_id
+                ? (patient.attending_doctor_id === user?.linked_id ? 'You (attending)' : patient.attending_doctor_name)
+                : 'Not assigned'}
+              {canAssignAttending && (
+                <button
+                  onClick={openAssignAttending}
+                  title="Set this patient's attending doctor (their primary doctor — not a specialist referral)"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                           color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
+                >
+                  {patient.attending_doctor_id ? 'Reassign' : 'Assign'}
+                </button>
+              )}
+            </span>
+          </div>
+          <div><span className="info-label">Admitting Doctor</span><span>{patient.admitting_doctor ? `Dr. ${patient.admitting_doctor}` : '—'}</span></div>
           <div><span className="info-label">Room</span><span>{patient.room_type ? `${patient.room_type} — ${patient.bed_number}` : patient.admission_status === 'Pending Room' ? 'Awaiting room' : '—'}</span></div>
           <div><span className="info-label">Contact</span><span>{patient.contact_number || '—'}</span></div>
           <div><span className="info-label">Address</span><span>{patient.address || '—'}</span></div>
@@ -563,6 +623,31 @@ const PatientDetailPage = () => {
       })()}
 
       {/* Modals */}
+      {/* Assign/reassign the ATTENDING doctor (Doctor-in-Charge only). Same
+          operation as the Triage page — a patient-level routing decision, not a referral. */}
+      <Modal isOpen={assignOpen} onClose={() => setAssignOpen(false)} title="Assign Attending Doctor" size="sm">
+        <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+          Set the <strong>attending doctor</strong> for <strong>{patient.first_name} {patient.last_name}</strong> —
+          the doctor who takes primary responsibility for this patient&apos;s care.
+          This is ER routing, <em>not</em> a referral: referring to a specialist is done from a
+          diagnosis on the Referrals page and has its own Pending → Accepted → Completed lifecycle.
+        </p>
+        <div className="form-group" style={{ marginBottom: 'var(--space-6)' }}>
+          <label htmlFor="pd-assign-doctor">Attending doctor *</label>
+          <select id="pd-assign-doctor" value={assignDoctorId} onChange={(e) => setAssignDoctorId(e.target.value)} required>
+            <option value="">— Select doctor —</option>
+            {assignDoctors.map((d) => (
+              <option key={d.doctor_id} value={d.doctor_id}>
+                Dr. {d.first_name} {d.last_name}{d.specialization ? ` (${d.specialization})` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={() => setAssignOpen(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleAssignAttending} loading={assignSaving} disabled={!assignDoctorId}>Assign</Button>
+        </div>
+      </Modal>
       <Modal isOpen={modal === 'edit'}      onClose={() => setModal(null)} title="Edit Patient"     size="lg"><PatientForm  initial={patient} onSubmit={act((d) => updatePatient(id, d))} loading={saving} /></Modal>
       <Modal isOpen={modal === 'complete-registration'} onClose={() => setModal(null)} title="Complete Patient Registration" size="lg">
         <PatientForm initial={cleanedForRegistration} onSubmit={act((d) => updatePatient(id, { ...d, is_unidentified: 0 }))} loading={saving} />

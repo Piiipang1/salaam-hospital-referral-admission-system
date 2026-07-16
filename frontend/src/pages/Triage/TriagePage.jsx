@@ -156,23 +156,26 @@ const TriagePage = () => {
         </span>
       ),
     },
-    { key: 'actions', label: '', width: isCoordinator ? '220px' : '80px', align: 'right',
+    { key: 'actions', label: '', width: isCoordinator ? '260px' : '80px', align: 'right',
       render: (r) => {
         const openAssign = (e) => { e.stopPropagation(); setAssignDoctorId(''); setAssignTarget(r); };
         return (
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', alignItems: 'center' }}>
-            {/* Coordinators (admin + DIC) see assignment state. Only a DIC gets
-                the actionable button; admins see read-only labels. */}
+          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+            {/* Coordinators (admin + DIC) see attending-doctor state. Only a DIC
+                gets the actionable button; admins see read-only labels. Wording
+                always says "attending doctor" so this is never read as a referral. */}
             {isCoordinator && (
               r.attending_doctor_id ? (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
                   <span style={{ color: 'var(--color-text-muted)' }}>
-                    {r.attending_doctor_id === user?.linked_id ? 'You (attending)' : (r.attending_doctor_name || 'Assigned')}
+                    {r.attending_doctor_id === user?.linked_id
+                      ? 'You (attending)'
+                      : `Attending: ${r.attending_doctor_name || 'assigned'}`}
                   </span>
                   {canAssignDoctor && (
                     <button
                       onClick={openAssign}
-                      title="Reassign the attending doctor"
+                      title="Change this patient's attending doctor (their primary doctor — not a specialist referral)"
                       style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                                color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
                     >
@@ -181,11 +184,13 @@ const TriagePage = () => {
                   )}
                 </span>
               ) : canAssignDoctor ? (
-                <Button size="sm" variant="outline" title="Assign the attending doctor" onClick={openAssign}>
-                  Assign doctor
+                <Button size="sm" variant="outline"
+                  title="Set this patient's attending doctor (their primary doctor — not a specialist referral)"
+                  onClick={openAssign}>
+                  Assign attending doctor
                 </Button>
               ) : (
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>Unassigned</span>
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>No attending doctor</span>
               )
             )}
             <Button size="sm" variant="ghost"
@@ -206,8 +211,9 @@ const TriagePage = () => {
         <div>
           <h1 className="page-title">Triage</h1>
           <p className="page-subtitle">
-            {total} triage record{total !== 1 ? 's' : ''}
-            {hasActiveFilters ? ' (filtered)' : ''}
+            {unassignedOnly
+              ? `ER coordination queue — ${total} triaged patient${total !== 1 ? 's' : ''} awaiting an attending doctor`
+              : `${total} triage record${total !== 1 ? 's' : ''}${hasActiveFilters ? ' (filtered)' : ''}`}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
@@ -289,7 +295,8 @@ const TriagePage = () => {
           </div>
         </div>
 
-        {/* Unassigned-only toggle — ER coordinators (admin / Doctor-in-Charge) */}
+        {/* ER coordination queue — triaged patients with no attending doctor yet.
+            Same backend param (unassigned=true); the label states the purpose. */}
         {isCoordinator && (
           <button
             className={`triage-level-pill${unassignedOnly ? ' triage-level-pill--active' : ''}`}
@@ -297,9 +304,9 @@ const TriagePage = () => {
             style={unassignedOnly
               ? { background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff' }
               : {}}
-            title="Show only patients with no doctor assigned yet"
+            title="ER coordination queue: triaged patients who still need an attending doctor assigned. This is routing to a primary doctor — not a specialist referral."
           >
-            Unassigned only
+            Needs attending doctor
           </button>
         )}
 
@@ -328,8 +335,11 @@ const TriagePage = () => {
       {/* ── Assign attending doctor modal (ER coordinator) ── */}
       <Modal isOpen={!!assignTarget} onClose={() => setAssignTarget(null)} title="Assign Attending Doctor" size="sm">
         <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-4)' }}>
-          Set the attending doctor for <strong>{assignTarget?.patient_name || 'this patient'}</strong>.
-          Once assigned to another doctor, this patient leaves your coordination list.
+          Set the <strong>attending doctor</strong> for <strong>{assignTarget?.patient_name || 'this patient'}</strong> —
+          the doctor who takes primary responsibility for this patient&apos;s care.
+          This is ER routing, <em>not</em> a referral: referring a patient to a specialist is done
+          from a diagnosis on the Referrals page and has its own Pending → Accepted → Completed lifecycle.
+          Once assigned to another doctor, this patient leaves your coordination queue.
         </p>
         <div className="form-group" style={{ marginBottom: 'var(--space-6)' }}>
           <label htmlFor="assign-doctor-select">Doctor *</label>

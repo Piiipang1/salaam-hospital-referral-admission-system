@@ -93,7 +93,9 @@ const getAllPatients = async (req, res) => {
               p.is_unidentified, p.created_at,
               a.status AS admission_status,
               rm.room_type, rm.bed_number,
-              CONCAT(d.first_name, ' ', d.last_name) AS attending_doctor
+              -- the current admission's doctor; NOT the doctor_in_charge attending
+              -- doctor (see getPatientById for the attending_doctor_* fields)
+              CONCAT(d.first_name, ' ', d.last_name) AS admitting_doctor
        FROM patients p
        LEFT JOIN admissions a
          ON a.patient_id = p.patient_id AND a.status IN ('Pending Room','Active')
@@ -126,15 +128,30 @@ const getAllPatients = async (req, res) => {
 const getPatientById = async (req, res) => {
   try {
     const [rows] = await db.query(
+      // Two DIFFERENT doctors, deliberately named apart:
+      //   admitting_doctor      — the doctor on the current admission (a.doctor_id)
+      //   attending_doctor_*    — the patient's primary doctor (latest doctor_in_charge),
+      //                           set by a Doctor-in-Charge via assignTriageDoctor
+      // The ordered single-row subquery keeps stale duplicate doctor_in_charge rows
+      // from multiplying the result (same pattern as getAllTriages).
       `SELECT p.*,
               a.status AS admission_status,
               rm.room_type, rm.bed_number,
-              CONCAT(d.first_name, ' ', d.last_name) AS attending_doctor
+              CONCAT(d.first_name, ' ', d.last_name) AS admitting_doctor,
+              adoc.doctor_id AS attending_doctor_id,
+              CASE WHEN adoc.doctor_id IS NOT NULL
+                   THEN CONCAT('Dr. ', adoc.first_name, ' ', adoc.last_name)
+              END AS attending_doctor_name
        FROM patients p
        LEFT JOIN admissions a
          ON a.patient_id = p.patient_id AND a.status IN ('Pending Room','Active')
        LEFT JOIN rooms   rm ON rm.room_id  = a.room_id
        LEFT JOIN doctors d  ON d.doctor_id = a.doctor_id
+       LEFT JOIN doctors adoc ON adoc.doctor_id = (
+         SELECT dc.doctor_id FROM doctor_in_charge dc
+         WHERE dc.patient_id = p.patient_id
+         ORDER BY dc.assigned_at DESC LIMIT 1
+       )
        WHERE p.patient_id = ?`,
       [req.params.id]
     );
