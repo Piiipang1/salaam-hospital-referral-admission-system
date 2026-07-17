@@ -5,7 +5,9 @@ const { assertCanAccessPatient } = require('../utils/scoping');
 // patient_id when allowed, or sends the 404/403 response and returns null so the
 // caller can bail out. The diagnosis's own patient_id is the authoritative link
 // (never trust a patient_id from the request body/query).
-const guardDiagnosisAccess = async (req, res) => {
+// Pass { forWrite: true } from mutation handlers: a doctor with only a Pending
+// assignment proposal may READ the chart but not write to it.
+const guardDiagnosisAccess = async (req, res, { forWrite = false } = {}) => {
   const [[diag]] = await db.query(
     'SELECT patient_id FROM diagnoses WHERE diagnosis_id = ?',
     [req.params.id]
@@ -14,7 +16,7 @@ const guardDiagnosisAccess = async (req, res) => {
     res.status(404).json({ success: false, message: 'Diagnosis not found.' });
     return null;
   }
-  const denied = await assertCanAccessPatient(req, diag.patient_id);
+  const denied = await assertCanAccessPatient(req, diag.patient_id, { forWrite });
   if (denied) {
     res.status(denied.status).json({ success: false, message: denied.message });
     return null;
@@ -48,9 +50,14 @@ const createDiagnosis = async (req, res) => {
 
     // Invariant: at most one doctor_in_charge row per patient — the current
     // attending doctor. Replace, same semantics as assignTriageDoctor.
+    // Recording a diagnosis is an act of taking clinical responsibility, so the
+    // row is written directly as 'Accepted' (an implicit acceptance — there is
+    // no proposal handshake to wait on, and any live Pending proposal for this
+    // patient is superseded by the doctor actually treating them).
     await connection.query('DELETE FROM doctor_in_charge WHERE patient_id = ?', [patient_id]);
     await connection.query(
-      'INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at) VALUES (?, ?, NOW())',
+      `INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at, status, responded_at)
+       VALUES (?, ?, NOW(), 'Accepted', NOW())`,
       [doctor_id, patient_id]
     );
 
@@ -112,7 +119,7 @@ const getDiagnosisById = async (req, res) => {
 const updateDiagnosis = async (req, res) => {
   const { medical_condition, doctor_id } = req.body;
   try {
-    if ((await guardDiagnosisAccess(req, res)) === null) return;
+    if ((await guardDiagnosisAccess(req, res, { forWrite: true })) === null) return;
 
     await db.query(
       `UPDATE diagnoses SET
@@ -143,7 +150,7 @@ const addTreatment = async (req, res) => {
   }
 
   try {
-    if ((await guardDiagnosisAccess(req, res)) === null) return;
+    if ((await guardDiagnosisAccess(req, res, { forWrite: true })) === null) return;
 
     const [result] = await db.query(
       `INSERT INTO treatments (diagnosis_id, prescribed_medications, dosage, frequency, treatment_duration)
@@ -228,7 +235,7 @@ const saveAssessment = async (req, res) => {
   }
 
   try {
-    if ((await guardDiagnosisAccess(req, res)) === null) return;
+    if ((await guardDiagnosisAccess(req, res, { forWrite: true })) === null) return;
 
     const [existing] = await db.query(
       'SELECT assessment_id FROM doctor_assessments WHERE diagnosis_id = ?',
@@ -356,7 +363,7 @@ const addLabResult = async (req, res) => {
     // Access is checked against the diagnosis's own patient (the authoritative
     // link) — not the patient_id in the body. nurse is allowed on this route,
     // so the guard applies the nurse "personally registered" rule to them too.
-    if ((await guardDiagnosisAccess(req, res)) === null) return;
+    if ((await guardDiagnosisAccess(req, res, { forWrite: true })) === null) return;
 
     const [result] = await db.query(
       `INSERT INTO lab_results (patient_id, diagnosis_id, test_type, results, file_attachment, date_conducted)

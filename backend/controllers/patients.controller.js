@@ -57,7 +57,7 @@ const getAllPatients = async (req, res) => {
     // never trust the JWT for the DIC flag.)
     if (req.user.role === 'doctor') {
       const scope = (await isDoctorInCharge(req.user.user_id))
-        ? scopeForDoctorInCharge('p.patient_id', req.user.linked_id)
+        ? scopeForDoctorInCharge('p.patient_id', req.user.linked_id, req.user.user_id)
         : scopeToAssignedPatients('p.patient_id', req.user.linked_id);
       conditions.push(scope.sql);
       params.push(...scope.params);
@@ -130,10 +130,12 @@ const getPatientById = async (req, res) => {
     const [rows] = await db.query(
       // Two DIFFERENT doctors, deliberately named apart:
       //   admitting_doctor      — the doctor on the current admission (a.doctor_id)
-      //   attending_doctor_*    — the patient's primary doctor (latest doctor_in_charge),
-      //                           set by a Doctor-in-Charge via assignTriageDoctor
-      // The ordered single-row subquery keeps stale duplicate doctor_in_charge rows
-      // from multiplying the result (same pattern as getAllTriages).
+      //   attending_doctor_*    — the patient's doctor_in_charge row: Accepted =
+      //                           the attending doctor; Pending = a proposal
+      //                           awaiting that doctor's acceptance
+      //                           (assignment_status distinguishes the two).
+      // The ordered single-row subquery — keyed on dic_id — keeps stale duplicate
+      // doctor_in_charge rows from multiplying the result (same as getAllTriages).
       `SELECT p.*,
               a.status AS admission_status,
               rm.room_type, rm.bed_number,
@@ -141,17 +143,20 @@ const getPatientById = async (req, res) => {
               adoc.doctor_id AS attending_doctor_id,
               CASE WHEN adoc.doctor_id IS NOT NULL
                    THEN CONCAT('Dr. ', adoc.first_name, ' ', adoc.last_name)
-              END AS attending_doctor_name
+              END AS attending_doctor_name,
+              adic.status AS assignment_status,
+              adic.assigned_by AS assignment_assigned_by
        FROM patients p
        LEFT JOIN admissions a
          ON a.patient_id = p.patient_id AND a.status IN ('Pending Room','Active')
        LEFT JOIN rooms   rm ON rm.room_id  = a.room_id
        LEFT JOIN doctors d  ON d.doctor_id = a.doctor_id
-       LEFT JOIN doctors adoc ON adoc.doctor_id = (
-         SELECT dc.doctor_id FROM doctor_in_charge dc
+       LEFT JOIN doctor_in_charge adic ON adic.dic_id = (
+         SELECT dc.dic_id FROM doctor_in_charge dc
          WHERE dc.patient_id = p.patient_id
          ORDER BY dc.assigned_at DESC LIMIT 1
        )
+       LEFT JOIN doctors adoc ON adoc.doctor_id = adic.doctor_id
        WHERE p.patient_id = ?`,
       [req.params.id]
     );
@@ -160,9 +165,11 @@ const getPatientById = async (req, res) => {
     }
 
     if (req.user.role === 'doctor') {
+      // Detail reads include patients pending the doctor's acceptance; the DIC
+      // additionally keeps limbo access to proposals they created (userId).
       const allowed = (await isDoctorInCharge(req.user.user_id))
-        ? await doctorInChargeCanAccessPatient(req.user.linked_id, req.params.id)
-        : await doctorCanAccessPatient(req.user.linked_id, req.params.id);
+        ? await doctorInChargeCanAccessPatient(req.user.linked_id, req.params.id, { userId: req.user.user_id, includePending: true })
+        : await doctorCanAccessPatient(req.user.linked_id, req.params.id, { includePending: true });
       if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }
@@ -195,9 +202,10 @@ const getPatientHistory = async (req, res) => {
     // Same doctor scoping as getPatientById — Doctor-in-Charge bypasses it so
     // the patient detail page (info + history) works for unassigned patients.
     if (req.user.role === 'doctor') {
+      // Same read semantics as getPatientById: pending-for-me + DIC limbo.
       const allowed = (await isDoctorInCharge(req.user.user_id))
-        ? await doctorInChargeCanAccessPatient(req.user.linked_id, id)
-        : await doctorCanAccessPatient(req.user.linked_id, id);
+        ? await doctorInChargeCanAccessPatient(req.user.linked_id, id, { userId: req.user.user_id, includePending: true })
+        : await doctorCanAccessPatient(req.user.linked_id, id, { includePending: true });
       if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }

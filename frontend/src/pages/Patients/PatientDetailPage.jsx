@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { FileText, Image, Paperclip, FlaskConical, ClipboardList } from 'lucide-react';
 import { getPatientById, getPatientHistory, updatePatient } from '../../api/patients.api';
 import { createTriage, assignTriageDoctor } from '../../api/triages.api';
+import { cancelAssignment } from '../../api/assignments.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessment } from '../../api/diagnoses.api';
 import { createReferral } from '../../api/referrals.api';
@@ -231,6 +232,20 @@ const PatientDetailPage = () => {
       setAssignOpen(false);
     } finally { setAssignSaving(false); }
   };
+
+  // Pending = a proposal awaiting the proposed doctor's acceptance.
+  const hasPendingAssignment = patient?.assignment_status === 'Pending';
+
+  const handleCancelAssignment = async () => {
+    try {
+      const res = await cancelAssignment(id);
+      setSuccess(res.message || 'Assignment proposal cancelled.');
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Cancel failed.');
+      load(); // may have been accepted/declined meanwhile — refresh either way
+    }
+  };
   const treatments = diagnoses.flatMap((d) =>
     (d.treatments ?? []).map((tx) => ({ ...tx, medical_condition: d.medical_condition }))
   );
@@ -265,6 +280,26 @@ const PatientDetailPage = () => {
         </div>
       ) : null}
 
+      {/* Pending attending-doctor assignment banner */}
+      {hasPendingAssignment ? (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          gap: 'var(--space-4)', padding: 'var(--space-4) var(--space-5)',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--color-warning-muted, #fef3c7)', border: '1px solid var(--color-warning, #d97706)',
+          color: 'var(--color-warning, #92400e)',
+        }}>
+          <span style={{ fontWeight: 500 }}>
+            ⏳ Attending-doctor assignment awaiting acceptance by {patient.attending_doctor_name || 'the proposed doctor'}.
+          </span>
+          {canAssignAttending && (
+            <Button size="sm" variant="outline" onClick={handleCancelAssignment}>
+              Cancel Proposal
+            </Button>
+          )}
+        </div>
+      ) : null}
+
       {/* Patient info card */}
       <Card
         title={
@@ -284,15 +319,31 @@ const PatientDetailPage = () => {
           <div><span className="info-label">Age</span><span>{(() => { const a = formatPatientAge(patient); return /^\d+$/.test(a) ? `${a} yrs` : a; })()}</span></div>
           <div><span className="info-label">Date of Birth</span><span>{formatPatientDob(patient)}</span></div>
           {/* Attending doctor = the patient's primary doctor (doctor_in_charge),
-              set by a Doctor-in-Charge at triage. Distinct from the admitting
-              doctor below and from any specialist referral. */}
+              proposed by a Doctor-in-Charge at triage and confirmed by the
+              doctor's acceptance. Distinct from the admitting doctor below and
+              from any specialist referral. */}
           <div>
             <span className="info-label">Attending Doctor</span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-              {patient.attending_doctor_id
-                ? (patient.attending_doctor_id === user?.linked_id ? 'You (attending)' : patient.attending_doctor_name)
-                : 'Not assigned'}
-              {canAssignAttending && (
+              {hasPendingAssignment
+                ? <span style={{ color: 'var(--color-warning, #d97706)' }}>
+                    {patient.attending_doctor_id === user?.linked_id
+                      ? 'Awaiting your acceptance'
+                      : `Awaiting acceptance — ${patient.attending_doctor_name || 'proposed doctor'}`}
+                  </span>
+                : patient.attending_doctor_id
+                  ? (patient.attending_doctor_id === user?.linked_id ? 'You (attending)' : patient.attending_doctor_name)
+                  : 'Not assigned'}
+              {canAssignAttending && (hasPendingAssignment ? (
+                <button
+                  onClick={handleCancelAssignment}
+                  title="Withdraw this proposal — the patient returns to the coordination queue"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                           color: 'var(--color-danger)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
+                >
+                  Cancel
+                </button>
+              ) : (
                 <button
                   onClick={openAssignAttending}
                   title="Set this patient's attending doctor (their primary doctor — not a specialist referral)"
@@ -301,7 +352,7 @@ const PatientDetailPage = () => {
                 >
                   {patient.attending_doctor_id ? 'Reassign' : 'Assign'}
                 </button>
-              )}
+              ))}
             </span>
           </div>
           <div><span className="info-label">Admitting Doctor</span><span>{patient.admitting_doctor ? `Dr. ${patient.admitting_doctor}` : '—'}</span></div>
