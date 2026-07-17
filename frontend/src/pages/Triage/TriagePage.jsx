@@ -169,63 +169,69 @@ const TriagePage = () => {
         </span>
       ),
     },
-    { key: 'actions', label: '', width: isCoordinator ? '260px' : '80px', align: 'right',
+    { key: 'actions', label: '', width: isCoordinator ? '320px' : '80px', align: 'right',
       render: (r) => {
         const openAssign = (e) => { e.stopPropagation(); setAssignDoctorId(''); setAssignTarget(r); };
         return (
-          <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
+          // Two-part layout: the coordinator content right-aligns inside a
+          // flexible inner div, while the View button stays OUTSIDE it with
+          // flexShrink:0 — so View sits in the exact same spot on every row
+          // even when a long attending name wraps to two lines.
+          <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'nowrap' }}>
             {/* Coordinators (admin + DIC) see assignment state. Three states:
                 no row → Assign (DIC only); Pending → awaiting acceptance, with
                 Cancel for a DIC; Accepted → attending display + Reassign.
                 Wording always says "attending doctor" — never a referral. */}
             {isCoordinator && (
-              r.assignment_status === 'Pending' ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
-                  <span style={{ color: 'var(--color-warning, #d97706)' }}>
-                    {r.attending_doctor_id === user?.linked_id
-                      ? 'Awaiting your acceptance'
-                      : `Awaiting acceptance — ${r.attending_doctor_name || 'proposed doctor'}`}
-                  </span>
-                  {canAssignDoctor && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleCancelAssignment(r.patient_id); }}
-                      title="Withdraw this proposal — the patient returns to the coordination queue"
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                               color: 'var(--color-danger)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </span>
-              ) : r.attending_doctor_id ? (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>
-                    {r.attending_doctor_id === user?.linked_id
-                      ? 'You (attending)'
-                      : `Attending: ${r.attending_doctor_name || 'assigned'}`}
-                  </span>
-                  {canAssignDoctor && (
-                    <button
-                      onClick={openAssign}
-                      title="Change this patient's attending doctor (their primary doctor — not a specialist referral)"
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-                               color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
-                    >
-                      Reassign
-                    </button>
-                  )}
-                </span>
-              ) : canAssignDoctor ? (
-                <Button size="sm" variant="outline"
-                  title="Set this patient's attending doctor (their primary doctor — not a specialist referral)"
-                  onClick={openAssign}>
-                  Assign attending doctor
-                </Button>
-              ) : (
-                <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>No attending doctor</span>
-              )
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 'var(--space-2)', textAlign: 'right', fontSize: 'var(--font-size-sm)' }}>
+                {r.assignment_status === 'Pending' ? (
+                  <>
+                    <span style={{ color: 'var(--color-warning, #d97706)' }}>
+                      {r.attending_doctor_id === user?.linked_id
+                        ? 'Awaiting your acceptance'
+                        : `Awaiting acceptance — ${r.attending_doctor_name || 'proposed doctor'}`}
+                    </span>
+                    {canAssignDoctor && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleCancelAssignment(r.patient_id); }}
+                        title="Withdraw this proposal — the patient returns to the coordination queue"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0,
+                                 color: 'var(--color-danger)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </>
+                ) : r.attending_doctor_id ? (
+                  <>
+                    <span style={{ color: 'var(--color-text-muted)' }}>
+                      {r.attending_doctor_id === user?.linked_id
+                        ? 'You (attending)'
+                        : `Attending: ${r.attending_doctor_name || 'assigned'}`}
+                    </span>
+                    {canAssignDoctor && (
+                      <button
+                        onClick={openAssign}
+                        title="Change this patient's attending doctor (their primary doctor — not a specialist referral)"
+                        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0,
+                                 color: 'var(--color-primary)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
+                      >
+                        Reassign
+                      </button>
+                    )}
+                  </>
+                ) : canAssignDoctor ? (
+                  <Button size="sm" variant="outline"
+                    title="Set this patient's attending doctor (their primary doctor — not a specialist referral)"
+                    onClick={openAssign}>
+                    Assign attending doctor
+                  </Button>
+                ) : (
+                  <span style={{ color: 'var(--color-text-muted)' }}>No attending doctor</span>
+                )}
+              </div>
             )}
-            <Button size="sm" variant="ghost"
+            <Button size="sm" variant="ghost" style={{ flexShrink: 0 }}
               onClick={(e) => { e.stopPropagation(); navigate(`/triage/${r.triage_id}`); }}>
               View
             </Button>

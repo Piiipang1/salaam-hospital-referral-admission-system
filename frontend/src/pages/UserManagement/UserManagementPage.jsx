@@ -202,15 +202,16 @@ const UserManagementPage = () => {
         {!!r.is_doctor_in_charge && <Badge status="Completed" label="DIC" />}
       </span>
     )},
-    { key:'linked_name', label:'Staff Member', render:(r)=>r.linked_name ?? '—', hideMobile: true },
+    { key:'linked_name', label:'Full Name', render:(r)=>r.linked_name ?? '—', hideMobile: true },
     { key:'is_active', label:'Status',  render:(r)=>r.is_active ? <Badge status="Completed" label="Active" /> : <Badge status="Cancelled" label="Inactive" /> },
     { key:'created_at',label:'Created', render:(r)=>formatDate(r.created_at), hideMobile: true },
     {
-      key:'actions', label:'', width:'300px', align:'right',
+      key:'actions', label:'', width:'360px', align:'right',
       render:(r)=>(
-        // minWidth fits the widest case (Edit / Disable DIC / Deactivate) on one
-        // line; below it the wrapper scrolls or the buttons wrap inside the cell
-        <div style={{display:'flex',gap:'var(--space-2)',justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap',minWidth:'280px'}}>
+        // nowrap + 340px minimum fits the widest case (Edit / Demote to Doctor /
+        // Deactivate) on a single right-aligned line, so 2- and 3-button rows
+        // stay visually aligned; the table wrapper scrolls on narrow viewports
+        <div style={{display:'flex',gap:'var(--space-2)',justifyContent:'flex-end',alignItems:'center',flexWrap:'nowrap',whiteSpace:'nowrap',minWidth:'340px'}}>
           <Button size="sm" variant="outline" onClick={(e)=>{e.stopPropagation();setModal(r);}}>Edit</Button>
           {r.role === 'doctor' && r.is_active && (
             <Button size="sm" variant={r.is_doctor_in_charge ? 'secondary' : 'outline'}
