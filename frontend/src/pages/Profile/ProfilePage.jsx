@@ -70,7 +70,8 @@ const ProfilePage = () => {
           {isDoctor && (
             <>
               <div><span className="info-label">Specialization</span><span>{me.specialization || 'General'}</span></div>
-              <div><span className="info-label">ER-Assigned</span><span>{me.is_er_assigned ? 'Yes' : 'No'}</span></div>
+              {/* ER-Assigned is intentionally not shown on profiles (adviser
+                  feedback) — it remains an admin-managed flag in User Management. */}
               <div>
                 <span className="info-label">Doctor-in-Charge</span>
                 <span>{me.is_doctor_in_charge ? <Badge status="Completed" label="Enabled" /> : '—'}</span>

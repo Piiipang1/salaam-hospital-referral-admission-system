@@ -68,18 +68,27 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
       </div>
 
       {form.role === 'doctor' && (
-        <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer' }}>
-            <input
-              id="uf-er"
-              type="checkbox"
-              checked={form.is_er_assigned}
-              onChange={(e) => setForm((f) => ({ ...f, is_er_assigned: e.target.checked }))}
-              style={{ width: 'auto' }}
-            />
-            ER-assigned (may admit patients)
-          </label>
-        </div>
+        initial.is_doctor_in_charge ? (
+          /* DICs are ER-assigned by definition — the toggle is meaningless for
+             them, so show a note instead. is_er_assigned still submits with its
+             stored value (no behavior change). */
+          <p className="text-sm text-muted" style={{ marginTop: 'var(--space-4)' }}>
+            Doctor-in-Charge — ER-assigned by definition.
+          </p>
+        ) : (
+          <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', cursor: 'pointer' }}>
+              <input
+                id="uf-er"
+                type="checkbox"
+                checked={form.is_er_assigned}
+                onChange={(e) => setForm((f) => ({ ...f, is_er_assigned: e.target.checked }))}
+                style={{ width: 'auto' }}
+              />
+              ER-assigned (may admit patients)
+            </label>
+          </div>
+        )
       )}
 
       {showPersonFields && (

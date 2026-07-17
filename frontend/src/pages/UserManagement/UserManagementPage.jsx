@@ -215,7 +215,7 @@ const UserManagementPage = () => {
           {r.role === 'doctor' && r.is_active && (
             <Button size="sm" variant={r.is_doctor_in_charge ? 'secondary' : 'outline'}
               onClick={(e)=>{e.stopPropagation();openDicToggle(r);}}>
-              {r.is_doctor_in_charge ? 'Disable DIC' : 'Enable DIC'}
+              {r.is_doctor_in_charge ? 'Demote to Doctor' : 'Promote to DIC'}
             </Button>
           )}
           {r.is_active
@@ -442,12 +442,12 @@ const UserManagementPage = () => {
         isOpen={dicStep === 'confirm'}
         onClose={closeDicFlow}
         onConfirm={() => setDicStep('password')}
-        title="Enable Doctor-in-Charge Mode"
+        title="Promote to Doctor-in-Charge"
         message={
-          `Enable Doctor-in-Charge mode for "${dicTarget?.row?.username}"?\n\n` +
+          `Promote "${dicTarget?.row?.username}" to Doctor-in-Charge?\n\n` +
           `This grants elevated visibility: access to ALL patient records, ` +
           `the doctor workload overview, and the ability to reassign referrals. ` +
-          `A maximum of 3 doctors can hold this mode at once. ` +
+          `A maximum of 3 doctors can hold this promotion at once. ` +
           `You will be asked to re-enter your password to confirm.`
         }
         confirmLabel="Continue"
@@ -457,13 +457,14 @@ const UserManagementPage = () => {
       <Modal
         isOpen={dicStep === 'password'}
         onClose={closeDicFlow}
-        title={dicTarget?.enabled ? 'Confirm — Enable Doctor-in-Charge' : 'Confirm — Disable Doctor-in-Charge'}
+        title={dicTarget?.enabled ? 'Confirm — Promote to DIC' : 'Confirm — Demote to Doctor'}
         size="sm"
       >
         <form onSubmit={handleDicSubmit} noValidate>
           <p style={{ color:'var(--color-text-muted)', marginBottom:'var(--space-4)' }}>
-            Re-enter your admin password to {dicTarget?.enabled ? 'enable' : 'disable'} Doctor-in-Charge
-            mode for <strong>{dicTarget?.row?.username}</strong>.
+            Re-enter your admin password to {dicTarget?.enabled
+              ? <>promote <strong>{dicTarget?.row?.username}</strong> to Doctor-in-Charge</>
+              : <>demote <strong>{dicTarget?.row?.username}</strong> to regular doctor</>}.
           </p>
           <div className="form-group">
             <label htmlFor="dic-pwd">Admin Password *</label>
@@ -480,7 +481,7 @@ const UserManagementPage = () => {
           <div className="form-actions">
             <Button type="button" variant="secondary" onClick={closeDicFlow} disabled={dicSaving}>Cancel</Button>
             <Button type="submit" variant="primary" loading={dicSaving} disabled={!dicPassword}>
-              {dicTarget?.enabled ? 'Enable' : 'Disable'}
+              {dicTarget?.enabled ? 'Promote' : 'Demote'}
             </Button>
           </div>
         </form>

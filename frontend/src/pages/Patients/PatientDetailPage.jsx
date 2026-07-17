@@ -391,7 +391,7 @@ const PatientDetailPage = () => {
                   <span className="text-sm text-muted">{formatDate(t.triage_datetime, true)}</span>
                 </div>
                 {canManageTriage(user?.role) && (
-                  <Button size="sm" variant="ghost" onClick={() => { setVitalTriageId(t.triage_id); setModal('vitals'); }}>+ Vitals</Button>
+                  <Button size="sm" variant="outline" onClick={() => { setVitalTriageId(t.triage_id); setModal('vitals'); }}>+ Vitals</Button>
                 )}
               </div>
               <p className="text-sm" style={{ marginTop:'var(--space-3)' }}>{t.notes || '—'}</p>
