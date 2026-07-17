@@ -141,10 +141,13 @@ const createAdmission = async (req, res) => {
   try {
     // ── Guard: a doctor may only admit patients assigned or referred to them.
     // A Doctor-in-Charge (live-checked, never from the JWT) may additionally
-    // admit currently-unassigned patients — that is the ER-coordinator flow
-    // for new/unidentified emergency arrivals.
+    // admit currently-unassigned patients — the ER-coordinator flow for new/
+    // unidentified emergency arrivals — and, via limbo ownership (userId),
+    // patients whose Pending assignment proposal they created. A doctor with
+    // only a Pending proposal TO them may not admit before accepting
+    // (includePending stays false — this is a write).
     const allowed = (await isDoctorInCharge(req.user.user_id))
-      ? await doctorInChargeCanAccessPatient(req.user.linked_id, patient_id)
+      ? await doctorInChargeCanAccessPatient(req.user.linked_id, patient_id, { userId: req.user.user_id })
       : await doctorCanAccessPatient(req.user.linked_id, patient_id);
     if (!allowed) {
       return res.status(403).json({

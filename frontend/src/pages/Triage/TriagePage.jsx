@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Siren } from 'lucide-react';
 import { getAllTriages, createTriage, createEmergencyTriage, assignTriageDoctor } from '../../api/triages.api';
+import { cancelAssignment } from '../../api/assignments.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManageTriage, canEmergencyTriage } from '../../utils/roleGuard';
@@ -142,6 +143,18 @@ const TriagePage = () => {
     } finally { setAssignSaving(false); }
   };
 
+  // Withdraw a Pending proposal so the patient returns to the coordination queue.
+  const handleCancelAssignment = async (patientId) => {
+    try {
+      const res = await cancelAssignment(patientId);
+      setSuccess(res.message || 'Assignment proposal cancelled.');
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Cancel failed.');
+      load(); // the row may have been accepted/declined meanwhile — refresh either way
+    }
+  };
+
   const clearFilters = () => { setLevel(''); setFromDate(''); setToDate(''); setUnassignedOnly(false); };
   const hasActiveFilters = level || fromDate || toDate || unassignedOnly;
 
@@ -161,11 +174,30 @@ const TriagePage = () => {
         const openAssign = (e) => { e.stopPropagation(); setAssignDoctorId(''); setAssignTarget(r); };
         return (
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Coordinators (admin + DIC) see attending-doctor state. Only a DIC
-                gets the actionable button; admins see read-only labels. Wording
-                always says "attending doctor" so this is never read as a referral. */}
+            {/* Coordinators (admin + DIC) see assignment state. Three states:
+                no row → Assign (DIC only); Pending → awaiting acceptance, with
+                Cancel for a DIC; Accepted → attending display + Reassign.
+                Wording always says "attending doctor" — never a referral. */}
             {isCoordinator && (
-              r.attending_doctor_id ? (
+              r.assignment_status === 'Pending' ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                  <span style={{ color: 'var(--color-warning, #d97706)' }}>
+                    {r.attending_doctor_id === user?.linked_id
+                      ? 'Awaiting your acceptance'
+                      : `Awaiting acceptance — ${r.attending_doctor_name || 'proposed doctor'}`}
+                  </span>
+                  {canAssignDoctor && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleCancelAssignment(r.patient_id); }}
+                      title="Withdraw this proposal — the patient returns to the coordination queue"
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                               color: 'var(--color-danger)', fontSize: 'var(--font-size-xs)', textDecoration: 'underline' }}
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </span>
+              ) : r.attending_doctor_id ? (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
                   <span style={{ color: 'var(--color-text-muted)' }}>
                     {r.attending_doctor_id === user?.linked_id

@@ -29,8 +29,9 @@ const createReferral = async (req, res) => {
     }
 
     // 2. The referring doctor must have a relationship with this patient — same
-    //    per-patient scoping used across the clinical endpoints.
-    const denied = await assertCanAccessPatient(req, diag.patient_id);
+    //    per-patient scoping used across the clinical endpoints. forWrite: a
+    //    doctor with only a Pending assignment proposal may not refer yet.
+    const denied = await assertCanAccessPatient(req, diag.patient_id, { forWrite: true });
     if (denied) {
       return res.status(denied.status).json({ success: false, message: denied.message });
     }

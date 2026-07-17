@@ -146,8 +146,10 @@ const getAllTriages = async (req, res) => {
     // coordinator) also sees triages of currently-unassigned patients.
     // Admins unscoped. (Fresh DB read — never trust the JWT for the DIC flag.)
     if (req.user.role === 'doctor') {
+      // userId enables the DIC "limbo ownership" branch — patients whose
+      // Pending proposal this DIC created stay visible until accepted/declined.
       const scope = (await isDoctorInCharge(req.user.user_id))
-        ? scopeForDoctorInCharge('t.patient_id', req.user.linked_id)
+        ? scopeForDoctorInCharge('t.patient_id', req.user.linked_id, req.user.user_id)
         : scopeToAssignedPatients('t.patient_id', req.user.linked_id);
       conditions.push(scope.sql);
       params.push(...scope.params);
@@ -169,24 +171,27 @@ const getAllTriages = async (req, res) => {
     // Run data + count in parallel
     const [[rows], [[{ total }]]] = await Promise.all([
       db.query(
-        // adoc = the patient's CURRENT attending doctor (doctor_in_charge). The
-        // ordered single-row subquery guarantees at most one doctor per triage
-        // row even when doctor_in_charge holds stale duplicate rows for a patient
-        // — a plain LEFT JOIN doctor_in_charge would multiply triage rows.
+        // adic = the patient's CURRENT doctor_in_charge row (Pending proposal or
+        // Accepted attending). The ordered single-row subquery — keyed on dic_id
+        // — guarantees at most one row per triage even if stale duplicates ever
+        // reappear; a plain LEFT JOIN doctor_in_charge would multiply triage rows.
         `SELECT t.*, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
                 vs.blood_pressure, vs.heart_rate, vs.temperature, vs.respiratory_rate,
                 adoc.doctor_id AS attending_doctor_id,
                 CASE WHEN adoc.doctor_id IS NOT NULL
                      THEN CONCAT('Dr. ', adoc.first_name, ' ', adoc.last_name)
-                END AS attending_doctor_name
+                END AS attending_doctor_name,
+                adic.status AS assignment_status,
+                adic.assigned_by AS assignment_assigned_by
          FROM triages t
          LEFT JOIN patients p ON t.patient_id = p.patient_id
          LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
-         LEFT JOIN doctors adoc ON adoc.doctor_id = (
-           SELECT dc.doctor_id FROM doctor_in_charge dc
+         LEFT JOIN doctor_in_charge adic ON adic.dic_id = (
+           SELECT dc.dic_id FROM doctor_in_charge dc
            WHERE dc.patient_id = t.patient_id
            ORDER BY dc.assigned_at DESC LIMIT 1
          )
+         LEFT JOIN doctors adoc ON adoc.doctor_id = adic.doctor_id
          ${where}
          ORDER BY t.triage_datetime DESC LIMIT ? OFFSET ?`,
         [...params, parseInt(limit), offset]
@@ -221,17 +226,20 @@ const getTriageById = async (req, res) => {
               adoc.doctor_id AS attending_doctor_id,
               CASE WHEN adoc.doctor_id IS NOT NULL
                    THEN CONCAT('Dr. ', adoc.first_name, ' ', adoc.last_name)
-              END AS attending_doctor_name
+              END AS attending_doctor_name,
+              adic.status AS assignment_status,
+              adic.assigned_by AS assignment_assigned_by
        FROM triages t
        LEFT JOIN patients p ON t.patient_id = p.patient_id
        LEFT JOIN employees e ON t.employee_id = e.employee_id
        LEFT JOIN visit_rooms vr ON t.visit_room_id = vr.visit_room_id
        LEFT JOIN vital_signs vs ON t.triage_id = vs.triage_id
-       LEFT JOIN doctors adoc ON adoc.doctor_id = (
-         SELECT dc.doctor_id FROM doctor_in_charge dc
+       LEFT JOIN doctor_in_charge adic ON adic.dic_id = (
+         SELECT dc.dic_id FROM doctor_in_charge dc
          WHERE dc.patient_id = t.patient_id
          ORDER BY dc.assigned_at DESC LIMIT 1
        )
+       LEFT JOIN doctors adoc ON adoc.doctor_id = adic.doctor_id
        WHERE t.triage_id = ?`,
       [req.params.id]
     );
@@ -239,12 +247,13 @@ const getTriageById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Triage not found.' });
     }
 
-    // Doctors may view triages of their assigned patients; a Doctor-in-Charge
-    // may also view triages of currently-unassigned patients.
+    // Doctors may view triages of their assigned patients (read scope includes
+    // patients pending their acceptance); a Doctor-in-Charge may also view
+    // triages of unassigned patients and of proposals they created (limbo).
     if (req.user.role === 'doctor') {
       const allowed = (await isDoctorInCharge(req.user.user_id))
-        ? await doctorInChargeCanAccessPatient(req.user.linked_id, rows[0].patient_id)
-        : await doctorCanAccessPatient(req.user.linked_id, rows[0].patient_id);
+        ? await doctorInChargeCanAccessPatient(req.user.linked_id, rows[0].patient_id, { userId: req.user.user_id, includePending: true })
+        : await doctorCanAccessPatient(req.user.linked_id, rows[0].patient_id, { includePending: true });
       if (!allowed) {
         return res.status(403).json({ success: false, message: 'You are not assigned to this patient.' });
       }
@@ -537,15 +546,35 @@ const assignTriageDoctor = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Assigned doctor must exist and be Active.' });
     }
 
-    // "Assign or change" — replace the patient's doctor_in_charge with the new
-    // attending doctor, in a transaction.
+    // Acceptance workflow: assigning ANOTHER doctor creates a Pending PROPOSAL
+    // they must accept or decline; assigning YOURSELF is immediately Accepted
+    // (you don't accept your own proposal). A patient with a live Pending
+    // proposal cannot be re-proposed — the DIC must cancel it first
+    // (POST /api/assignments/:patientId/cancel). An Accepted row may be
+    // replaced (reassign), which starts a new Pending handshake.
+    // INVARIANT: at most one doctor_in_charge row per patient, of either status.
+    const isSelfAssign = Number(doctor_id) === Number(req.user.linked_id);
+
+    const [[existing]] = await db.query(
+      'SELECT dic_id, status FROM doctor_in_charge WHERE patient_id = ? LIMIT 1',
+      [triage.patient_id]
+    );
+    if (existing && existing.status === 'Pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'This patient already has an assignment awaiting acceptance. Cancel it before proposing another doctor.',
+      });
+    }
+
+    const newStatus = isSelfAssign ? 'Accepted' : 'Pending';
     const connection = await db.getConnection();
     await connection.beginTransaction();
     try {
       await connection.query('DELETE FROM doctor_in_charge WHERE patient_id = ?', [triage.patient_id]);
       await connection.query(
-        'INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at) VALUES (?, ?, NOW())',
-        [doctor_id, triage.patient_id]
+        `INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at, status, assigned_by, responded_at)
+         VALUES (?, ?, NOW(), ?, ?, ${isSelfAssign ? 'NOW()' : 'NULL'})`,
+        [doctor_id, triage.patient_id, newStatus, req.user.user_id]
       );
       await connection.query(
         "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'ASSIGN_DOCTOR', 'doctor_in_charge', ?)",
@@ -561,10 +590,12 @@ const assignTriageDoctor = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: `Dr. ${targetDoctor.name} is now the attending doctor for ${triage.patient_name ?? 'this patient'}.`,
+      message: isSelfAssign
+        ? `You are now the attending doctor for ${triage.patient_name ?? 'this patient'}.`
+        : `Dr. ${targetDoctor.name} has been proposed as attending doctor for ${triage.patient_name ?? 'this patient'} — awaiting their acceptance.`,
     });
 
-    // Best-effort notification to the newly assigned doctor
+    // Best-effort notification to the proposed doctor (skip on self-assign)
     try {
       const [[docUser]] = await db.query(
         "SELECT user_id FROM users WHERE linked_id = ? AND role = 'doctor' AND is_active = 1 LIMIT 1",
@@ -573,7 +604,11 @@ const assignTriageDoctor = async (req, res) => {
       if (docUser && docUser.user_id !== req.user.user_id) {
         await db.query(
           'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
-          [docUser.user_id, `You have been assigned as the attending doctor for ${triage.patient_name ?? 'a patient'}.`, null]
+          [
+            docUser.user_id,
+            `You have been proposed as the attending doctor for ${triage.patient_name ?? 'a patient'}. Review the chart and accept or decline from your dashboard.`,
+            null,
+          ]
         );
       }
     } catch (notifErr) {

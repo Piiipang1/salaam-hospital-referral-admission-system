@@ -2,13 +2,16 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Stethoscope, Building2, ClipboardList, FlaskConical,
-  Siren, BedDouble, Users, Repeat, UserPlus, DoorOpen, ChevronRight,
+  Siren, BedDouble, Users, Repeat, UserPlus, DoorOpen, ChevronRight, UserCheck,
 } from 'lucide-react';
 import { getDashboardStats, getDashboardRecentActivity, getDashboardMyStats } from '../../api/dashboard.api';
+import { getMyPendingAssignments, acceptAssignment, declineAssignment } from '../../api/assignments.api';
 import { useAuth } from '../../context/AuthContext';
 import StatCard from '../../components/ui/StatCard';
 import Badge   from '../../components/ui/Badge';
 import Alert   from '../../components/ui/Alert';
+import Button  from '../../components/ui/Button';
+import Modal   from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import { formatDate } from '../../utils/formatDate';
 import './DashboardPage.css';
@@ -92,6 +95,128 @@ const ActivityPanel = ({ title, icon, loading, items, emptyMsg, renderItem, coun
     </div>
   </div>
 );
+
+// ── Pending attending-doctor assignments (doctor only) ──────────────────────
+// Proposals from a Doctor-in-Charge awaiting THIS doctor's response. The
+// doctor can open the chart (read access while Pending), then Accept —
+// becoming the attending doctor — or Decline with a reason, which returns the
+// patient to the coordination queue and notifies the proposing DIC.
+const PendingAssignmentsPanel = ({ navigate, onResponded }) => {
+  const [items,   setItems]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState('');
+  const [success, setSuccess] = useState('');
+  const [acting,  setActing]  = useState(false);
+  const [declineTarget, setDeclineTarget] = useState(null); // row being declined
+  const [declineReason, setDeclineReason] = useState('');
+
+  const loadPending = () => {
+    getMyPendingAssignments()
+      .then((r) => { if (r.success) setItems(r.data); })
+      .catch(() => {}) // non-critical
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { loadPending(); }, []);
+
+  const respond = async (fn, successFallback) => {
+    setActing(true);
+    try {
+      const res = await fn();
+      setSuccess(res.message || successFallback);
+      setDeclineTarget(null);
+      setDeclineReason('');
+      loadPending();
+      onResponded(); // refresh dashboard stats
+    } catch (err) {
+      setError(err.response?.data?.message || 'Action failed.');
+      setDeclineTarget(null);
+      loadPending(); // proposal may have been cancelled meanwhile
+    } finally { setActing(false); }
+  };
+
+  // Hide the section entirely when there is nothing to respond to.
+  if (!loading && items.length === 0 && !success && !error) return null;
+
+  return (
+    <section className="role-section">
+      <div className="role-section__header">
+        <span className="role-section__badge role-section__badge--doctor"><UserCheck size={16} /> Action Required</span>
+        <h3 className="role-section__title">Pending Assignments</h3>
+      </div>
+
+      {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
+      {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
+
+      <ActivityPanel
+        title="Patients proposed to you"
+        icon={<UserCheck size={18} />}
+        loading={loading}
+        items={items}
+        emptyMsg="No assignments awaiting your response."
+        count={items.length}
+        renderItem={(a) => (
+          <div key={a.dic_id} className="activity-item" style={{ cursor: 'default' }}>
+            <div className="activity-item__avatar activity-item__avatar--triage"><UserCheck size={18} /></div>
+            <div className="activity-item__body">
+              <p className="activity-item__name">{a.patient_name || 'Unknown Patient'}</p>
+              <p className="activity-item__meta">
+                Proposed {timeAgo(a.assigned_at)}
+                {a.assigned_by_name ? ` by ${a.assigned_by_name}` : ''}
+                {' · '}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/patients/${a.patient_id}`)}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                           color: 'var(--color-primary)', font: 'inherit', textDecoration: 'underline' }}
+                >
+                  Review chart
+                </button>
+              </p>
+            </div>
+            <div className="activity-item__right" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              {a.triage_level && <Badge status={a.triage_level} />}
+              <Button size="sm" variant="primary" loading={acting}
+                onClick={() => respond(() => acceptAssignment(a.patient_id), 'Assignment accepted.')}>
+                Accept
+              </Button>
+              <Button size="sm" variant="danger"
+                onClick={() => { setDeclineReason(''); setDeclineTarget(a); }}>
+                Decline
+              </Button>
+            </div>
+          </div>
+        )}
+      />
+
+      {/* Decline-with-reason modal */}
+      <Modal isOpen={!!declineTarget} onClose={() => setDeclineTarget(null)} title="Decline Assignment" size="sm">
+        <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+          Decline the attending-doctor assignment for <strong>{declineTarget?.patient_name || 'this patient'}</strong>?
+          The patient returns to the coordination queue and the proposing coordinator is notified with your reason.
+        </p>
+        <div className="form-group" style={{ marginBottom: 'var(--space-6)' }}>
+          <label htmlFor="decline-reason">Reason *</label>
+          <textarea
+            id="decline-reason"
+            rows={3}
+            maxLength={255}
+            value={declineReason}
+            onChange={(e) => setDeclineReason(e.target.value)}
+            placeholder="e.g. At capacity — please route to another internist."
+            required
+          />
+        </div>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={() => setDeclineTarget(null)}>Cancel</Button>
+          <Button variant="danger" loading={acting} disabled={!declineReason.trim()}
+            onClick={() => respond(() => declineAssignment(declineTarget.patient_id, declineReason.trim()), 'Assignment declined.')}>
+            Decline Assignment
+          </Button>
+        </div>
+      </Modal>
+    </section>
+  );
+};
 
 // ── Role panel: Doctor ────────────────────────────────────────────────────────
 const DoctorPanel = ({ myData, loading, navigate }) => {
@@ -406,7 +531,16 @@ const DashboardPage = () => {
 
       {/* ── Role-specific focus panel ── */}
       {role === 'doctor' && (
-        <DoctorPanel myData={myData} loading={loadMy} navigate={navigate} />
+        <>
+          <PendingAssignmentsPanel
+            navigate={navigate}
+            onResponded={() => {
+              // Accepting/declining changes my patient set — refresh my-stats.
+              getDashboardMyStats().then((r) => { if (r.success) setMyData(r.data); }).catch(() => {});
+            }}
+          />
+          <DoctorPanel myData={myData} loading={loadMy} navigate={navigate} />
+        </>
       )}
       {(role === 'nurse' || role === 'staff') && (
         <NurseStaffPanel myData={myData} loading={loadMy} navigate={navigate} />

@@ -423,7 +423,14 @@ CREATE TABLE doctor_in_charge (
     doctor_id   INT UNSIGNED    NOT NULL,
     patient_id  INT UNSIGNED    NOT NULL,
     assigned_at DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Assignment-acceptance workflow (see migrations/add_assignment_acceptance.sql).
+    -- INVARIANT: at most one doctor_in_charge row per patient, of either status.
+    status         ENUM('Pending','Accepted') NOT NULL DEFAULT 'Accepted',
+    assigned_by    INT UNSIGNED NULL COMMENT 'users.user_id of the proposing DIC',
+    responded_at   DATETIME     NULL,
+    decline_reason VARCHAR(255) NULL,
     PRIMARY KEY (dic_id),
+    KEY idx_dic_assigned_by (assigned_by),
     CONSTRAINT fk_dic_doctor
         FOREIGN KEY (doctor_id)  REFERENCES doctors  (doctor_id)
         ON UPDATE CASCADE ON DELETE CASCADE,
