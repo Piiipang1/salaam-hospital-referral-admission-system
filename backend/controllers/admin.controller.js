@@ -5,6 +5,7 @@ const db = require('../config/db');
 const getActivityLogs = async (req, res) => {
   const {
     user_id,
+    role,
     action,
     target_table,
     from_date,
@@ -20,6 +21,7 @@ const getActivityLogs = async (req, res) => {
     const params     = [];
 
     if (user_id)      { conditions.push('al.user_id = ?');                    params.push(user_id); }
+    if (role)         { conditions.push('u.role = ?');                        params.push(role); }
     if (action)       { conditions.push('al.action = ?');                     params.push(action); }
     if (target_table) { conditions.push('al.target_table = ?');               params.push(target_table); }
     if (from_date)    { conditions.push('DATE(al.created_at) >= ?');          params.push(from_date); }

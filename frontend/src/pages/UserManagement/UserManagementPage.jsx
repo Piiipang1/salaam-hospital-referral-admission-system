@@ -227,11 +227,16 @@ const UserManagementPage = () => {
     },
   ];
 
+  // ── Split users by role ────────────────────────────────────────────────────
+  const doctors = users.filter((u) => u.role === 'doctor');
+  const nurses  = users.filter((u) => u.role === 'nurse');
+  const staffs  = users.filter((u) => u.role === 'staff');
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'var(--space-6)'}}>
 
-      {/* ── User Management Section ─────────────────────────────────────────── */}
-      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-5)'}}>
+      {/* ── User Management Header ──────────────────────────────────────────── */}
+      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-4)'}}>
         <div className="page-header">
           <div>
             <h1 className="page-title">User Management</h1>
@@ -241,8 +246,41 @@ const UserManagementPage = () => {
         </div>
         {error   && <Alert type="error"   message={error}   onDismiss={()=>setError('')}   />}
         {success && <Alert type="success" message={success} onDismiss={()=>setSuccess('')} />}
-        <Table columns={userColumns} data={users} loading={loading} emptyMessage="No users found." />
       </div>
+
+      {/* ── Doctors Table ───────────────────────────────────────────────────── */}
+      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-3)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)'}}>
+          <h2 style={{margin:0,fontSize:'var(--font-size-lg)',fontWeight:700}}>Doctors</h2>
+          <span style={{fontSize:'var(--font-size-xs)',background:'var(--color-info-muted)',color:'var(--color-info)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}>
+            {loading ? '…' : doctors.length}
+          </span>
+        </div>
+        <Table columns={userColumns} data={doctors} loading={loading} emptyMessage="No doctor accounts found." />
+      </div>
+
+      {/* ── Nurses Table ────────────────────────────────────────────────────── */}
+      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-3)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)'}}>
+          <h2 style={{margin:0,fontSize:'var(--font-size-lg)',fontWeight:700}}>Nurses</h2>
+          <span style={{fontSize:'var(--font-size-xs)',background:'var(--color-success-muted)',color:'var(--color-success)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}>
+            {loading ? '…' : nurses.length}
+          </span>
+        </div>
+        <Table columns={userColumns} data={nurses} loading={loading} emptyMessage="No nurse accounts found." />
+      </div>
+
+      {/* ── Staff Table ─────────────────────────────────────────────────────── */}
+      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-3)'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)'}}>
+          <h2 style={{margin:0,fontSize:'var(--font-size-lg)',fontWeight:700}}>Staff</h2>
+          <span style={{fontSize:'var(--font-size-xs)',background:'var(--color-warning-muted)',color:'var(--color-warning)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}>
+            {loading ? '…' : staffs.length}
+          </span>
+        </div>
+        <Table columns={userColumns} data={staffs} loading={loading} emptyMessage="No staff accounts found." />
+      </div>
+
 
       {/* ── Database Backup Section (local dev only — requires mysqldump) ──────── */}
       {BACKUPS_ENABLED && <Card

@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Siren, Repeat, BedDouble,
-  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut, CircleUserRound,
+  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canViewReports, canManageUsers } from '../../utils/roleGuard';
@@ -21,7 +21,6 @@ const NAV_ITEMS = [
   // Room grid is for admin/nurse/staff only — doctors use "My Patients" instead
   { to: '/rooms',         icon: DoorOpen,        label: 'Rooms',           roles: ['admin', 'nurse', 'staff'] },
   { to: '/notifications', icon: Bell,            label: 'Notifications'    },
-  { to: '/profile',       icon: CircleUserRound, label: 'My Profile'       },
   { to: '/reports',       icon: BarChart3,       label: 'Reports',         roles: ['admin'] },
   { to: '/users',         icon: UserCog,         label: 'User Management', roles: ['admin'] },
   { to: '/audit',         icon: ScrollText,      label: 'Audit Trail',     roles: ['admin'] },
@@ -35,7 +34,7 @@ const ITEM_BY_PATH = Object.fromEntries(NAV_ITEMS.map((i) => [i.to, i]));
 const ADMIN_SECTIONS = [
   { header: null,             paths: ['/dashboard'] },
   { header: 'Oversight',      paths: ['/rooms', '/reports', '/audit'] },
-  { header: 'Administration', paths: ['/users', '/notifications', '/profile'] },
+  { header: 'Administration', paths: ['/users', '/notifications'] },
 ];
 
 const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
@@ -106,17 +105,25 @@ const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
 
         {/* User + Logout */}
         <div className="sidebar__footer">
-          {!collapsed && (
-            <div className="sidebar__user">
-              <div className="sidebar__user-avatar">
-                {displayName?.[0]?.toUpperCase() ?? '?'}
-              </div>
-              <div className="sidebar__user-info">
-                <span className="sidebar__user-name">{displayName}</span>
-                <span className="sidebar__user-role">{ROLE_LABELS[user?.role] ?? user?.role}</span>
-              </div>
+        {/* User account card — clickable, navigates to /profile */}
+        {!collapsed && (
+          <NavLink
+            to="/profile"
+            className={({ isActive }) =>
+              `sidebar__user${isActive ? ' sidebar__user--active' : ''}`
+            }
+            onClick={onClose}
+            title="My Profile"
+          >
+            <div className="sidebar__user-avatar">
+              {displayName?.[0]?.toUpperCase() ?? '?'}
             </div>
-          )}
+            <div className="sidebar__user-info">
+              <span className="sidebar__user-name">{displayName}</span>
+              <span className="sidebar__user-role">{ROLE_LABELS[user?.role] ?? user?.role}</span>
+            </div>
+          </NavLink>
+        )}
           <button
             className="sidebar__logout"
             onClick={handleLogout}

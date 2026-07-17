@@ -356,3 +356,27 @@
 .workflow-step__label { font-weight: 600; font-size: var(--font-size-sm); }
 .workflow-step__caption { font-size: var(--font-size-xs); color: var(--color-text-muted); }
 .workflow-step__arrow { color: var(--color-text-muted); flex-shrink: 0; display: inline-flex; }
+
+/* ── Workflow stepper — mobile ≤767px ─────────────────────── */
+@media (max-width: 767px) {
+  .workflow-stepper {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    overflow-x: unset;
+  }
+  .workflow-step-wrap {
+    flex: none;
+  }
+  /* Hide the chevron arrows between steps on mobile */
+  .workflow-step__arrow {
+    display: none;
+  }
+  .workflow-step {
+    min-width: 0;
+    width: 100%;
+  }
+  .workflow-step__count {
+    font-size: 1.3rem;
+  }
+}

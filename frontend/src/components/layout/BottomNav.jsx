@@ -7,12 +7,38 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import './BottomNav.css';
 
-// 4 nav links + "More" button = 5 slots in the bar
-const BAR_ITEMS = [
-  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
-  { to: '/patients',   icon: Users,           label: 'Patients'   },
-  { to: '/triage',     icon: Siren,           label: 'Triage'     },
-  { to: '/admissions', icon: BedDouble,       label: 'Admissions' },
+// Role-aware bar items — 4 slots + "More" button = 5 total.
+// Admin gets oversight-only links; clinical roles get their clinical links.
+const BAR_ITEMS_BY_ROLE = {
+  admin:  [
+    { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/rooms',     icon: DoorOpen,        label: 'Rooms'     },
+    { to: '/reports',   icon: BarChart3,       label: 'Reports'   },
+    { to: '/audit',     icon: ScrollText,      label: 'Audit'     },
+  ],
+  doctor: [
+    { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard' },
+    { to: '/patients',   icon: Users,           label: 'Patients'  },
+    { to: '/referrals',  icon: Repeat,          label: 'Referrals' },
+    { to: '/admissions', icon: BedDouble,       label: 'My Patients' },
+  ],
+  nurse: [
+    { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
+    { to: '/patients',   icon: Users,           label: 'Patients'   },
+    { to: '/triage',     icon: Siren,           label: 'Triage'     },
+    { to: '/admissions', icon: BedDouble,       label: 'Admissions' },
+  ],
+  staff: [
+    { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
+    { to: '/patients',   icon: Users,           label: 'Patients'   },
+    { to: '/triage',     icon: Siren,           label: 'Triage'     },
+    { to: '/admissions', icon: BedDouble,       label: 'Admissions' },
+  ],
+};
+
+// Default fallback bar items
+const DEFAULT_BAR_ITEMS = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
 ];
 
 // Nav links that appear in the More sheet (role-restricted where noted)
@@ -33,8 +59,15 @@ const BottomNav = () => {
   // Close the sheet whenever the route changes
   useEffect(() => { setSheetOpen(false); }, [location.pathname]);
 
+  // Get bar items for the current role
+  const barItems = BAR_ITEMS_BY_ROLE[user?.role] ?? DEFAULT_BAR_ITEMS;
+
+  // Sheet items: exclude links already in the bar items for this role, and filter by role
+  const barPaths = new Set(barItems.map((i) => i.to));
   const visibleSheetItems = SHEET_ITEMS.filter(
-    (item) => !item.roles || item.roles.includes(user?.role)
+    (item) =>
+      !barPaths.has(item.to) &&
+      (!item.roles || item.roles.includes(user?.role))
   );
 
   const handleLogout = () => {
@@ -46,7 +79,7 @@ const BottomNav = () => {
     <>
       {/* ── Fixed bottom bar ── */}
       <nav className="bottom-nav" aria-label="Mobile navigation">
-        {BAR_ITEMS.map((item) => {
+        {barItems.map((item) => {
           const Icon = item.icon;
           return (
             <NavLink

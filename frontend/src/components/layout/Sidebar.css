@@ -101,6 +101,16 @@
   gap: var(--space-3);
   padding: var(--space-2);
   overflow: hidden;
+  border-radius: var(--radius-md);
+  text-decoration: none;
+  transition: background var(--transition-fast);
+  cursor: pointer;
+}
+.sidebar__user:hover {
+  background: rgba(255,255,255,0.1);
+}
+.sidebar__user--active {
+  background: rgba(255,255,255,0.12);
 }
 .sidebar__user-avatar {
   width: 34px;

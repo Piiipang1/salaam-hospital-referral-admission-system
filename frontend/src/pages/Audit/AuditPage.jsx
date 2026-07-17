@@ -5,6 +5,7 @@ import Table  from '../../components/ui/Table';
 import Alert  from '../../components/ui/Alert';
 import Button from '../../components/ui/Button';
 import { formatDate } from '../../utils/formatDate';
+import { ROLE_LABELS } from '../../utils/constants';
 import './AuditPage.css';
 
 const LIMIT = 25;
@@ -33,27 +34,18 @@ const ActionPill = ({ action }) => {
 
 const RolePill = ({ role }) => (
   <span className={`audit-role-pill audit-role-pill--${role ?? 'unknown'}`}>
-    {role ?? '—'}
+    {role ? (ROLE_LABELS[role] ?? role) : '—'}
   </span>
 );
 
-// ── Affected record — merged "Table #id" label, e.g. "Patients #12" ──────────
-const affectedRecord = (r) => {
-  if (!r.target_table) return '—';
-  const table = r.target_table.charAt(0).toUpperCase() + r.target_table.slice(1);
-  return r.target_id != null ? `${table} #${r.target_id}` : table;
-};
-
 // ── CSV export ────────────────────────────────────────────────────────────────
 const exportCSV = (rows) => {
-  const headers = ['Log ID', 'Date/Time', 'User', 'Role', 'Action', 'Affected Record'];
+  const headers = ['Log ID', 'Date/Time', 'Role', 'Action'];
   const lines   = rows.map((r) => [
     r.log_id,
     formatDate(r.created_at, true),
-    r.username ?? '',
     r.role     ?? '',
     r.action,
-    affectedRecord(r),
   ].map((v) => `"${String(v).replace(/"/g, '""')}"`).join(','));
 
   const csv  = [headers.join(','), ...lines].join('\n');
@@ -66,14 +58,21 @@ const exportCSV = (rows) => {
   URL.revokeObjectURL(url);
 };
 
+// ── Roles available for filtering ─────────────────────────────────────────────
+// Only clinical + admin roles that can appear in the audit log
+const FILTER_ROLES = [
+  { value: 'doctor', label: 'Doctor'  },
+  { value: 'nurse',  label: 'Nurse'   },
+  { value: 'staff',  label: 'Staff'   },
+  { value: 'admin',  label: 'Admin'   },
+];
+
 // ── Main component ────────────────────────────────────────────────────────────
 const AuditPage = () => {
   // ── Filter state ──────────────────────────────────────────────
-  const [userId,      setUserId]      = useState('');
-  const [action,      setAction]      = useState('');
-  const [targetTable, setTargetTable] = useState('');
-  const [fromDate,    setFromDate]    = useState('');
-  const [toDate,      setToDate]      = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [fromDate,   setFromDate]   = useState('');
+  const [toDate,     setToDate]     = useState('');
 
   // ── Data state ────────────────────────────────────────────────
   const [rows,    setRows]    = useState([]);
@@ -82,39 +81,19 @@ const AuditPage = () => {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
 
-  // ── Meta (dropdown options) ───────────────────────────────────
-  const [users,         setUsers]         = useState([]);
-  const [actionOptions, setActionOptions] = useState([]);
-  const [tableOptions,  setTableOptions]  = useState([]);
-
-  const totalPages        = Math.max(1, Math.ceil(total / LIMIT));
-  const hasActiveFilters  = userId || action || targetTable || fromDate || toDate;
-
-  // Load filter dropdown options once
-  useEffect(() => {
-    getActivityLogsMeta()
-      .then((r) => {
-        if (r.success) {
-          setUsers(r.data.users);
-          setActionOptions(r.data.actions);
-          setTableOptions(r.data.target_tables);
-        }
-      })
-      .catch(() => {}); // non-critical; filters still work without it
-  }, []);
+  const totalPages       = Math.max(1, Math.ceil(total / LIMIT));
+  const hasActiveFilters = roleFilter || fromDate || toDate;
 
   // Reset page when any filter changes
-  useEffect(() => { setPage(1); }, [userId, action, targetTable, fromDate, toDate]);
+  useEffect(() => { setPage(1); }, [roleFilter, fromDate, toDate]);
 
   // Fetch data
   const load = useCallback(() => {
     setLoading(true);
     const params = { page, limit: LIMIT };
-    if (userId)      params.user_id      = userId;
-    if (action)      params.action       = action;
-    if (targetTable) params.target_table = targetTable;
-    if (fromDate)    params.from_date    = fromDate;
-    if (toDate)      params.to_date      = toDate;
+    if (roleFilter) params.role      = roleFilter;
+    if (fromDate)   params.from_date = fromDate;
+    if (toDate)     params.to_date   = toDate;
 
     getActivityLogs(params)
       .then((r) => {
@@ -122,7 +101,7 @@ const AuditPage = () => {
       })
       .catch(() => setError('Failed to load audit logs.'))
       .finally(() => setLoading(false));
-  }, [page, userId, action, targetTable, fromDate, toDate]);
+  }, [page, roleFilter, fromDate, toDate]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -135,24 +114,12 @@ const AuditPage = () => {
       ),
     },
     {
-      key: 'username', label: 'User',
-      render: (r) => (
-        <span className="audit-user">{r.username ?? <em className="text-muted">deleted</em>}</span>
-      ),
-    },
-    {
-      key: 'role', label: 'Role', width: '90px',
+      key: 'role', label: 'Role', width: '110px',
       render: (r) => <RolePill role={r.role} />,
     },
     {
       key: 'action', label: 'Action', width: '130px',
       render: (r) => <ActionPill action={r.action} />,
-    },
-    {
-      key: 'affected_record', label: 'Affected Record', width: '160px', hideMobile: true,
-      render: (r) => (
-        <code className="audit-table-name">{affectedRecord(r)}</code>
-      ),
     },
   ];
 
@@ -184,47 +151,17 @@ const AuditPage = () => {
       {/* ── Filter toolbar ── */}
       <div className="audit-toolbar">
 
-        {/* User dropdown */}
+        {/* Role dropdown — shows general positions only, not individual usernames */}
         <select
-          id="audit-filter-user"
+          id="audit-filter-role"
           className="filter-select"
-          value={userId}
-          onChange={(e) => setUserId(e.target.value)}
-          aria-label="Filter by user"
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+          aria-label="Filter by role"
         >
           <option value="">All Users</option>
-          {users.map((u) => (
-            <option key={u.user_id} value={u.user_id}>
-              {u.username} ({u.role})
-            </option>
-          ))}
-        </select>
-
-        {/* Action dropdown */}
-        <select
-          id="audit-filter-action"
-          className="filter-select"
-          value={action}
-          onChange={(e) => setAction(e.target.value)}
-          aria-label="Filter by action"
-        >
-          <option value="">All Actions</option>
-          {actionOptions.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
-
-        {/* Target table dropdown */}
-        <select
-          id="audit-filter-table"
-          className="filter-select"
-          value={targetTable}
-          onChange={(e) => setTargetTable(e.target.value)}
-          aria-label="Filter by target table"
-        >
-          <option value="">All Tables</option>
-          {tableOptions.map((t) => (
-            <option key={t} value={t}>{t}</option>
+          {FILTER_ROLES.map((r) => (
+            <option key={r.value} value={r.value}>{r.label}</option>
           ))}
         </select>
 
@@ -257,8 +194,7 @@ const AuditPage = () => {
           <button
             className="filter-clear-btn"
             onClick={() => {
-              setUserId(''); setAction(''); setTargetTable('');
-              setFromDate(''); setToDate('');
+              setRoleFilter(''); setFromDate(''); setToDate('');
             }}
           >
             ✕ Clear
