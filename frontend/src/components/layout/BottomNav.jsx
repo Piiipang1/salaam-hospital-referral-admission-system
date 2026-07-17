@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Siren, BedDouble, Menu,
   Bell, Repeat, DoorOpen, BarChart3, UserCog, ScrollText, LogOut, X,
+  CircleUserRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './BottomNav.css';
@@ -43,9 +44,11 @@ const DEFAULT_BAR_ITEMS = [
 
 // Nav links that appear in the More sheet (role-restricted where noted)
 const SHEET_ITEMS = [
+  { to: '/profile',       icon: CircleUserRound, label: 'My Profile' },
+  { to: '/triage',        icon: Siren,           label: 'Triage',    roles: ['doctor', 'nurse', 'staff'] },
   { to: '/notifications', icon: Bell,       label: 'Notifications'    },
   { to: '/referrals',     icon: Repeat,     label: 'Referrals',       roles: ['doctor', 'admin'] },
-  { to: '/rooms',         icon: DoorOpen,   label: 'Rooms'            },
+  { to: '/rooms',         icon: DoorOpen,   label: 'Rooms',           roles: ['admin', 'nurse', 'staff'] },
   { to: '/reports',       icon: BarChart3,  label: 'Reports',         roles: ['admin'] },
   { to: '/users',         icon: UserCog,    label: 'User Management', roles: ['admin'] },
   { to: '/audit',         icon: ScrollText, label: 'Audit Trail',     roles: ['admin'] },
