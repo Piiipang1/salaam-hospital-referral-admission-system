@@ -47,7 +47,7 @@ const SHEET_ITEMS = [
   { to: '/profile',       icon: CircleUserRound, label: 'My Profile' },
   { to: '/triage',        icon: Siren,           label: 'Triage',    roles: ['doctor', 'nurse', 'staff'] },
   { to: '/notifications', icon: Bell,       label: 'Notifications'    },
-  { to: '/referrals',     icon: Repeat,     label: 'Referrals',       roles: ['doctor', 'admin'] },
+  { to: '/referrals',     icon: Repeat,     label: 'Referrals',       roles: ['doctor'] },
   { to: '/rooms',         icon: DoorOpen,   label: 'Rooms',           roles: ['admin', 'nurse', 'staff'] },
   { to: '/reports',       icon: BarChart3,  label: 'Reports',         roles: ['admin'] },
   { to: '/users',         icon: UserCog,    label: 'User Management', roles: ['admin'] },
