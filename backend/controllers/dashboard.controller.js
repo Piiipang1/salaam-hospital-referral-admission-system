@@ -87,7 +87,27 @@ const getRecentActivity = async (req, res) => {
       admissionParams.push(req.user.user_id);
     }
 
-    const [admissions, referrals] = await Promise.all([
+    // Recent discharges — same scoping as recent admissions (doctor: their own
+    // admissions; nurse: patients they registered; staff: unscoped), plus the
+    // Discharged status filter. Ordered by discharge_date since that's the
+    // event this panel reports, not the original admission_date.
+    let dischargeWhere = "WHERE a.status = 'Discharged'";
+    const dischargeParams = [];
+
+    if (req.user.role === 'doctor') {
+      dischargeWhere += ' AND a.doctor_id = ?';
+      dischargeParams.push(req.user.linked_id);
+    }
+
+    if (req.user.role === 'nurse') {
+      dischargeWhere += ` AND a.patient_id IN (
+        SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
+        WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+      )`;
+      dischargeParams.push(req.user.user_id);
+    }
+
+    const [admissions, referrals, discharges] = await Promise.all([
       db.query(`
         SELECT a.admission_id, a.admission_date, a.status AS admission_status, a.admission_type,
                CONCAT(p.first_name, ' ', p.last_name) AS patient_name, p.patient_id,
@@ -116,11 +136,23 @@ const getRecentActivity = async (req, res) => {
             ORDER BY r.referral_date DESC LIMIT 5
           `, referralParams)
         : Promise.resolve([[]]),
+      db.query(`
+        SELECT a.admission_id, a.discharge_date, a.status AS admission_status, a.admission_type,
+               CONCAT(p.first_name, ' ', p.last_name) AS patient_name, p.patient_id,
+               CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
+               r.room_type, r.bed_number
+        FROM admissions a
+        LEFT JOIN patients p ON a.patient_id = p.patient_id
+        LEFT JOIN doctors  d ON a.doctor_id  = d.doctor_id
+        LEFT JOIN rooms    r ON a.room_id    = r.room_id
+        ${dischargeWhere}
+        ORDER BY a.discharge_date DESC LIMIT 5
+      `, dischargeParams),
     ]);
 
     return res.status(200).json({
       success: true,
-      data: { recent_admissions: admissions[0], recent_referrals: referrals[0] },
+      data: { recent_admissions: admissions[0], recent_referrals: referrals[0], recent_discharges: discharges[0] },
     });
   } catch (err) {
     console.error('getRecentActivity error:', err);

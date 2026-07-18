@@ -476,6 +476,7 @@ const DashboardPage = () => {
 
   const recentAdmissions = activity?.recent_admissions ?? [];
   const recentReferrals  = activity?.recent_referrals  ?? [];
+  const recentDischarges = activity?.recent_discharges ?? [];
 
   // ── Greeting based on role — prefer the real name, fall back to username ──
   const greetings = {
@@ -589,6 +590,30 @@ const DashboardPage = () => {
                   <div className="activity-item__right">
                     <Badge status={r.referral_status} />
                     <span className="activity-item__time">{timeAgo(r.referral_date)}</span>
+                  </div>
+                </button>
+              )}
+            />
+          )}
+          {/* Nurses/staff have no referrals panel — Recent Discharges fills the
+              second column for them instead. */}
+          {(role === 'nurse' || role === 'staff') && (
+            <ActivityPanel
+              title="Recent Discharges" icon={<DoorOpen size={18} />} loading={loadAct}
+              items={recentDischarges} emptyMsg="No discharges recorded yet."
+              renderItem={(a) => (
+                <button key={a.admission_id} className="activity-item" onClick={() => navigate('/admissions')}>
+                  <div className="activity-item__avatar activity-item__avatar--discharge"><DoorOpen size={18} /></div>
+                  <div className="activity-item__body">
+                    <p className="activity-item__name">{a.patient_name || 'Unknown Patient'}</p>
+                    <p className="activity-item__meta">
+                      {a.room_type && a.bed_number ? `${a.room_type} · Bed ${a.bed_number}` : 'Room TBD'}
+                      {a.doctor_name ? ` · Dr. ${a.doctor_name}` : ''}
+                    </p>
+                  </div>
+                  <div className="activity-item__right">
+                    <Badge status={a.admission_status} />
+                    <span className="activity-item__time">{timeAgo(a.discharge_date)}</span>
                   </div>
                 </button>
               )}

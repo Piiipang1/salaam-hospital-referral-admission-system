@@ -221,6 +221,7 @@
 .activity-item__avatar--referral  { background: var(--color-warning-muted); }
 .activity-item__avatar--triage    { background: var(--color-danger-muted);  }
 .activity-item__avatar--diagnosis { background: var(--color-info-muted);    }
+.activity-item__avatar--discharge { background: var(--color-success-muted); }
 
 /* Text body */
 .activity-item__body { flex: 1; min-width: 0; }
