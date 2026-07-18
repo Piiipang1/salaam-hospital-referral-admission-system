@@ -718,6 +718,7 @@ const PatientDetailPage = () => {
           initial={assessment ?? {}}
           onSubmit={act((data) => saveAssessment(latestDiagnosis.diagnosis_id, data))}
           loading={saving}
+          currentDoctorId={user?.linked_id}
         />
       </Modal>
       <Modal isOpen={modal === 'vitals'}    onClose={() => setModal(null)} title="Record Vital Signs" size="md">
