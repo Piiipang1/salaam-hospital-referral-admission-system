@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { getAllAdmissions, createAdmission, assignRoom, dischargePatient, confirmDischarge, cancelDischarge } from '../../api/admissions.api';
 import { getAllRooms } from '../../api/rooms.api';
 import { useAuth } from '../../context/AuthContext';
@@ -60,11 +59,6 @@ const AdmissionsPage = () => {
   const [fromDate, setFromDate] = useState('');
   const [toDate,   setToDate]   = useState('');
 
-  // Status filter pre-applied from the admin workflow stepper
-  // (?status=Pending Room | Pending Discharge). Applies to the admin/staff view.
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || '');
-
   // Assign-room modal: which admission row is being assigned, the available
   // rooms to choose from, and the currently selected room_id
   const [assignRow,   setAssignRow]   = useState(null);
@@ -74,14 +68,11 @@ const AdmissionsPage = () => {
 
   // The active view maps to a server-side status filter, so pagination + total
   // are correct per view (the server returns exactly the rows the tab shows).
-  //   doctor  → Current: the three ongoing statuses · History: Discharged
+  //   doctor      → Current: the three ongoing statuses · History: Discharged
   //   nurse/staff → Admissions: all · Discharge History: Discharged
-  //   admin       → the status chip from the workflow stepper (or all)
   const statusParam = isDoctor
     ? (tab === 'Current' ? CURRENT_STATUSES.join(',') : 'Discharged')
-    : (isNurse || isStaff)
-      ? (nurseTab === 'Discharge History' ? 'Discharged' : '')
-      : statusFilter;
+    : (nurseTab === 'Discharge History' ? 'Discharged' : '');
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
@@ -101,7 +92,15 @@ const AdmissionsPage = () => {
   }, [page, statusParam, fromDate, toDate]);
   useEffect(() => { load(); }, [load]);
 
+  // Auto-dismiss success alerts so a stale one can't linger above a later message
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(() => setSuccess(''), 4000);
+    return () => clearTimeout(t);
+  }, [success]);
+
   const handleAdmit = async (form) => {
+    setError(''); setSuccess('');
     setSaving(true);
     try { await createAdmission(form); setSuccess('Patient admitted.'); setModal(false); load(); }
     catch (err) { setError(err.response?.data?.message || 'Admission failed.'); }
@@ -115,6 +114,7 @@ const AdmissionsPage = () => {
   // Optional discharge notes / final assessment are saved for the nurse to see.
   const handleInitiateDischarge = async () => {
     if (!confirm) return;
+    setError(''); setSuccess('');
     setSaving(true);
     try { await dischargePatient(confirm.admission_id, dischargeNotes); setSuccess('Discharge initiated — awaiting confirmation.'); setConfirm(null); load(); }
     catch (err) { setError(err.response?.data?.message || 'Discharge failed.'); setConfirm(null); }
@@ -124,6 +124,7 @@ const AdmissionsPage = () => {
   // Step 2 — nurse confirms: Discharged, discharge_date set, room freed
   const handleConfirmDischarge = async () => {
     if (!nurseConfirm) return;
+    setError(''); setSuccess('');
     setSaving(true);
     try { await confirmDischarge(nurseConfirm.admission_id); setSuccess('Discharge confirmed. Room is now available.'); setNurseConfirm(null); load(); }
     catch (err) { setError(err.response?.data?.message || 'Confirmation failed.'); setNurseConfirm(null); }
@@ -131,6 +132,7 @@ const AdmissionsPage = () => {
   };
 
   const handleCancelDischarge = async (row) => {
+    setError(''); setSuccess('');
     setSaving(true);
     try { await cancelDischarge(row.admission_id); setSuccess('Discharge cancelled.'); load(); }
     catch (err) { setError(err.response?.data?.message || 'Cancel failed.'); }
@@ -149,6 +151,7 @@ const AdmissionsPage = () => {
 
   const handleAssignRoom = async () => {
     if (!assignRow || !selectedRoom) return;
+    setError(''); setSuccess('');
     setSaving(true);
     try { await assignRoom(assignRow.admission_id, selectedRoom); setSuccess('Room assigned.'); setAssignRow(null); load(); }
     catch (err) { setError(err.response?.data?.message || 'Room assignment failed.'); }
@@ -168,13 +171,13 @@ const AdmissionsPage = () => {
       {r.status === 'Pending Discharge' && (isNurse || isStaff) && (
         <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); setNurseConfirm(r); }}>Confirm Discharge</Button>
       )}
-      {r.status === 'Pending Discharge' && (user?.role === 'admin' || (user?.role === 'doctor' && user?.linked_id === r.doctor_id)) && (
+      {r.status === 'Pending Discharge' && user?.role === 'doctor' && user?.linked_id === r.doctor_id && (
         <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleCancelDischarge(r); }}>Cancel</Button>
       )}
     </>
   );
 
-  // Default table (nurse / staff / admin)
+  // Default table (nurse / staff)
   const columns = [
     { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
     { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name  ?? '—' },
@@ -308,7 +311,7 @@ const AdmissionsPage = () => {
             emptyMessage={tab === 'Current' ? 'No current admissions.' : 'No discharge history.'}
           />
         </>
-      ) : (isNurse || isStaff) ? (
+      ) : (
         <>
           {/* Admissions / Discharge History tabs */}
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
@@ -323,28 +326,6 @@ const AdmissionsPage = () => {
             data={data}
             loading={loading}
             emptyMessage={nurseTab === 'Discharge History' ? 'No discharge history yet.' : 'No admission records found.'}
-          />
-        </>
-      ) : (
-        <>
-          {statusFilter && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-              <span style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-muted)' }}>Filtered by status:</span>
-              <Badge status={statusFilter} />
-              <button
-                className="filter-clear-btn"
-                onClick={() => { setStatusFilter(''); setSearchParams({}); }}
-                title="Clear status filter"
-              >
-                ✕ Clear
-              </button>
-            </div>
-          )}
-          <Table
-            columns={columns}
-            data={data}
-            loading={loading}
-            emptyMessage={statusFilter ? `No admissions with status “${statusFilter}”.` : 'No admission records found.'}
           />
         </>
       )}

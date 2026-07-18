@@ -60,6 +60,7 @@ const ReferralsPage = () => {
   const handleDicRevoked = (msg) => {
     setDicActive(false);
     setModal(null);
+    setSuccess('');
     setError(msg || 'Doctor-in-Charge mode is no longer active on your account.');
   };
 
@@ -105,8 +106,16 @@ const ReferralsPage = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // Auto-dismiss success alerts so a stale one can't linger above a later message
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(() => setSuccess(''), 4000);
+    return () => clearTimeout(t);
+  }, [success]);
+
   // ── Action handlers ─────────────────────────────────────────────────────────
   const handleCreate = async (form) => {
+    setError(''); setSuccess('');
     setSaving(true);
     try { await createReferral(form); setSuccess('Referral created.'); setModal(null); load(); }
     catch (err) { setError(err.response?.data?.message || 'Failed.'); }
@@ -115,6 +124,7 @@ const ReferralsPage = () => {
 
   const handleUpdateStatus = async () => {
     if (!newStatus || !modal?.referral) return;
+    setError(''); setSuccess('');
     setSaving(true);
     try {
       await updateReferralStatus(modal.referral.referral_id, newStatus);
@@ -130,6 +140,7 @@ const ReferralsPage = () => {
 
   const handleReassign = async () => {
     if (!reassignDoctorId || !modal?.referral) return;
+    setError(''); setSuccess('');
     setSaving(true);
     try {
       const res = await reassignReferral(modal.referral.referral_id, reassignDoctorId);

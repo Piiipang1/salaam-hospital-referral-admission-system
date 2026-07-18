@@ -98,8 +98,16 @@ const TriagePage = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // Auto-dismiss success alerts so a stale one can't linger above a later message
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(() => setSuccess(''), 4000);
+    return () => clearTimeout(t);
+  }, [success]);
+
   // ── Handlers ──────────────────────────────────────────────────
   const handleCreate = async (form) => {
+    setError(''); setSuccess('');
     setSaving(true);
     try {
       await createTriage(form);
@@ -111,6 +119,7 @@ const TriagePage = () => {
   };
 
   const handleEmergencyTriage = async () => {
+    setError(''); setSuccess('');
     setEmergencySaving(true);
     try {
       const result = await createEmergencyTriage(emergencyForm);
@@ -126,6 +135,7 @@ const TriagePage = () => {
   // Coordinator assigns/changes the attending doctor for a triage's patient.
   const handleAssignDoctor = async () => {
     if (!assignTarget || !assignDoctorId) return;
+    setError(''); setSuccess('');
     setAssignSaving(true);
     try {
       const res = await assignTriageDoctor(assignTarget.triage_id, assignDoctorId);
@@ -145,6 +155,7 @@ const TriagePage = () => {
 
   // Withdraw a Pending proposal so the patient returns to the coordination queue.
   const handleCancelAssignment = async (patientId) => {
+    setError(''); setSuccess('');
     try {
       const res = await cancelAssignment(patientId);
       setSuccess(res.message || 'Assignment proposal cancelled.');

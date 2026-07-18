@@ -19,6 +19,7 @@ export const formatDate = (dateStr, includeTime = false) => {
 export const timeAgo = (dateStr) => {
   if (!dateStr) return '';
   const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff < 0) return 'just now'; // future timestamp / clock skew
   const mins  = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);

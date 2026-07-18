@@ -108,8 +108,16 @@ const PatientsPage = () => {
     return () => window.removeEventListener('referral-status-updated', handleReferralUpdate);
   }, [load]);
 
+  // Auto-dismiss success alerts so a stale one can't linger above a later message
+  useEffect(() => {
+    if (!success) return;
+    const t = setTimeout(() => setSuccess(''), 4000);
+    return () => clearTimeout(t);
+  }, [success]);
+
   // ── Handlers ──────────────────────────────────────────────────
   const handleSave = async (data) => {
+    setError(''); setSuccess('');
     setSaving(true);
     try {
       if (modal.patient) {
