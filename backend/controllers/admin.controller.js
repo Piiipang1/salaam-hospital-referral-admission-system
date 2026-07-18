@@ -48,7 +48,7 @@ const getActivityLogs = async (req, res) => {
         [...params, parseInt(limit), offset]
       ),
       db.query(
-        `SELECT COUNT(*) AS total FROM activity_logs al ${where}`,
+        `SELECT COUNT(*) AS total FROM activity_logs al LEFT JOIN users u ON al.user_id = u.user_id ${where}`,
         params
       ),
     ]);
