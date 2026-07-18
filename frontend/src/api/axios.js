@@ -23,8 +23,9 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    const isLoginRequest = (error.config?.url || '').includes('/api/auth/login');
-    if (error.response?.status === 401 && !isLoginRequest) {
+    const url = error.config?.url || '';
+    const isAuthPageRequest = url.includes('/api/auth/login') || url.includes('/api/auth/change-password');
+    if (error.response?.status === 401 && !isAuthPageRequest) {
       localStorage.removeItem('salaam_token');
       localStorage.removeItem('salaam_user');
       window.location.href = '/login';
