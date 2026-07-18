@@ -6,7 +6,7 @@ const DISPOSITIONS = ['Admit', 'Discharge', 'Refer', 'Observe'];
 
 const DoctorAssessmentForm = ({ initial = {}, onSubmit, loading, currentDoctorId }) => {
   const [form, setForm] = useState({
-    doctor_id:      initial.doctor_id      ?? currentDoctorId ?? '',
+    doctor_id:      currentDoctorId ?? '',
     clinical_notes: initial.clinical_notes ?? '',
     disposition:    initial.disposition    ?? '',
   });

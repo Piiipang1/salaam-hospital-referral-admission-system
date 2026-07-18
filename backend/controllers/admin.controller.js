@@ -66,28 +66,4 @@ const getActivityLogs = async (req, res) => {
   }
 };
 
-// GET /api/admin/activity-logs/meta
-// Returns the distinct actions, target_tables, and all users (for filter dropdowns).
-const getActivityLogsMeta = async (req, res) => {
-  try {
-    const [actions, tables, users] = await Promise.all([
-      db.query('SELECT DISTINCT action FROM activity_logs ORDER BY action ASC'),
-      db.query('SELECT DISTINCT target_table FROM activity_logs WHERE target_table IS NOT NULL ORDER BY target_table ASC'),
-      db.query('SELECT user_id, username, role FROM users ORDER BY username ASC'),
-    ]);
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        actions:       actions[0].map((r) => r.action),
-        target_tables: tables[0].map((r) => r.target_table),
-        users:         users[0],
-      },
-    });
-  } catch (err) {
-    console.error('getActivityLogsMeta error:', err);
-    return res.status(500).json({ success: false, message: 'Server error.' });
-  }
-};
-
-module.exports = { getActivityLogs, getActivityLogsMeta };
+module.exports = { getActivityLogs };

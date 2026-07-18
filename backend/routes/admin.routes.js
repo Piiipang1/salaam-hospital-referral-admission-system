@@ -26,10 +26,6 @@ router.delete('/backups/:filename', ...adminOnly, backupCtrl.deleteBackup);
 router.post('/restore/:filename',   ...adminOnly, backupCtrl.restoreBackup);
 
 // ── Audit Trail routes ─────────────────────────────────────────
-// GET /api/admin/activity-logs/meta — distinct actions, tables, users (for filters)
-// NOTE: /meta must be registered BEFORE /:id-style routes to avoid conflict
-router.get('/activity-logs/meta', ...adminOnly, adminCtrl.getActivityLogsMeta);
-
 // GET /api/admin/activity-logs — paginated + filtered log entries
 router.get('/activity-logs',      ...adminOnly, adminCtrl.getActivityLogs);
 

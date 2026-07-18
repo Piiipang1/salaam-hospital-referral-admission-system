@@ -6,9 +6,3 @@ import api from './axios';
  */
 export const getActivityLogs     = (params = {}) =>
   api.get('/api/admin/activity-logs', { params }).then(r => r.data);
-
-/**
- * Fetch distinct actions, target_tables, and all users for filter dropdowns.
- */
-export const getActivityLogsMeta = () =>
-  api.get('/api/admin/activity-logs/meta').then(r => r.data);

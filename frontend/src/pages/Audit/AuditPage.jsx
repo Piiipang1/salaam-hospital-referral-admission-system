@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Download } from 'lucide-react';
-import { getActivityLogs, getActivityLogsMeta } from '../../api/audit.api';
+import { getActivityLogs } from '../../api/audit.api';
 import Table  from '../../components/ui/Table';
 import Alert  from '../../components/ui/Alert';
 import Button from '../../components/ui/Button';
@@ -80,6 +80,7 @@ const AuditPage = () => {
   const [page,    setPage]    = useState(1);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const totalPages       = Math.max(1, Math.ceil(total / LIMIT));
   const hasActiveFilters = roleFilter || fromDate || toDate;
@@ -104,6 +105,23 @@ const AuditPage = () => {
   }, [page, roleFilter, fromDate, toDate]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Export ALL rows matching the current filters (not just the visible page)
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = { page: 1, limit: total || 100000 };
+      if (roleFilter) params.role      = roleFilter;
+      if (fromDate)   params.from_date = fromDate;
+      if (toDate)     params.to_date   = toDate;
+      const res = await getActivityLogs(params);
+      if (res.success) exportCSV(res.data);
+    } catch {
+      /* keep the page's existing error display pattern */
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // ── Table columns ──────────────────────────────────────────────
   const columns = [
@@ -139,7 +157,8 @@ const AuditPage = () => {
           id="audit-export-btn"
           variant="outline"
           size="sm"
-          onClick={() => exportCSV(rows)}
+          onClick={handleExport}
+          loading={exporting}
           disabled={rows.length === 0}
         >
           <Download size={14} /> Export CSV

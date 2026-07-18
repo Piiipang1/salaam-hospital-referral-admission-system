@@ -351,7 +351,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
             <button
               key={t.triage_id}
               className="activity-item"
-              onClick={() => navigate(`/patients/${t.patient_id}`)}
+              onClick={() => navigate(`/triage/${t.triage_id}`)}
             >
               <div className="activity-item__avatar activity-item__avatar--triage"><Siren size={18} /></div>
               <div className="activity-item__body">
