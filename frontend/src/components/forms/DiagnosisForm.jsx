@@ -8,7 +8,7 @@ import { addLabResult } from '../../api/diagnoses.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
 
-const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading }) => {
+const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, onComplete, loading }) => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
 
@@ -100,6 +100,8 @@ const DiagnosisForm = ({ patientId, triageId, initial = {}, onSubmit, loading })
         setLabUploading(false);
       }
     }
+
+    if (onComplete) onComplete();
   };
 
   const isSubmitting = loading || labUploading;

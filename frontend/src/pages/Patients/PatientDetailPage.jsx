@@ -110,13 +110,13 @@ const PatientDetailPage = () => {
   };
   useEffect(() => { load(); }, [id]);
 
-  const act = (fn) => async (data) => {
+  const act = (fn, { skipRefresh = false } = {}) => async (data) => {
     setSaving(true);
     try {
       const result = await fn(data);
       setSuccess('Saved successfully.');
       setModal(null);
-      load();
+      if (!skipRefresh) load();
       return result; // propagate so callers (DiagnosisForm) can read diagnosis_id
     } catch (err) {
       setError(err.response?.data?.message || 'Save failed.');
@@ -704,7 +704,7 @@ const PatientDetailPage = () => {
         <PatientForm initial={cleanedForRegistration} onSubmit={act((d) => updatePatient(id, { ...d, is_unidentified: 0 }))} loading={saving} />
       </Modal>
       <Modal isOpen={modal === 'triage'}    onClose={() => setModal(null)} title="Record Triage"    size="md"><TriageForm    patientId={id}    onSubmit={act(createTriage)}    loading={saving} /></Modal>
-      <Modal isOpen={modal === 'diagnosis'} onClose={() => setModal(null)} title="Record Diagnosis" size="md"><DiagnosisForm patientId={id}    onSubmit={act(createDiagnosis)} loading={saving} /></Modal>
+      <Modal isOpen={modal === 'diagnosis'} onClose={() => setModal(null)} title="Record Diagnosis" size="md"><DiagnosisForm patientId={id}    onSubmit={act(createDiagnosis, { skipRefresh: true })} onComplete={load} loading={saving} /></Modal>
       {/* Referral modal — ReferralForm builds FormData; act() passes it straight through */}
       <Modal isOpen={modal === 'referral'} onClose={() => setModal(null)} title="Create Referral" size="md">
         <ReferralForm diagnoses={diagnoses} onSubmit={(fd) => act(createReferral)(fd)} loading={saving} />
