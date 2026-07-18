@@ -43,6 +43,7 @@ const AdmissionsPage = () => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
   const isNurse  = user?.role === 'nurse';
+  const isStaff  = user?.role === 'staff';
   const [tab,      setTab]      = useState('Current');    // doctor "My Patients" tab
   const [nurseTab, setNurseTab] = useState('Admissions'); // nurse view tab
   const [data,    setData]    = useState([]);
@@ -74,11 +75,11 @@ const AdmissionsPage = () => {
   // The active view maps to a server-side status filter, so pagination + total
   // are correct per view (the server returns exactly the rows the tab shows).
   //   doctor  → Current: the three ongoing statuses · History: Discharged
-  //   nurse   → Admissions: all · Discharge History: Discharged
-  //   staff/admin → the status chip from the workflow stepper (or all)
+  //   nurse/staff → Admissions: all · Discharge History: Discharged
+  //   admin       → the status chip from the workflow stepper (or all)
   const statusParam = isDoctor
     ? (tab === 'Current' ? CURRENT_STATUSES.join(',') : 'Discharged')
-    : isNurse
+    : (isNurse || isStaff)
       ? (nurseTab === 'Discharge History' ? 'Discharged' : '')
       : statusFilter;
 
@@ -115,7 +116,7 @@ const AdmissionsPage = () => {
   const handleInitiateDischarge = async () => {
     if (!confirm) return;
     setSaving(true);
-    try { await dischargePatient(confirm.admission_id, dischargeNotes); setSuccess('Discharge initiated — awaiting nurse confirmation.'); setConfirm(null); load(); }
+    try { await dischargePatient(confirm.admission_id, dischargeNotes); setSuccess('Discharge initiated — awaiting confirmation.'); setConfirm(null); load(); }
     catch (err) { setError(err.response?.data?.message || 'Discharge failed.'); setConfirm(null); }
     finally { setSaving(false); }
   };
@@ -164,7 +165,7 @@ const AdmissionsPage = () => {
       {r.status === 'Active' && user?.role === 'doctor' && user?.linked_id === r.doctor_id && (
         <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); openInitiateDischarge(r); }}>Initiate Discharge</Button>
       )}
-      {r.status === 'Pending Discharge' && user?.role === 'nurse' && (
+      {r.status === 'Pending Discharge' && (isNurse || isStaff) && (
         <Button size="sm" variant="primary" onClick={(e) => { e.stopPropagation(); setNurseConfirm(r); }}>Confirm Discharge</Button>
       )}
       {r.status === 'Pending Discharge' && (user?.role === 'admin' || (user?.role === 'doctor' && user?.linked_id === r.doctor_id)) && (
@@ -307,7 +308,7 @@ const AdmissionsPage = () => {
             emptyMessage={tab === 'Current' ? 'No current admissions.' : 'No discharge history.'}
           />
         </>
-      ) : isNurse ? (
+      ) : (isNurse || isStaff) ? (
         <>
           {/* Admissions / Discharge History tabs */}
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
@@ -367,7 +368,7 @@ const AdmissionsPage = () => {
       {/* Step 1 — doctor initiates discharge with optional notes */}
       <Modal isOpen={!!confirm} onClose={() => setConfirm(null)} title="Initiate Discharge" size="sm">
         <p style={{ color: 'var(--color-text-muted)', marginBottom: 'var(--space-4)' }}>
-          Request discharge for <strong>{confirm?.patient_name ?? 'this patient'}</strong>? A nurse must confirm before the room is freed.
+          Request discharge for <strong>{confirm?.patient_name ?? 'this patient'}</strong>? A nurse or staff must confirm before the room is freed.
         </p>
         <div className="form-group">
           <label htmlFor="discharge-notes">Discharge notes / final assessment (optional)</label>

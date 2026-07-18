@@ -21,8 +21,8 @@ router.put('/:id/assign-room', auth, requireRole('nurse', 'staff'), admissionsCo
 // PUT /api/admissions/:id/discharge — step 1: assigned doctor initiates
 router.put('/:id/discharge', auth, requireRole('doctor'), admissionsController.dischargePatient);
 
-// PUT /api/admissions/:id/confirm-discharge — step 2: nurse confirms
-router.put('/:id/confirm-discharge', auth, requireRole('nurse'), admissionsController.confirmDischarge);
+// PUT /api/admissions/:id/confirm-discharge — step 2: nurse/staff confirms
+router.put('/:id/confirm-discharge', auth, requireRole('nurse', 'staff'), admissionsController.confirmDischarge);
 
 // PUT /api/admissions/:id/cancel-discharge — mistaken initiation → back to Active
 router.put('/:id/cancel-discharge', auth, requireRole('doctor'), admissionsController.cancelDischarge);

@@ -482,12 +482,12 @@ const dischargePatient = async (req, res) => {
     );
 
     // ── Respond immediately — notifications are best-effort ───────────────────
-    res.status(200).json({ success: true, message: 'Discharge initiated. Awaiting nurse confirmation.' });
+    res.status(200).json({ success: true, message: 'Discharge initiated. Awaiting nurse/staff confirmation.' });
 
     // Notify all active nurses to review and confirm
     try {
       const [nurses] = await db.query(
-        "SELECT user_id FROM users WHERE role = 'nurse' AND is_active = 1"
+        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
       );
       const roomLabel = adm.room_type ? `${adm.room_type} — ${adm.bed_number}` : 'no room assigned';
       const notifRows = nurses.map((n) => [
