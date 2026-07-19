@@ -41,6 +41,30 @@ const createDiagnosis = async (req, res) => {
 
   let diagnosisId;
   try {
+    // 1. Resolve the patient. A bad patient_id would otherwise hit the FK and
+    //    surface as a generic 500 (same lookup pattern as createReferral).
+    const [[patient]] = await connection.query(
+      'SELECT patient_id FROM patients WHERE patient_id = ?',
+      [patient_id]
+    );
+    if (!patient) {
+      await connection.rollback();
+      connection.release();
+      return res.status(400).json({ success: false, message: 'Patient not found.' });
+    }
+
+    // 2. Per-patient write access guard — the same check every other clinical
+    //    write uses. Without it, any doctor could make themselves the attending
+    //    doctor of any patient just by posting a diagnosis. forWrite: a Pending
+    //    proposal grants review access only; the helper still keeps the
+    //    Doctor-in-Charge unassigned-pool and limbo branches working.
+    const denied = await assertCanAccessPatient(req, patient_id, { forWrite: true });
+    if (denied) {
+      await connection.rollback();
+      connection.release();
+      return res.status(denied.status).json({ success: false, message: denied.message });
+    }
+
     const [result] = await connection.query(
       `INSERT INTO diagnoses (patient_id, triage_id, doctor_id, medical_condition, diagnosis_date)
        VALUES (?, ?, ?, ?, CURDATE())`,
@@ -49,17 +73,29 @@ const createDiagnosis = async (req, res) => {
     diagnosisId = result.insertId;
 
     // Invariant: at most one doctor_in_charge row per patient — the current
-    // attending doctor. Replace, same semantics as assignTriageDoctor.
-    // Recording a diagnosis is an act of taking clinical responsibility, so the
-    // row is written directly as 'Accepted' (an implicit acceptance — there is
-    // no proposal handshake to wait on, and any live Pending proposal for this
-    // patient is superseded by the doctor actually treating them).
-    await connection.query('DELETE FROM doctor_in_charge WHERE patient_id = ?', [patient_id]);
-    await connection.query(
-      `INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at, status, responded_at)
-       VALUES (?, ?, NOW(), 'Accepted', NOW())`,
-      [doctor_id, patient_id]
+    // attending doctor. Recording a diagnosis is an act of taking clinical
+    // responsibility, so we make the diagnosing doctor the Accepted attending
+    // (an implicit acceptance — no proposal handshake to wait on) — BUT never by
+    // silently displacing a DIFFERENT doctor who has already accepted. If an
+    // Accepted row for another doctor exists, leave it and skip the
+    // doctor_in_charge write (the diagnosis is still recorded). A Pending
+    // proposal, or an Accepted row already held by this doctor, is safe to
+    // replace (the diagnosing doctor supersedes a live proposal).
+    const [[currentDic]] = await connection.query(
+      'SELECT doctor_id, status FROM doctor_in_charge WHERE patient_id = ? ORDER BY assigned_at DESC LIMIT 1',
+      [patient_id]
     );
+    const heldByAnotherAttending =
+      currentDic && currentDic.status === 'Accepted' && Number(currentDic.doctor_id) !== Number(doctor_id);
+
+    if (!heldByAnotherAttending) {
+      await connection.query('DELETE FROM doctor_in_charge WHERE patient_id = ?', [patient_id]);
+      await connection.query(
+        `INSERT INTO doctor_in_charge (doctor_id, patient_id, assigned_at, status, responded_at)
+         VALUES (?, ?, NOW(), 'Accepted', NOW())`,
+        [doctor_id, patient_id]
+      );
+    }
 
     await connection.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE', 'diagnoses', ?)",
