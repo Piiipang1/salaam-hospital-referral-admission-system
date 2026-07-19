@@ -180,7 +180,62 @@ const deactivateUser = async (req, res) => {
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'DEACTIVATE', 'users', ?)",
       [req.user.user_id, req.params.id]
     );
-    return res.status(200).json({ success: true, message: 'User deactivated.' });
+
+    // If the deactivated account was a doctor, any Pending doctor_in_charge
+    // proposal addressed to them can never be answered — it would strand those
+    // patients waiting on a doctor who can no longer respond. Delete those
+    // proposals so the patients return to the unassigned pool. (Accepted rows are
+    // left intact — reassigning active care is a separate clinical decision.)
+    let cancelledProposals = [];
+    const [[target]] = await db.query(
+      'SELECT role, linked_id FROM users WHERE user_id = ?',
+      [req.params.id]
+    );
+    if (target?.role === 'doctor' && target.linked_id) {
+      // Capture who proposed each row before deleting so we can notify them.
+      const [pending] = await db.query(
+        `SELECT dic.assigned_by,
+                CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+         FROM doctor_in_charge dic
+         LEFT JOIN patients p ON p.patient_id = dic.patient_id
+         WHERE dic.doctor_id = ? AND dic.status = 'Pending'`,
+        [target.linked_id]
+      );
+      if (pending.length > 0) {
+        await db.query(
+          "DELETE FROM doctor_in_charge WHERE doctor_id = ? AND status = 'Pending'",
+          [target.linked_id]
+        );
+        cancelledProposals = pending;
+      }
+    }
+
+    // ── Respond immediately — proposer notifications are best-effort ──────────
+    res.status(200).json({ success: true, message: 'User deactivated.' });
+
+    if (cancelledProposals.length > 0) {
+      try {
+        const notifRows = [];
+        for (const row of cancelledProposals) {
+          if (row.assigned_by) {
+            notifRows.push([
+              row.assigned_by,
+              `Your Doctor-in-Charge proposal for ${row.patient_name ?? 'a patient'} was cancelled because the assigned doctor was deactivated. The patient is back in the unassigned pool.`,
+              null,
+            ]);
+          }
+        }
+        if (notifRows.length > 0) {
+          await db.query(
+            'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+            [notifRows]
+          );
+        }
+      } catch (notifErr) {
+        console.warn('deactivateUser: proposal-cancel notification failed (non-fatal):', notifErr.message);
+      }
+    }
+    return;
   } catch (err) {
     console.error('deactivateUser error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });

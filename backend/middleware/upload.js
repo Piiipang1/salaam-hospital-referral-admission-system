@@ -41,7 +41,15 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: {
+    fileSize:  10 * 1024 * 1024, // 10 MB per uploaded file
+    // Non-file text fields. Multer's default is 1 MB, which would silently reject
+    // a large e_signature data URL (base64 PNG from the signature canvas) with a
+    // MulterError BEFORE it reaches createReferral. Raise the ceiling to 3 MB so
+    // the referral controller's own ~2 MB e_signature cap is what actually gates
+    // the size — returning a clean 400 instead of a parser-level failure.
+    fieldSize: 3 * 1024 * 1024,  // 3 MB per text field
+  },
 });
 
 module.exports = { upload };

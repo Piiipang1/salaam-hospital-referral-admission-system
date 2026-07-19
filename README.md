@@ -50,6 +50,14 @@ The system eliminates manual paper-based workflows by providing a centralized pl
 - Referral Reports
 - Dashboard Analytics
 
+> **Admin data-access note:** Admins are *oversight-only* on the live clinical
+> screens (rooms, dashboard) and never see row-level clinical data there. The
+> Admission and Referral **reports** are the intentional exception — they show
+> patient names (and medical condition for referrals) because operational
+> reporting is a core admin function and is not useful without identifying the
+> patient per row. Admins are barred from the live clinical workflow, not from
+> the historical report layer.
+
 ## Technology Stack
 
 ### Frontend

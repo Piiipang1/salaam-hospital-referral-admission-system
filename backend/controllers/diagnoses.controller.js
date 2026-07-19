@@ -117,16 +117,19 @@ const getDiagnosisById = async (req, res) => {
 
 // PUT /api/diagnoses/:id
 const updateDiagnosis = async (req, res) => {
-  const { medical_condition, doctor_id } = req.body;
+  // Only medical_condition is editable. doctor_id (the attributed author) is
+  // deliberately NOT updatable here — allowing it would let any editor reattribute
+  // a diagnosis to another doctor, contradicting the "cannot spoof another doctor"
+  // rule enforced in createDiagnosis / createReferral.
+  const { medical_condition } = req.body;
   try {
     if ((await guardDiagnosisAccess(req, res, { forWrite: true })) === null) return;
 
     await db.query(
       `UPDATE diagnoses SET
-        medical_condition = COALESCE(?, medical_condition),
-        doctor_id = COALESCE(?, doctor_id)
+        medical_condition = COALESCE(?, medical_condition)
        WHERE diagnosis_id = ?`,
-      [medical_condition, doctor_id, req.params.id]
+      [medical_condition, req.params.id]
     );
 
     await db.query(

@@ -17,6 +17,17 @@ const createReferral = async (req, res) => {
     return res.status(400).json({ success: false, message: 'diagnosis_id and assigned_doctor_id are required.' });
   }
 
+  // e_signature is a base64 PNG data URL from the signature canvas. Cap it before
+  // it reaches the DB: even though the column is MEDIUMTEXT, a real signature is a
+  // few KB, so anything over ~2 MB is malformed or abusive — reject it rather than
+  // store a multi-MB blob per row.
+  if (e_signature && Buffer.byteLength(e_signature, 'utf8') > 2 * 1024 * 1024) {
+    return res.status(400).json({
+      success: false,
+      message: 'Signature image is too large (max 2 MB). Please re-capture a smaller signature.',
+    });
+  }
+
   try {
     // 1. Resolve the diagnosis and its patient. Without this a typo'd diagnosis_id
     //    reaches the FK and the user gets a generic 500 instead of a clear 400.
@@ -422,6 +433,17 @@ const reassignReferral = async (req, res) => {
     }
     if (!['Pending', 'Accepted'].includes(referral.status)) {
       return res.status(409).json({ success: false, message: 'Only Pending or Accepted referrals can be reassigned.' });
+    }
+
+    // A referral must hand the patient to a DIFFERENT doctor. Reassigning it back
+    // to its own referring doctor recreates the self-referral state createReferral
+    // explicitly forbids. Compare as Numbers so '3' === 3.
+    if (referral.referring_doctor_id != null &&
+        Number(assigned_doctor_id) === Number(referral.referring_doctor_id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot reassign a referral to its own referring doctor. Choose a different doctor.',
+      });
     }
 
     const [[targetDoctor]] = await db.query(

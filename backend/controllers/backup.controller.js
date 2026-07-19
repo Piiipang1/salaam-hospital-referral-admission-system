@@ -141,7 +141,11 @@ const listBackups = (req, res) => {
           filename,
           size:       formatSize(stats.size),
           size_bytes: stats.size,
-          created_at: stats.birthtime.toISOString(),
+          // mtime, not birthtime: creation time is unreliable on some Linux
+          // filesystems (returns 0 / the epoch), which would break sort order.
+          // A backup file is written once and never modified, so mtime is
+          // effectively its creation time here.
+          created_at: stats.mtime.toISOString(),
         };
       })
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));

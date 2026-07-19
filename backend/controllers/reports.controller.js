@@ -1,7 +1,22 @@
 const db = require('../config/db');
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POLICY NOTE — admins DO see patient names and medical_condition here, by design.
+//
+// Elsewhere admins are "oversight-only": the live clinical screens (rooms,
+// dashboard) deliberately withhold row-level clinical data — patient name, latest
+// condition, triage level (see rooms.controller.js getAllRooms). These reports are
+// the intentional EXCEPTION. Aggregate operational reporting (admissions log,
+// referral throughput) is a core admin oversight function and is not useful
+// without identifying which patient each row refers to, so the admissions and
+// referrals reports below expose patient_name (and medical_condition for
+// referrals) on purpose. The distinction: admins are barred from the live
+// clinical workflow, not from the historical/audit report layer.
+// ─────────────────────────────────────────────────────────────────────────────
+
 // GET /api/reports/admissions
 // Optional query params: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Returns patient_name per row — see the POLICY NOTE above (intentional).
 const admissionsReport = async (req, res) => {
   const { from, to } = req.query;
 
@@ -38,6 +53,8 @@ const admissionsReport = async (req, res) => {
 
 // GET /api/reports/referrals
 // Optional query params: ?status=Pending|Accepted|Completed|Cancelled&from=YYYY-MM-DD&to=YYYY-MM-DD
+// Returns patient_name + medical_condition per row — see the POLICY NOTE at the
+// top of this file (intentional exception to the admin oversight-only rule).
 const referralsReport = async (req, res) => {
   const { status, from, to } = req.query;
 
