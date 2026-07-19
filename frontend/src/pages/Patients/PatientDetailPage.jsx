@@ -8,6 +8,7 @@ import { getActiveDoctors } from '../../api/doctors.api';
 import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessment } from '../../api/diagnoses.api';
 import { createReferral } from '../../api/referrals.api';
 import { createAdmission } from '../../api/admissions.api';
+import { fetchFileBlob } from '../../api/files.api';
 import { useAuth } from '../../context/AuthContext';
 import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral, canUserAdmit, canUploadLabResult } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
@@ -32,10 +33,6 @@ import './PatientDetailPage.css';
 
 const TABS = ['Triage', 'Diagnoses', 'Treatment Plan', 'Referrals', 'Admissions', 'Documents'];
 
-
-// Build the public URL for an uploaded file
-const fileUrl = (filename) =>
-  `${import.meta.env.VITE_API_URL || ''}/uploads/${filename}`;
 
 // Pick a readable icon based on file extension
 const fileIcon = (filename = '') => {
@@ -131,6 +128,37 @@ const PatientDetailPage = () => {
     setLabFileName('');
     setLabError('');
     setLabModal(true);
+  };
+
+  // Uploaded files (PHI) are served only from the authenticated /api/files
+  // endpoint, so we fetch them as a Blob (JWT attached by axios) and open or
+  // download the object URL — a plain <a href> couldn't send the auth header.
+  const openFile = async (filename) => {
+    try {
+      const blob = await fetchFileBlob(filename);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      // Give the new tab time to load before releasing the object URL.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch {
+      setError('Could not open the file. Please try again.');
+    }
+  };
+
+  const downloadFile = async (filename) => {
+    try {
+      const blob = await fetchFileBlob(filename);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setError('Could not download the file. Please try again.');
+    }
   };
 
   const handleLabFileChange = (e) => {
@@ -444,10 +472,12 @@ const PatientDetailPage = () => {
                         </span>
                         <div className="lab-result-info">
                           <a
-                            href={`${import.meta.env.VITE_API_URL || ''}/uploads/${lr.file_attachment}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openFile(lr.file_attachment)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(lr.file_attachment); } }}
                             className="lab-result-link"
+                            style={{ cursor: 'pointer' }}
                           >
                             {lr.test_type || 'Lab Result'}
                           </a>
@@ -540,10 +570,12 @@ const PatientDetailPage = () => {
                     <span className="lab-result-icon"><RefFileIcon size={16} /></span>
                     <div className="lab-result-info">
                       <a
-                        href={fileUrl(r.file_attachment)}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openFile(r.file_attachment)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(r.file_attachment); } }}
                         className="lab-result-link"
+                        style={{ cursor: 'pointer' }}
                       >
                         Referral Document
                       </a>
@@ -624,10 +656,12 @@ const PatientDetailPage = () => {
                 <div className="lab-result-info" style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                     <a
-                      href={fileUrl(doc.filename)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openFile(doc.filename)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(doc.filename); } }}
                       className="lab-result-link"
+                      style={{ cursor: 'pointer' }}
                     >
                       {doc.label}
                     </a>
@@ -647,8 +681,10 @@ const PatientDetailPage = () => {
                   {doc.date && <p className="text-xs text-muted">{formatDate(doc.date)}</p>}
                 </div>
                 <a
-                  href={fileUrl(doc.filename)}
-                  download
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => downloadFile(doc.filename)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); downloadFile(doc.filename); } }}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -661,6 +697,7 @@ const PatientDetailPage = () => {
                     fontSize: 'var(--font-size-xs)',
                     textDecoration: 'none',
                     flexShrink: 0,
+                    cursor: 'pointer',
                     transition: 'border-color var(--transition-fast), color var(--transition-fast)',
                   }}
                   title="Download file"

@@ -17,6 +17,7 @@ const diagnosesRoutes     = require('./routes/diagnoses.routes');
 const referralsRoutes     = require('./routes/referrals.routes');
 const admissionsRoutes    = require('./routes/admissions.routes');
 const assignmentsRoutes   = require('./routes/assignments.routes');
+const filesRoutes         = require('./routes/files.routes');
 const roomsRoutes         = require('./routes/rooms.routes');
 const doctorsRoutes       = require('./routes/doctors.routes');
 const employeesRoutes     = require('./routes/employees.routes');
@@ -28,6 +29,11 @@ const adminRoutes         = require('./routes/admin.routes');
 // ─── App Initialization ───────────────────────────────────────────────────────
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Trust the first proxy hop (deployment targets Render, which sits behind a
+// reverse proxy). Without this, req.ip is the proxy's IP and express-rate-limit
+// keys every user's login attempts into one shared bucket.
+app.set('trust proxy', 1);
 
 // ─── Startup Environment Guard ────────────────────────────────────────────────
 const REQUIRED_ENV = ['JWT_SECRET', 'DB_HOST', 'DB_USER', 'DB_NAME'];
@@ -60,12 +66,13 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Static Files (Lab Result Uploads) ───────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// ─── Static Files (Database Backups — auth enforced at route level) ──────────
-// Note: direct /backups URL is blocked by requireRole at the route handler.
-// This static mount is intentionally omitted; downloads go via /api/admin/backups/:filename.
+// ─── Uploaded Patient Files (PHI — auth enforced at route level) ─────────────
+// Served ONLY through GET /api/files/:filename behind the auth middleware.
+// The old unauthenticated express.static('/uploads') mount was removed: it let
+// anyone with a URL download lab results / referral attachments.
+//
+// Database backups are likewise never statically served — downloads go through
+// /api/admin/backups/:filename, gated by requireRole('admin').
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
@@ -86,6 +93,7 @@ app.use('/api/diagnoses',     diagnosesRoutes);
 app.use('/api/referrals',     referralsRoutes);
 app.use('/api/admissions',    admissionsRoutes);
 app.use('/api/assignments',   assignmentsRoutes);
+app.use('/api/files',         filesRoutes);
 app.use('/api/rooms',         roomsRoutes);
 app.use('/api/doctors',       doctorsRoutes);
 app.use('/api/employees',     employeesRoutes);
