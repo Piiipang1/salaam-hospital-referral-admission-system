@@ -19,6 +19,9 @@ const createUser = async (req, res) => {
   if (!username || !password || !role) {
     return res.status(400).json({ success: false, message: 'Username, password, and role are required.' });
   }
+  if (password.length < 8) {
+    return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+  }
   if (!validRoles.includes(role)) {
     return res.status(400).json({ success: false, message: `Role must be one of: ${validRoles.join(', ')}.` });
   }
@@ -132,21 +135,58 @@ const getUserById = async (req, res) => {
 
 // PUT /api/users/:id
 const updateUser = async (req, res) => {
-  const { role, is_active, linked_id, is_er_assigned } = req.body;
+  // linked_id is deliberately NOT accepted from the client. It is set once, at
+  // creation time (createUser), alongside the person record it points to.
+  // Accepting it here would let a caller re-point an account at any doctors/
+  // employees row and hijack the per-role scoping subqueries.
+  const { role, is_active, is_er_assigned, password } = req.body;
+  const validRoles = ['admin', 'doctor', 'nurse', 'staff'];
   try {
+    const [[target]] = await db.query(
+      'SELECT role, linked_id FROM users WHERE user_id = ?',
+      [req.params.id]
+    );
+    if (!target) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // Role is immutable here. Changing it would desync linked_id (which still
+    // points at a person record of the OLD role) and corrupt the scoping
+    // subqueries. Validate the value, then reject any actual change.
+    if (role !== undefined && role !== null) {
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ success: false, message: `Role must be one of: ${validRoles.join(', ')}.` });
+      }
+      if (role !== target.role) {
+        return res.status(400).json({
+          success: false,
+          message: "Changing a user's role is not supported — deactivate the account and create a new one.",
+        });
+      }
+    }
+
+    // Optional password reset — hash only when a new password is supplied.
+    let password_hash = null;
+    if (password !== undefined && password !== null && password !== '') {
+      if (password.length < 8) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+      }
+      const salt = await bcrypt.genSalt(10);
+      password_hash = await bcrypt.hash(password, salt);
+    }
+
     await db.query(
-      'UPDATE users SET role = COALESCE(?, role), is_active = COALESCE(?, is_active), linked_id = COALESCE(?, linked_id) WHERE user_id = ?',
-      [role, is_active, linked_id, req.params.id]
+      `UPDATE users SET
+         is_active     = COALESCE(?, is_active),
+         password_hash = COALESCE(?, password_hash)
+       WHERE user_id = ?`,
+      [is_active, password_hash, req.params.id]
     );
 
     // ER assignment lives on the doctors row — update it when provided and
     // the target account is a doctor with a person record.
     if (is_er_assigned !== undefined && is_er_assigned !== null) {
-      const [[target]] = await db.query(
-        "SELECT role, linked_id FROM users WHERE user_id = ?",
-        [req.params.id]
-      );
-      if (target?.role === 'doctor' && target.linked_id) {
+      if (target.role === 'doctor' && target.linked_id) {
         await db.query(
           'UPDATE doctors SET is_er_assigned = ? WHERE doctor_id = ?',
           [is_er_assigned ? 1 : 0, target.linked_id]
@@ -175,7 +215,10 @@ const deactivateUser = async (req, res) => {
   }
 
   try {
-    await db.query('UPDATE users SET is_active = 0 WHERE user_id = ?', [req.params.id]);
+    // Also clear is_doctor_in_charge: a deactivated doctor must not keep holding
+    // one of the MAX_DOCTORS_IN_CHARGE slots (the count in setDoctorInCharge only
+    // considers active users, so a stale flag here would strand a slot).
+    await db.query('UPDATE users SET is_active = 0, is_doctor_in_charge = 0 WHERE user_id = ?', [req.params.id]);
     await db.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'DEACTIVATE', 'users', ?)",
       [req.user.user_id, req.params.id]
@@ -282,7 +325,7 @@ const setDoctorInCharge = async (req, res) => {
     }
 
     const [[target]] = await db.query(
-      'SELECT user_id, role, is_doctor_in_charge FROM users WHERE user_id = ?',
+      'SELECT user_id, role, is_doctor_in_charge, is_active FROM users WHERE user_id = ?',
       [req.params.id]
     );
     if (!target || target.role !== 'doctor') {
@@ -290,8 +333,13 @@ const setDoctorInCharge = async (req, res) => {
     }
 
     if (enabled) {
+      // A deactivated account cannot hold a DIC slot.
+      if (target.is_active !== 1) {
+        return res.status(400).json({ success: false, message: 'Cannot enable Doctor-in-Charge on a deactivated account.' });
+      }
+      // Only active doctors count toward the cap — deactivated ones don't occupy a slot.
       const [[{ cnt }]] = await db.query(
-        'SELECT COUNT(*) AS cnt FROM users WHERE is_doctor_in_charge = 1 AND user_id != ?',
+        'SELECT COUNT(*) AS cnt FROM users WHERE is_doctor_in_charge = 1 AND is_active = 1 AND user_id != ?',
         [req.params.id]
       );
       if (cnt >= MAX_DOCTORS_IN_CHARGE) {

@@ -52,10 +52,17 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
         </div>
         <div className="form-group">
           <label htmlFor="uf-role">Role *</label>
-          <select id="uf-role" value={form.role} onChange={set('role')} required>
+          {/* Role is immutable after creation — the backend rejects role changes
+              (they desync linked_id). Show it read-only when editing. */}
+          <select id="uf-role" value={form.role} onChange={set('role')} required disabled={isEdit}>
             <option value="">Select role</option>
             {USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
+          {isEdit && (
+            <p className="text-xs text-muted" style={{ marginTop: 'var(--space-1)' }}>
+              Role can't be changed. Deactivate and create a new account instead.
+            </p>
+          )}
         </div>
       </div>
       <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
