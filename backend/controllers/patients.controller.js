@@ -419,6 +419,31 @@ const updatePatient = async (req, res) => {
   }
 
   try {
+    // Verify the patient exists first — otherwise a bad ID updates nothing yet
+    // still reports success.
+    const [[patient]] = await db.query(
+      'SELECT patient_id FROM patients WHERE patient_id = ?',
+      [req.params.id]
+    );
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient not found.' });
+    }
+
+    // Nurses and staff may only edit patients they personally registered — the
+    // same ownership check getPatientById applies (this route is nurse/staff
+    // only, so no doctor branch is needed).
+    if (req.user.role === 'nurse' || req.user.role === 'staff') {
+      const [[nurseAccess]] = await db.query(
+        `SELECT 1 AS allowed FROM activity_logs
+         WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
+        [req.user.user_id, req.params.id]
+      );
+      if (!nurseAccess) {
+        return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
+      }
+    }
+
     await db.query(
       `UPDATE patients SET
         first_name = COALESCE(?, first_name),
