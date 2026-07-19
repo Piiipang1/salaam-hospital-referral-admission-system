@@ -32,7 +32,14 @@ export const timeAgo = (dateStr) => {
 /** Format a date for an HTML date input (YYYY-MM-DD) */
 export const toInputDate = (dateStr) => {
   if (!dateStr) return '';
-  return new Date(dateStr).toISOString().split('T')[0];
+  // Already a plain date string (the backend now returns DATE columns this way):
+  // use it verbatim — never round-trip through Date/toISOString, which UTC-shifts
+  // the day in UTC+ timezones.
+  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return dateStr.slice(0, 10);
+  // Fallback for datetime values: build from LOCAL components, not toISOString.
+  const d = new Date(dateStr);
+  if (isNaN(d)) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 /** Today's date in YYYY-MM-DD (local time) — for pre-filling date filters. */

@@ -83,12 +83,26 @@ const createRoom = async (req, res) => {
   }
 
   try {
+    // Reject a duplicate (room_type, bed_number) with a clear 409 rather than a
+    // generic 500. The DB also enforces this via the uq_room_bed unique key —
+    // the ER_DUP_ENTRY catch below covers the race between this check and INSERT.
+    const [[dup]] = await db.query(
+      'SELECT room_id FROM rooms WHERE room_type = ? AND bed_number = ?',
+      [room_type, bed_number]
+    );
+    if (dup) {
+      return res.status(409).json({ success: false, message: 'A room with this type and bed number already exists.' });
+    }
+
     const [result] = await db.query(
       "INSERT INTO rooms (room_type, bed_number, availability_status) VALUES (?, ?, 'available')",
       [room_type, bed_number]
     );
     return res.status(201).json({ success: true, message: 'Room added.', room_id: result.insertId });
   } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'A room with this type and bed number already exists.' });
+    }
     console.error('createRoom error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
@@ -104,6 +118,20 @@ const updateRoom = async (req, res) => {
   }
 
   try {
+    // Don't free a bed that still has an ongoing admission — otherwise assignRoom
+    // would place a second patient in the same bed. (Same ongoing-admission check
+    // deleteRoom uses.) Marking a room 'occupied' manually is always allowed.
+    if (availability_status === 'available') {
+      const [[ongoing]] = await db.query(
+        `SELECT COUNT(*) AS cnt FROM admissions
+         WHERE room_id = ? AND status IN ('Pending Room', 'Active')`,
+        [req.params.id]
+      );
+      if (ongoing.cnt > 0) {
+        return res.status(409).json({ success: false, message: 'Cannot mark this room available while an admission is using it.' });
+      }
+    }
+
     await db.query(
       `UPDATE rooms SET
         room_type = COALESCE(?, room_type),
@@ -114,6 +142,9 @@ const updateRoom = async (req, res) => {
     );
     return res.status(200).json({ success: true, message: 'Room updated.' });
   } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ success: false, message: 'A room with this type and bed number already exists.' });
+    }
     console.error('updateRoom error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }

@@ -11,6 +11,11 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
+    // Return DATE columns (date_of_birth, diagnosis_date) as plain 'YYYY-MM-DD'
+    // strings instead of JS Date objects — a Date JSON-serializes as a UTC-shifted
+    // ISO string, which shifts the day by one in UTC+ timezones. DATETIME/TIMESTAMP
+    // are unaffected and keep their default (Date object) handling.
+    dateStrings: ['DATE'],
     ...(process.env.DB_SSL === 'true' && { ssl: { rejectUnauthorized: false } }),
 });
 
