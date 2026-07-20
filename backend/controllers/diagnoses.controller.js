@@ -316,6 +316,25 @@ const saveAssessment = async (req, res) => {
       message = 'Assessment created.';
     }
 
+    // ── Classify the visit from the disposition (stored on the latest triage) ──
+    // Admit → Inpatient, Discharge → Outpatient. Refer/Observe leave it unchanged
+    // (still in progress). Best-effort — must NOT break assessment saving.
+    const visitType = disposition === 'Admit' ? 'Inpatient'
+                    : disposition === 'Discharge' ? 'Outpatient'
+                    : null;
+    if (visitType) {
+      try {
+        await db.query(
+          `UPDATE triages SET visit_type = ?
+           WHERE patient_id = (SELECT patient_id FROM diagnoses WHERE diagnosis_id = ?)
+           ORDER BY triage_datetime DESC LIMIT 1`,
+          [visitType, req.params.id]
+        );
+      } catch (vtErr) {
+        console.warn('saveAssessment: visit_type update failed (non-fatal):', vtErr.message);
+      }
+    }
+
     // ── Respond immediately — notifications are best-effort ───────────────────
     res.status(statusCode).json({ success: true, message, assessment_id: assessmentId });
 

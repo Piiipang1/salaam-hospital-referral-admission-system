@@ -226,6 +226,21 @@ const createAdmission = async (req, res) => {
       throw txErr;
     }
 
+    // ── Mark the patient's latest triage as Inpatient ────────────────────────
+    // An actual admission is stronger evidence of visit type than a disposition,
+    // so it overrides any value saveAssessment set. Best-effort — never let this
+    // break a completed admission.
+    try {
+      await db.query(
+        `UPDATE triages SET visit_type = 'Inpatient'
+         WHERE patient_id = ?
+         ORDER BY triage_datetime DESC LIMIT 1`,
+        [patient_id]
+      );
+    } catch (vtErr) {
+      console.warn('createAdmission: visit_type update failed (non-fatal):', vtErr.message);
+    }
+
     // ── Respond immediately — notifications are best-effort ──────────────────
     res.status(201).json({ success: true, message: 'Patient admitted. Awaiting room assignment.', admission_id: admissionId });
 

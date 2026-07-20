@@ -147,4 +147,41 @@ const turnaroundReport = async (req, res) => {
   }
 };
 
-module.exports = { admissionsReport, referralsReport, turnaroundReport };
+// GET /api/reports/outpatients
+// Optional query params: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+// Lists triages classified as Outpatient (seen and sent home) — visit_type is a
+// stored column, set from the doctor's 'Discharge' disposition (see
+// diagnoses.controller saveAssessment) and never overridden by an admission.
+const outpatientsReport = async (req, res) => {
+  const { from, to } = req.query;
+
+  try {
+    const conditions = ["t.visit_type = 'Outpatient'"];
+    const params = [];
+
+    if (from) { conditions.push('DATE(t.triage_datetime) >= ?'); params.push(from); }
+    if (to)   { conditions.push('DATE(t.triage_datetime) <= ?'); params.push(to); }
+
+    const where = 'WHERE ' + conditions.join(' AND ');
+
+    const [rows] = await db.query(
+      `SELECT t.triage_id,
+              CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+              t.triage_level,
+              t.visit_type,
+              t.triage_datetime
+       FROM triages t
+       INNER JOIN patients p ON p.patient_id = t.patient_id
+       ${where}
+       ORDER BY t.triage_datetime DESC`,
+      params
+    );
+
+    return res.status(200).json({ success: true, data: rows, total: rows.length });
+  } catch (err) {
+    console.error('outpatientsReport error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = { admissionsReport, referralsReport, turnaroundReport, outpatientsReport };
