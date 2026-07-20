@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Database, Download, RotateCcw, Trash2 } from 'lucide-react';
 import { getAllUsers, createUser, updateUser, deactivateUser, reactivateUser, setDoctorInCharge } from '../../api/users.api';
 import { createBackup, listBackups, getBackupDownloadUrl, restoreBackup, deleteBackup } from '../../api/backup.api';
@@ -12,6 +13,8 @@ import Alert from '../../components/ui/Alert';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import UserForm from '../../components/forms/UserForm';
 import Card from '../../components/ui/Card';
+// Reuse the audit page's pager styles so the pagination looks identical.
+import '../Audit/AuditPage.css';
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
 const relativeDate = (iso) => {
@@ -26,8 +29,136 @@ const relativeDate = (iso) => {
   return `${days}d ago`;
 };
 
+// ─── Reusable per-role table section ───────────────────────────────────────────
+// Each section owns its OWN search / status / (DIC) / sort / page state — the
+// three tables are fully independent. All filtering, sorting, and pagination is
+// client-side (the parent already holds every account in `users`).
+const PAGE_SIZE = 10;
+
+const SORT_OPTIONS = [
+  { value: 'created_desc', label: 'Newest first'  },
+  { value: 'created_asc',  label: 'Oldest first'  },
+  { value: 'username_az',  label: 'Username A–Z'  },
+  { value: 'username_za',  label: 'Username Z–A'  },
+  { value: 'name_az',      label: 'Full name A–Z' },
+  { value: 'name_za',      label: 'Full name Z–A' },
+];
+
+const UserTableSection = ({ title, rows, loading, columns, emptyMessage, badgeStyle, showDicFilter = false }) => {
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('all');           // all | active | inactive
+  const [dic,    setDic]    = useState('all');            // all | dic | nondic (doctors only)
+  const [sort,   setSort]   = useState('created_desc');
+  const [page,   setPage]   = useState(1);
+
+  // ── Filter (search matches username OR full name; guard null linked_name) ──
+  const q = search.trim().toLowerCase();
+  const filtered = rows.filter((u) => {
+    if (q) {
+      const uname = (u.username ?? '').toLowerCase();
+      const name  = (u.linked_name ?? '').toLowerCase();
+      if (!uname.includes(q) && !name.includes(q)) return false;
+    }
+    if (status === 'active'   && !u.is_active) return false;
+    if (status === 'inactive' &&  u.is_active) return false;
+    if (showDicFilter) {
+      if (dic === 'dic'    && !u.is_doctor_in_charge) return false;
+      if (dic === 'nondic' &&  u.is_doctor_in_charge) return false;
+    }
+    return true;
+  });
+
+  // ── Sort (copy first so the incoming array is never mutated; null name → '') ──
+  const sorted = [...filtered].sort((a, b) => {
+    switch (sort) {
+      case 'created_asc': return new Date(a.created_at) - new Date(b.created_at);
+      case 'username_az': return (a.username ?? '').localeCompare(b.username ?? '');
+      case 'username_za': return (b.username ?? '').localeCompare(a.username ?? '');
+      case 'name_az':     return (a.linked_name ?? '').localeCompare(b.linked_name ?? '');
+      case 'name_za':     return (b.linked_name ?? '').localeCompare(a.linked_name ?? '');
+      case 'created_desc':
+      default:            return new Date(b.created_at) - new Date(a.created_at);
+    }
+  });
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+
+  // Reset to page 1 when any filter/sort changes so we never strand on an empty page.
+  useEffect(() => { setPage(1); }, [search, status, dic, sort]);
+  // Clamp if the row set shrank underneath us (e.g. after a reload/deactivate).
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [page, totalPages]);
+
+  const pageRows = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:'var(--space-3)'}}>
+      {/* Heading + count pill (count reflects rows AFTER filtering) */}
+      <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)'}}>
+        <h2 style={{margin:0,fontSize:'var(--font-size-lg)',fontWeight:700}}>{title}</h2>
+        <span style={badgeStyle}>{loading ? '…' : filtered.length}</span>
+      </div>
+
+      {/* Controls — stack cleanly on mobile */}
+      <div style={{display:'flex',gap:'var(--space-3)',flexWrap:'wrap'}}>
+        <input
+          className="filter-select"
+          style={{cursor:'text',minWidth:'220px'}}
+          type="text"
+          placeholder="Search username or name…"
+          value={search}
+          onChange={(e)=>setSearch(e.target.value)}
+          aria-label={`Search ${title}`}
+        />
+        <select className="filter-select" value={status} onChange={(e)=>setStatus(e.target.value)} aria-label="Filter by status">
+          <option value="all">All statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        {showDicFilter && (
+          <select className="filter-select" value={dic} onChange={(e)=>setDic(e.target.value)} aria-label="Filter by Doctor-in-Charge">
+            <option value="all">All doctors</option>
+            <option value="dic">DIC only</option>
+            <option value="nondic">Non-DIC</option>
+          </select>
+        )}
+        <select className="filter-select" value={sort} onChange={(e)=>setSort(e.target.value)} aria-label="Sort order">
+          {SORT_OPTIONS.map((o)=><option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      </div>
+
+      <Table columns={columns} data={pageRows} loading={loading} emptyMessage={emptyMessage} />
+
+      {/* Pager — hidden when a single page (mirrors AuditPage markup/styling) */}
+      {totalPages > 1 && (
+        <div className="audit-pagination">
+          <span className="audit-pagination__info">
+            Page {page} of {totalPages} · {sorted.length} account{sorted.length!==1?'s':''}
+          </span>
+          <div className="audit-pagination__controls">
+            <button
+              className="audit-page-btn"
+              onClick={()=>setPage((p)=>Math.max(1,p-1))}
+              disabled={page===1}
+            >‹ Previous</button>
+            <span className="audit-page-current">{page}</span>
+            <button
+              className="audit-page-btn"
+              onClick={()=>setPage((p)=>Math.min(totalPages,p+1))}
+              disabled={page===totalPages}
+            >Next ›</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const UserManagementPage = () => {
   const BACKUPS_ENABLED = import.meta.env.VITE_ENABLE_BACKUPS === 'true';
+
+  // Role filter from the sidebar submenu (?role=doctor|nurse|staff). null = show all.
+  const [searchParams] = useSearchParams();
+  const roleFilter = searchParams.get('role');
 
   // ── User management state ──────────────────────────────────────────────────
   const [users,   setUsers]   = useState([]);
@@ -233,6 +364,14 @@ const UserManagementPage = () => {
   const nurses  = users.filter((u) => u.role === 'nurse');
   const staffs  = users.filter((u) => u.role === 'staff');
 
+  // Subtitle count reflects what's shown: the filtered role's count when a
+  // filter is active, otherwise the total.
+  const roleCounts = { doctor: doctors.length, nurse: nurses.length, staff: staffs.length };
+  const shownCount = roleFilter ? (roleCounts[roleFilter] ?? 0) : users.length;
+  const subtitle = roleFilter
+    ? `${shownCount} ${roleFilter} account${shownCount !== 1 ? 's' : ''}`
+    : `${shownCount} user account${shownCount !== 1 ? 's' : ''}`;
+
   return (
     <div style={{display:'flex',flexDirection:'column',gap:'var(--space-6)'}}>
 
@@ -241,7 +380,7 @@ const UserManagementPage = () => {
         <div className="page-header">
           <div>
             <h1 className="page-title">User Management</h1>
-            <p className="page-subtitle">{users.length} user account{users.length!==1?'s':''}</p>
+            <p className="page-subtitle">{subtitle}</p>
           </div>
           <Button id="create-user-btn" variant="primary" onClick={()=>setModal('new')}>+ Add User</Button>
         </div>
@@ -249,38 +388,42 @@ const UserManagementPage = () => {
         {success && <Alert type="success" message={success} onDismiss={()=>setSuccess('')} />}
       </div>
 
-      {/* ── Doctors Table ───────────────────────────────────────────────────── */}
-      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-3)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)'}}>
-          <h2 style={{margin:0,fontSize:'var(--font-size-lg)',fontWeight:700}}>Doctors</h2>
-          <span style={{fontSize:'var(--font-size-xs)',background:'var(--color-info-muted)',color:'var(--color-info)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}>
-            {loading ? '…' : doctors.length}
-          </span>
-        </div>
-        <Table columns={userColumns} data={doctors} loading={loading} emptyMessage="No doctor accounts found." />
-      </div>
+      {/* ── Doctors ─────────────────────────────────────────────────────────── */}
+      {(!roleFilter || roleFilter === 'doctor') && (
+        <UserTableSection
+          title="Doctors"
+          rows={doctors}
+          loading={loading}
+          columns={userColumns}
+          emptyMessage="No doctor accounts found."
+          showDicFilter
+          badgeStyle={{fontSize:'var(--font-size-xs)',background:'var(--color-info-muted)',color:'var(--color-info)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}
+        />
+      )}
 
-      {/* ── Nurses Table ────────────────────────────────────────────────────── */}
-      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-3)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)'}}>
-          <h2 style={{margin:0,fontSize:'var(--font-size-lg)',fontWeight:700}}>Nurses</h2>
-          <span style={{fontSize:'var(--font-size-xs)',background:'var(--color-success-muted)',color:'var(--color-success)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}>
-            {loading ? '…' : nurses.length}
-          </span>
-        </div>
-        <Table columns={userColumns} data={nurses} loading={loading} emptyMessage="No nurse accounts found." />
-      </div>
+      {/* ── Nurses ──────────────────────────────────────────────────────────── */}
+      {(!roleFilter || roleFilter === 'nurse') && (
+        <UserTableSection
+          title="Nurses"
+          rows={nurses}
+          loading={loading}
+          columns={userColumns}
+          emptyMessage="No nurse accounts found."
+          badgeStyle={{fontSize:'var(--font-size-xs)',background:'var(--color-success-muted)',color:'var(--color-success)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}
+        />
+      )}
 
-      {/* ── Staff Table ─────────────────────────────────────────────────────── */}
-      <div style={{display:'flex',flexDirection:'column',gap:'var(--space-3)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'var(--space-3)'}}>
-          <h2 style={{margin:0,fontSize:'var(--font-size-lg)',fontWeight:700}}>Staff</h2>
-          <span style={{fontSize:'var(--font-size-xs)',background:'var(--color-warning-muted)',color:'var(--color-warning)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}>
-            {loading ? '…' : staffs.length}
-          </span>
-        </div>
-        <Table columns={userColumns} data={staffs} loading={loading} emptyMessage="No staff accounts found." />
-      </div>
+      {/* ── Staff ───────────────────────────────────────────────────────────── */}
+      {(!roleFilter || roleFilter === 'staff') && (
+        <UserTableSection
+          title="Staff"
+          rows={staffs}
+          loading={loading}
+          columns={userColumns}
+          emptyMessage="No staff accounts found."
+          badgeStyle={{fontSize:'var(--font-size-xs)',background:'var(--color-warning-muted)',color:'var(--color-warning)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}
+        />
+      )}
 
 
       {/* ── Database Backup Section (local dev only — requires mysqldump) ──────── */}
