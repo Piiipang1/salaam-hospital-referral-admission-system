@@ -1,7 +1,8 @@
-import { NavLink, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Siren, Repeat, BedDouble,
-  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut,
+  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut, ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canViewReports, canManageUsers } from '../../utils/roleGuard';
@@ -28,6 +29,14 @@ const NAV_ITEMS = [
 
 const ITEM_BY_PATH = Object.fromEntries(NAV_ITEMS.map((i) => [i.to, i]));
 
+// Sub-items shown under the expandable "User Management" entry. Each links to
+// /users with a ?role= filter so the page shows only that role's table.
+const USER_SUBITEMS = [
+  { to: '/users?role=doctor', label: 'Doctors' },
+  { to: '/users?role=nurse',  label: 'Nurses'  },
+  { to: '/users?role=staff',  label: 'Staff'   },
+];
+
 // Admins get a grouped oversight nav. Dashboard stays ungrouped on top;
 // Oversight = read-only visibility (rooms grid, reports, audit trail),
 // Administration = account/system management.
@@ -40,6 +49,14 @@ const ADMIN_SECTIONS = [
 const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Expandable "User Management" submenu. Auto-open when already on /users so
+  // the active sub-item is visible.
+  const [usersOpen, setUsersOpen] = useState(false);
+  useEffect(() => {
+    if (location.pathname === '/users') setUsersOpen(true);
+  }, [location.pathname]);
 
   const displayName = (user?.first_name && user?.last_name)
     ? `${user.first_name} ${user.last_name}`
@@ -58,6 +75,53 @@ const Sidebar = ({ collapsed, onClose, mobileOpen }) => {
     if (!item) return null;
     const Icon = item.icon;
     const label = (user?.role === 'doctor' && item.doctorLabel) ? item.doctorLabel : item.label;
+
+    // User Management is an expandable dropdown: the row toggles the submenu
+    // (never navigates) and reveals the per-role sub-links below it.
+    if (item.to === '/users') {
+      const currentRole = new URLSearchParams(location.search).get('role');
+      return (
+        <div key={item.to} className="sidebar__submenu">
+          <button
+            type="button"
+            className="sidebar__link"
+            onClick={() => setUsersOpen((open) => !open)}
+            aria-expanded={usersOpen}
+            title={collapsed ? label : undefined}
+            style={{ background: 'none', border: 'none', width: '100%', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}
+          >
+            <span className="sidebar__link-icon"><Icon size={18} /></span>
+            {!collapsed && <span className="sidebar__link-label">{label}</span>}
+            {!collapsed && (
+              <span
+                className="sidebar__link-chevron"
+                style={{ marginLeft: 'auto', display: 'inline-flex', transition: 'transform var(--transition-fast)', transform: usersOpen ? 'rotate(180deg)' : 'none' }}
+              >
+                <ChevronDown size={16} />
+              </span>
+            )}
+          </button>
+          {usersOpen && !collapsed && USER_SUBITEMS.map((sub) => {
+            // NavLink's default isActive ignores the query string, so match on
+            // ?role= manually — otherwise all three sub-links highlight at once.
+            const subRole = new URLSearchParams(sub.to.split('?')[1]).get('role');
+            const active = location.pathname === '/users' && currentRole === subRole;
+            return (
+              <NavLink
+                key={sub.to}
+                to={sub.to}
+                onClick={onClose}
+                className={`sidebar__link sidebar__sublink${active ? ' sidebar__link--active' : ''}`}
+                style={{ paddingLeft: 'var(--space-8)', fontSize: 'var(--font-size-xs)' }}
+              >
+                <span className="sidebar__link-label">{sub.label}</span>
+              </NavLink>
+            );
+          })}
+        </div>
+      );
+    }
+
     return (
       <NavLink
         key={item.to}
