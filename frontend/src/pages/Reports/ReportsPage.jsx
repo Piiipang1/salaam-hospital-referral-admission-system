@@ -10,7 +10,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Bar, Doughnut } from 'react-chartjs-2';
-import { getAdmissionsReport, getReferralsReport, getTurnaroundReport } from '../../api/reports.api';
+import { getAdmissionsReport, getReferralsReport, getTurnaroundReport, getOutpatientsReport } from '../../api/reports.api';
 import { formatDate } from '../../utils/formatDate';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
@@ -131,6 +131,31 @@ const buildReferralsChartData = (rows) => {
   };
 };
 
+/** Group outpatient visits by triage day, return Chart.js bar dataset */
+const buildOutpatientsChartData = (rows) => {
+  const counts = {};
+  rows.forEach((r) => {
+    const day = r.triage_datetime
+      ? new Date(r.triage_datetime).toLocaleDateString('en-PH', { month:'short', day:'numeric' })
+      : 'Unknown';
+    counts[day] = (counts[day] || 0) + 1;
+  });
+  const labels = Object.keys(counts);
+  return {
+    labels,
+    datasets: [{
+      label: 'Outpatients',
+      data: labels.map((l) => counts[l]),
+      backgroundColor: labels.map((_, i) => BAR_COLORS[i % BAR_COLORS.length] + 'cc'),
+      borderColor:     labels.map((_, i) => BAR_COLORS[i % BAR_COLORS.length]),
+      borderWidth: 1,
+      borderRadius: 6,
+      barThickness: 'flex',
+      maxBarThickness: 52,
+    }],
+  };
+};
+
 /** One bar per patient showing turnaround minutes */
 const buildTurnaroundChartData = (rows) => {
   const labels = rows.map((r) => r.patient_name || 'Unknown');
@@ -187,6 +212,13 @@ const turnaColumns = [
   { key:'turnaround_minutes', label:'Time (min)', align:'right' },
 ];
 
+const outColumns = [
+  { key:'patient_name',    label:'Patient'    },
+  { key:'triage_level',    label:'Level',      render:(r)=><Badge status={r.triage_level} /> },
+  { key:'visit_type',      label:'Visit Type', render:(r)=><Badge status={r.visit_type} /> },
+  { key:'triage_datetime', label:'Triaged',    render:(r)=>formatDate(r.triage_datetime, true) },
+];
+
 // ─── CSV export helpers ────────────────────────────────────────────────────────
 const csvEscape = (value) => {
   const str = value === null || value === undefined ? '' : String(value);
@@ -200,13 +232,14 @@ const toCsv = (columns, rows) => {
 };
 
 const TAB_FILE_PREFIX = {
-  Admissions: 'admissions',
-  Referrals:  'referrals',
-  Turnaround: 'triage-to-admission',
+  Admissions:  'admissions',
+  Referrals:   'referrals',
+  Turnaround:  'triage-to-admission',
+  Outpatients: 'outpatients',
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
-const TABS = ['Admissions', 'Referrals', 'Turnaround'];
+const TABS = ['Admissions', 'Referrals', 'Turnaround', 'Outpatients'];
 
 const ReportsPage = () => {
   const [tab,          setTab]          = useState('Admissions');
@@ -219,9 +252,10 @@ const ReportsPage = () => {
   const [statusFilter, setStatusFilter] = useState('');
 
   // Computed chart data — re-derives whenever `data` or `tab` changes
-  const admChart   = tab === 'Admissions' && data.length ? buildAdmissionsChartData(data) : null;
-  const refChart   = tab === 'Referrals'  && data.length ? buildReferralsChartData(data)  : null;
-  const turnaChart = tab === 'Turnaround' && data.length ? buildTurnaroundChartData(data) : null;
+  const admChart   = tab === 'Admissions'  && data.length ? buildAdmissionsChartData(data)  : null;
+  const refChart   = tab === 'Referrals'   && data.length ? buildReferralsChartData(data)   : null;
+  const turnaChart = tab === 'Turnaround'  && data.length ? buildTurnaroundChartData(data)  : null;
+  const outChart   = tab === 'Outpatients' && data.length ? buildOutpatientsChartData(data) : null;
 
   const run = async () => {
     setLoading(true); setError('');
@@ -232,9 +266,10 @@ const ReportsPage = () => {
       if (tab === 'Referrals' && statusFilter) params.status = statusFilter;
 
       let res;
-      if (tab === 'Admissions')     res = await getAdmissionsReport(params);
-      else if (tab === 'Referrals') res = await getReferralsReport(params);
-      else                          res = await getTurnaroundReport(params);
+      if (tab === 'Admissions')       res = await getAdmissionsReport(params);
+      else if (tab === 'Referrals')   res = await getReferralsReport(params);
+      else if (tab === 'Outpatients') res = await getOutpatientsReport(params);
+      else                            res = await getTurnaroundReport(params);
 
       if (res.success) {
         setData(res.data);
@@ -244,8 +279,9 @@ const ReportsPage = () => {
     finally  { setLoading(false); }
   };
 
-  const columns = tab === 'Admissions' ? admColumns
-                : tab === 'Referrals'  ? refColumns
+  const columns = tab === 'Admissions'  ? admColumns
+                : tab === 'Referrals'   ? refColumns
+                : tab === 'Outpatients' ? outColumns
                 : turnaColumns;
 
   const downloadCsv = () => {
@@ -421,6 +457,19 @@ const ReportsPage = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── OUTPATIENTS CHART ── */}
+      {tab === 'Outpatients' && outChart && (
+        <div className="report-chart-panel">
+          <p className="report-chart-panel__title">Outpatients per Day</p>
+          <p style={{ fontSize:'var(--font-size-sm)', color:'var(--color-text-muted)', marginBottom:'var(--space-3)' }}>
+            Patients seen and sent home (disposition Discharge) — not admitted to a bed.
+          </p>
+          <div className="report-chart-panel__canvas-wrap">
+            <Bar data={outChart} options={admChartOptions} />
+          </div>
+        </div>
       )}
 
       {/* ── DATA TABLE ── */}
