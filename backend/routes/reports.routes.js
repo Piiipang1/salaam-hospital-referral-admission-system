@@ -13,4 +13,7 @@ router.get('/referrals', auth, requireRole('admin'), reportsController.referrals
 // GET /api/reports/turnaround
 router.get('/turnaround', auth, requireRole('admin'), reportsController.turnaroundReport);
 
+// GET /api/reports/outpatients
+router.get('/outpatients', auth, requireRole('admin'), reportsController.outpatientsReport);
+
 module.exports = router;

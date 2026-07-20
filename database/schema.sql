@@ -187,6 +187,7 @@ CREATE TABLE triages (
     employee_id     INT UNSIGNED    DEFAULT NULL,
     visit_room_id   INT UNSIGNED    DEFAULT NULL,
     triage_level    ENUM('Critical','Urgent','Non-Urgent') NOT NULL,
+    visit_type      ENUM('Inpatient','Outpatient') DEFAULT NULL,
     notes           TEXT            DEFAULT NULL,
     triage_datetime DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (triage_id),
