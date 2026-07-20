@@ -180,6 +180,7 @@ const TriagePage = () => {
         </span>
       ),
     },
+    { key: 'visit_type',      label: 'Visit Type', hideMobile: true, render: (r) => r.visit_type ? <Badge status={r.visit_type} /> : '—' },
     { key: 'actions', label: '', width: isCoordinator ? '320px' : '80px', align: 'right',
       render: (r) => {
         const openAssign = (e) => { e.stopPropagation(); setAssignDoctorId(''); setAssignTarget(r); };

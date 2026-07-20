@@ -44,6 +44,9 @@ export const STATUS_COLORS = {
   Discharge:  'success',
   Refer:      'info',
   Observe:    'warning',
+  // Visit type
+  Inpatient:  'info',
+  Outpatient: 'success',
 };
 
 // Role display labels

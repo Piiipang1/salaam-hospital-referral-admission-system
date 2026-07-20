@@ -66,6 +66,7 @@ const TriageDetailPage = () => {
           <div><span className="info-label">Date/Time</span><span>{formatDate(triage.triage_datetime, true)}</span></div>
           <div><span className="info-label">Recorded By</span><span>{triage.employee_name ?? '—'}</span></div>
           <div><span className="info-label">Attending Doctor</span><span>{triage.attending_doctor_name ?? '—'}</span></div>
+          <div><span className="info-label">Visit Type</span><span>{triage.visit_type ? <Badge status={triage.visit_type} /> : '—'}</span></div>
           <div><span className="info-label">Visit Room</span><span>{triage.visit_room_label ?? '—'}</span></div>
         </div>
         {triage.notes && <p style={{ marginTop:'var(--space-4)', color:'var(--color-text-muted)', fontSize:'var(--font-size-sm)' }}>{triage.notes}</p>}
