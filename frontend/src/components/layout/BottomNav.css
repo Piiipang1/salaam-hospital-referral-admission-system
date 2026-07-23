@@ -184,6 +184,40 @@
     flex-shrink: 0;
   }
 
+  /* ── Expandable User Management sub-links ── */
+  .bottom-nav__sheet-subitem {
+    display: flex;
+    align-items: center;
+    /* Indent past the parent row's icon (icon width + gap ≈ 28px) so the
+       sub-labels line up under the parent label. */
+    padding: var(--space-4) var(--space-5);
+    padding-left: calc(var(--space-5) + 28px);
+    text-decoration: none;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    transition: background 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .bottom-nav__sheet-subitem:active {
+    background: var(--color-surface-2);
+  }
+
+  .bottom-nav__sheet-subitem--active {
+    color: var(--color-primary);
+  }
+
+  /* Chevron on the User Management toggle row — rotates when expanded */
+  .bottom-nav__chevron {
+    display: inline-flex;
+    align-items: center;
+    transition: transform 0.15s ease;
+  }
+  .bottom-nav__chevron--open {
+    transform: rotate(180deg);
+  }
+
   /* ── Divider between nav links and logout ── */
   .bottom-nav__sheet-divider {
     height: 1px;
