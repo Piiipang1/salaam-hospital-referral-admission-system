@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Siren, BedDouble, Menu,
   Bell, Repeat, DoorOpen, BarChart3, UserCog, ScrollText, LogOut, X,
-  CircleUserRound,
+  CircleUserRound, ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './BottomNav.css';
@@ -54,13 +54,25 @@ const SHEET_ITEMS = [
   { to: '/audit',         icon: ScrollText, label: 'Audit Trail',     roles: ['admin'] },
 ];
 
+// Sub-items shown under the expandable "User Management" sheet row. Each links to
+// /users with a ?role= filter so the admin jumps straight to one role's table
+// (mirrors the desktop sidebar dropdown).
+const USER_SUBITEMS = [
+  { to: '/users?role=doctor', label: 'Doctors' },
+  { to: '/users?role=nurse',  label: 'Nurses'  },
+  { to: '/users?role=staff',  label: 'Staff'   },
+];
+
 const BottomNav = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [usersExpanded, setUsersExpanded] = useState(false);
 
   // Close the sheet whenever the route changes
   useEffect(() => { setSheetOpen(false); }, [location.pathname]);
+  // Collapse the User Management group whenever the sheet closes, so it reopens clean
+  useEffect(() => { if (!sheetOpen) setUsersExpanded(false); }, [sheetOpen]);
 
   // Get bar items for the current role
   const barItems = BAR_ITEMS_BY_ROLE[user?.role] ?? DEFAULT_BAR_ITEMS;
@@ -135,6 +147,45 @@ const BottomNav = () => {
 
         {visibleSheetItems.map((item) => {
           const Icon = item.icon;
+
+          // User Management renders as an expandable group with per-role sub-links.
+          if (item.to === '/users') {
+            const currentRole = new URLSearchParams(location.search).get('role');
+            return (
+              <div key={item.to}>
+                <button
+                  type="button"
+                  className="bottom-nav__sheet-item"
+                  onClick={() => setUsersExpanded((v) => !v)}
+                  aria-expanded={usersExpanded}
+                  style={{ background: 'none', border: 'none', width: '100%', font: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <span className="bottom-nav__sheet-item-icon"><Icon size={20} /></span>
+                  {item.label}
+                  <span className={`bottom-nav__chevron${usersExpanded ? ' bottom-nav__chevron--open' : ''}`} style={{ marginLeft: 'auto', display: 'inline-flex' }}>
+                    <ChevronDown size={18} />
+                  </span>
+                </button>
+                {usersExpanded && USER_SUBITEMS.map((sub) => {
+                  // NavLink's isActive ignores the query string, so match ?role=
+                  // manually — otherwise all three sub-links light up on /users.
+                  const subRole = new URLSearchParams(sub.to.split('?')[1]).get('role');
+                  const active = location.pathname === '/users' && currentRole === subRole;
+                  return (
+                    <NavLink
+                      key={sub.to}
+                      to={sub.to}
+                      onClick={() => setSheetOpen(false)}
+                      className={`bottom-nav__sheet-subitem${active ? ' bottom-nav__sheet-subitem--active' : ''}`}
+                    >
+                      {sub.label}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            );
+          }
+
           return (
             <NavLink
               key={item.to}
