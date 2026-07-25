@@ -8,10 +8,22 @@
   border-bottom: 1px solid var(--color-border);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-4);
   padding: 0 var(--space-6);
   z-index: var(--z-topbar);
   transition: left var(--transition-slow);
+}
+.topbar__brand {
+  display: none; /* hidden on desktop — the sidebar shows the brand there */
+  align-items: center;
+  gap: var(--space-2);
+}
+.topbar__brand-logo { height: 28px; width: auto; }
+.topbar__brand-name {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-text);
 }
 .topbar__menu-btn {
   font-size: 1.3rem;
@@ -85,4 +97,5 @@
 @media (max-width: 767px) {
   .topbar { left: 0; padding: 0 var(--space-4); }
   .topbar__title { font-size: var(--font-size-lg); }
+  .topbar__brand { display: flex; }
 }
