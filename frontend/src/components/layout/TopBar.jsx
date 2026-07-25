@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Sun, Moon } from 'lucide-react';
 import { useNotif } from '../../context/NotifContext';
 import { useTheme } from '../../context/ThemeContext';
+import logo from '../../assets/logo.png';
 import './TopBar.css';
 
 const TopBar = () => {
@@ -11,6 +12,13 @@ const TopBar = () => {
 
   return (
     <header className="topbar">
+      {/* Brand — shown only on mobile, where the sidebar (which carries the
+          logo on desktop) is hidden. */}
+      <div className="topbar__brand">
+        <img src={logo} alt="Salaam Hospital" className="topbar__brand-logo" />
+        <span className="topbar__brand-name">Salaam</span>
+      </div>
+
       {/* Page titles live in each page's own .page-header — no duplicate here */}
       <div className="topbar__actions">
         {/* Theme Toggle */}
