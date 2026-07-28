@@ -77,6 +77,12 @@
   margin-top: 2px;
 }
 
+/* The card is a flex column with its own gap — the global
+   .divider margin would double the spacing, so remove it here. */
+.login-card .divider {
+  margin: 0;
+}
+
 .login-card__heading {
   font-size: var(--font-size-2xl);
   font-weight: 700;
