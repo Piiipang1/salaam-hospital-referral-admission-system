@@ -256,6 +256,7 @@ const PatientsPage = () => {
             {isCoordinator && (
               <button
                 type="button"
+                className="filter-toggle-btn"
                 onClick={() => setUnassignedOnly((v) => !v)}
                 title="Show only patients with no doctor assigned yet"
                 style={{
