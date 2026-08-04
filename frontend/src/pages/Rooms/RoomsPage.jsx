@@ -234,7 +234,7 @@ const RoomsPage = () => {
         </>
       )}
 
-      <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal === 'new' ? 'Add Room' : 'Edit Room'} size="sm">
+      <Modal isOpen={!!modal} onClose={() => setModal(null)} title={modal === 'new' ? (isRoomBased(selectedWard) ? 'Add Room' : 'Add Bed') : (isRoomBased(selectedWard) ? 'Edit Room' : 'Edit Bed')} size="sm">
         <form onSubmit={handleSave} noValidate>
           <div className="form-group">
             <label htmlFor="rm-type">Room Type *</label>
@@ -257,7 +257,7 @@ const RoomsPage = () => {
           </div>
           <div className="form-actions">
             <Button type="button" variant="secondary" onClick={() => setModal(null)}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={saving}>Save Room</Button>
+            <Button type="submit" variant="primary" loading={saving}>{isRoomBased(selectedWard) ? 'Save Room' : 'Save Bed'}</Button>
           </div>
         </form>
       </Modal>
