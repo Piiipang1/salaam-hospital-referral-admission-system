@@ -63,7 +63,6 @@ const exportCSV = (rows) => {
 const FILTER_ROLES = [
   { value: 'doctor', label: 'Doctor'  },
   { value: 'nurse',  label: 'Nurse'   },
-  { value: 'staff',  label: 'Staff'   },
   { value: 'admin',  label: 'Admin'   },
 ];
 

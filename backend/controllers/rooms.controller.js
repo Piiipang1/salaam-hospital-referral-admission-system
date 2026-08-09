@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { getRoomCapacity } = require('../utils/capacity');
 
 // GET /api/rooms
 const getAllRooms = async (req, res) => {
@@ -6,9 +7,9 @@ const getAllRooms = async (req, res) => {
     // Admins are oversight-only: they get occupancy + admission metadata for
     // bed planning, but never row-level clinical data (patient name, latest
     // condition, triage level) — same policy as the dashboard and the
-    // clinical route guards. Nurses/staff need the patient context to manage
+    // clinical route guards. Nurses need the patient context to manage
     // beds, so they get the full payload.
-    const clinicalColumns = (req.user.role === 'nurse' || req.user.role === 'staff')
+    const clinicalColumns = (req.user.role === 'nurse')
       ? `CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
          (
            SELECT d.medical_condition
@@ -56,6 +57,20 @@ const getAvailableRooms = async (req, res) => {
     return res.status(200).json({ success: true, data: rows });
   } catch (err) {
     console.error('getAvailableRooms error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// GET /api/rooms/capacity
+// Bed-availability summary driving the frontend "no rooms available" banner and
+// the disabled intake forms. Open to any authenticated role — it carries counts
+// only, no clinical or row-level data.
+const getCapacity = async (req, res) => {
+  try {
+    const capacity = await getRoomCapacity();
+    return res.status(200).json({ success: true, data: capacity });
+  } catch (err) {
+    console.error('getCapacity error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 };
@@ -191,4 +206,4 @@ const deleteRoom = async (req, res) => {
   }
 };
 
-module.exports = { getAllRooms, getAvailableRooms, getRoomById, createRoom, updateRoom, deleteRoom };
+module.exports = { getAllRooms, getAvailableRooms, getCapacity, getRoomById, createRoom, updateRoom, deleteRoom };

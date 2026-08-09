@@ -29,12 +29,6 @@ const BAR_ITEMS_BY_ROLE = {
     { to: '/triage',     icon: Siren,           label: 'Triage'     },
     { to: '/admissions', icon: BedDouble,       label: 'Admissions' },
   ],
-  staff: [
-    { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard'  },
-    { to: '/patients',   icon: Users,           label: 'Patients'   },
-    { to: '/triage',     icon: Siren,           label: 'Triage'     },
-    { to: '/admissions', icon: BedDouble,       label: 'Admissions' },
-  ],
 };
 
 // Default fallback bar items
@@ -45,10 +39,10 @@ const DEFAULT_BAR_ITEMS = [
 // Nav links that appear in the More sheet (role-restricted where noted)
 const SHEET_ITEMS = [
   { to: '/profile',       icon: CircleUserRound, label: 'My Profile' },
-  { to: '/triage',        icon: Siren,           label: 'Triage',    roles: ['doctor', 'nurse', 'staff'] },
+  { to: '/triage',        icon: Siren,           label: 'Triage',    roles: ['doctor', 'nurse'] },
   { to: '/notifications', icon: Bell,       label: 'Notifications'    },
   { to: '/referrals',     icon: Repeat,     label: 'Referrals',       roles: ['doctor'] },
-  { to: '/rooms',         icon: DoorOpen,   label: 'Rooms',           roles: ['admin', 'nurse', 'staff'] },
+  { to: '/rooms',         icon: DoorOpen,   label: 'Rooms',           roles: ['admin', 'nurse'] },
   { to: '/reports',       icon: BarChart3,  label: 'Reports',         roles: ['admin'] },
   { to: '/users',         icon: UserCog,    label: 'User Management', roles: ['admin'] },
   { to: '/audit',         icon: ScrollText, label: 'Audit Trail',     roles: ['admin'] },
@@ -60,7 +54,6 @@ const SHEET_ITEMS = [
 const USER_SUBITEMS = [
   { to: '/users?role=doctor', label: 'Doctors' },
   { to: '/users?role=nurse',  label: 'Nurses'  },
-  { to: '/users?role=staff',  label: 'Staff'   },
 ];
 
 const BottomNav = () => {

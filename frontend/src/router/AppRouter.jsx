@@ -13,6 +13,9 @@ import TriageDetailPage    from '../pages/Triage/TriageDetailPage';
 import ReferralsPage       from '../pages/Referrals/ReferralsPage';
 import AdmissionsPage      from '../pages/Admissions/AdmissionsPage';
 import RoomsPage           from '../pages/Rooms/RoomsPage';
+import ExternalHospitalsPage from '../pages/ExternalHospitals/ExternalHospitalsPage';
+import MyWardPage          from '../pages/Nursing/MyWardPage';
+import EndorsementsPage    from '../pages/Nursing/EndorsementsPage';
 import NotificationsPage   from '../pages/Notifications/NotificationsPage';
 import ReportsPage         from '../pages/Reports/ReportsPage';
 import UserManagementPage  from '../pages/UserManagement/UserManagementPage';
@@ -64,7 +67,7 @@ const AppRouter = () => {
           <Route
             path="patients"
             element={
-              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+              <RoleRoute roles={['doctor', 'nurse']}>
                 <PatientsPage />
               </RoleRoute>
             }
@@ -72,7 +75,7 @@ const AppRouter = () => {
           <Route
             path="patients/:id"
             element={
-              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+              <RoleRoute roles={['doctor', 'nurse']}>
                 <PatientDetailPage />
               </RoleRoute>
             }
@@ -80,7 +83,7 @@ const AppRouter = () => {
           <Route
             path="triage"
             element={
-              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+              <RoleRoute roles={['doctor', 'nurse']}>
                 <TriagePage />
               </RoleRoute>
             }
@@ -88,7 +91,7 @@ const AppRouter = () => {
           <Route
             path="triage/:id"
             element={
-              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+              <RoleRoute roles={['doctor', 'nurse']}>
                 <TriageDetailPage />
               </RoleRoute>
             }
@@ -104,7 +107,7 @@ const AppRouter = () => {
           <Route
             path="admissions"
             element={
-              <RoleRoute roles={['doctor', 'nurse', 'staff']}>
+              <RoleRoute roles={['doctor', 'nurse']}>
                 <AdmissionsPage />
               </RoleRoute>
             }
@@ -113,8 +116,27 @@ const AppRouter = () => {
           <Route
             path="rooms"
             element={
-              <RoleRoute roles={['admin', 'nurse', 'staff']}>
+              <RoleRoute roles={['admin', 'nurse']}>
                 <RoomsPage />
+              </RoleRoute>
+            }
+          />
+
+          {/* Nursing — a ward roster and shift handoffs only exist for nurses,
+              who are the only role linked to a department. */}
+          <Route
+            path="ward"
+            element={
+              <RoleRoute roles={['nurse']}>
+                <MyWardPage />
+              </RoleRoute>
+            }
+          />
+          <Route
+            path="endorsements"
+            element={
+              <RoleRoute roles={['nurse']}>
+                <EndorsementsPage />
               </RoleRoute>
             }
           />
@@ -127,6 +149,16 @@ const AppRouter = () => {
             element={
               <RoleRoute roles={['admin']}>
                 <ReportsPage />
+              </RoleRoute>
+            }
+          />
+
+          {/* admin only — directory of facilities patients are referred out to */}
+          <Route
+            path="external-hospitals"
+            element={
+              <RoleRoute roles={['admin']}>
+                <ExternalHospitalsPage />
               </RoleRoute>
             }
           />

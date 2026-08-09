@@ -40,7 +40,6 @@
 .audit-role-pill--admin  { background: var(--color-primary-muted); color: var(--color-primary); }
 .audit-role-pill--doctor { background: var(--color-info-muted);    color: var(--color-info);    }
 .audit-role-pill--nurse,
-.audit-role-pill--staff  { background: var(--color-success-muted); color: var(--color-success); }
 .audit-role-pill--unknown { background: var(--color-surface-2); color: var(--color-text-muted); }
 
 /* ── Table cell helpers ──────────────────────────────────────── */

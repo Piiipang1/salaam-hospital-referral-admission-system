@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Siren, Repeat, BedDouble,
-  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut, ChevronDown,
+  DoorOpen, Bell, BarChart3, UserCog, ScrollText, LogOut, ChevronDown, Hospital,
+  ClipboardList, ArrowLeftRight,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { canViewReports, canManageUsers } from '../../utils/roleGuard';
@@ -14,15 +15,21 @@ import './Sidebar.css';
 // Admissions) — those routes are also blocked in AppRouter and on the backend.
 const NAV_ITEMS = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard'       },
-  { to: '/patients',      icon: Users,           label: 'Patients',        roles: ['doctor', 'nurse', 'staff'] },
-  { to: '/triage',        icon: Siren,           label: 'Triage',          roles: ['doctor', 'nurse', 'staff'] },
+  { to: '/patients',      icon: Users,           label: 'Patients',        roles: ['doctor', 'nurse'] },
+  { to: '/triage',        icon: Siren,           label: 'Triage',          roles: ['doctor', 'nurse'] },
   { to: '/referrals',     icon: Repeat,          label: 'Referrals',       roles: ['doctor'] },
   // For doctors, Admissions is their merged "My Patients" page (Current + History tabs)
-  { to: '/admissions',    icon: BedDouble,       label: 'Admissions',      doctorLabel: 'My Patients', roles: ['doctor', 'nurse', 'staff'] },
-  // Room grid is for admin/nurse/staff only — doctors use "My Patients" instead
-  { to: '/rooms',         icon: DoorOpen,        label: 'Rooms',           roles: ['admin', 'nurse', 'staff'] },
+  { to: '/admissions',    icon: BedDouble,       label: 'Admissions',      doctorLabel: 'My Patients', roles: ['doctor', 'nurse'] },
+  // Room grid is for admin/nurse only — doctors use "My Patients" instead
+  { to: '/rooms',         icon: DoorOpen,        label: 'Rooms',           roles: ['admin', 'nurse'] },
+  // Nursing: ward roster and shift handoffs. Nurse-only — they are the only
+  // role attached to a department.
+  { to: '/ward',          icon: ClipboardList,   label: 'My Ward',         roles: ['nurse'] },
+  { to: '/endorsements',  icon: ArrowLeftRight,  label: 'Endorsements',    roles: ['nurse'] },
   { to: '/notifications', icon: Bell,            label: 'Notifications'    },
   { to: '/reports',       icon: BarChart3,       label: 'Reports',         roles: ['admin'] },
+  // Directory of facilities patients are diverted to when this hospital is full
+  { to: '/external-hospitals', icon: Hospital,   label: 'External Hospitals', roles: ['admin'] },
   { to: '/users',         icon: UserCog,         label: 'User Management', roles: ['admin'] },
   { to: '/audit',         icon: ScrollText,      label: 'Audit Trail',     roles: ['admin'] },
 ];
@@ -34,7 +41,6 @@ const ITEM_BY_PATH = Object.fromEntries(NAV_ITEMS.map((i) => [i.to, i]));
 const USER_SUBITEMS = [
   { to: '/users?role=doctor', label: 'Doctors' },
   { to: '/users?role=nurse',  label: 'Nurses'  },
-  { to: '/users?role=staff',  label: 'Staff'   },
 ];
 
 // Admins get a grouped oversight nav. Dashboard stays ungrouped on top;
@@ -43,7 +49,7 @@ const USER_SUBITEMS = [
 const ADMIN_SECTIONS = [
   { header: null,             paths: ['/dashboard'] },
   { header: 'Oversight',      paths: ['/rooms', '/reports', '/audit'] },
-  { header: 'Administration', paths: ['/users', '/notifications'] },
+  { header: 'Administration', paths: ['/external-hospitals', '/users', '/notifications'] },
 ];
 
 const Sidebar = ({ collapsed, onClose, mobileOpen }) => {

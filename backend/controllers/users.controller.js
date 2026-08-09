@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
+const { isEmail, toE164 } = require('../utils/notifier');
 
 // Hard cap on concurrently enabled Doctor-in-Charge accounts
 const MAX_DOCTORS_IN_CHARGE = 3;
@@ -14,7 +15,7 @@ const createUser = async (req, res) => {
     first_name, last_name, specialization, contact_details,
     is_er_assigned,
   } = req.body;
-  const validRoles = ['admin', 'doctor', 'nurse', 'staff'];
+  const validRoles = ['admin', 'doctor', 'nurse'];
 
   if (!username || !password || !role) {
     return res.status(400).json({ success: false, message: 'Username, password, and role are required.' });
@@ -25,10 +26,10 @@ const createUser = async (req, res) => {
   if (!validRoles.includes(role)) {
     return res.status(400).json({ success: false, message: `Role must be one of: ${validRoles.join(', ')}.` });
   }
-  if (['doctor', 'nurse', 'staff'].includes(role) && (!first_name || !last_name)) {
+  if (['doctor', 'nurse'].includes(role) && (!first_name || !last_name)) {
     return res.status(400).json({
       success: false,
-      message: 'first_name and last_name are required for doctor, nurse, and staff roles.',
+      message: 'first_name and last_name are required for doctor and nurse roles.',
     });
   }
 
@@ -56,7 +57,7 @@ const createUser = async (req, res) => {
           [first_name, last_name, specialization || null, is_er_assigned ? 1 : 0, contact_details || null]
         );
         linkedId = docResult.insertId;
-      } else if (role === 'nurse' || role === 'staff') {
+      } else if (role === 'nurse') {
         const [empResult] = await connection.query(
           `INSERT INTO employees (first_name, last_name, role, contact_details, employment_status)
            VALUES (?, ?, ?, ?, 'Active')`,
@@ -99,10 +100,16 @@ const getAllUsers = async (req, res) => {
       `SELECT u.user_id, u.username, u.role, u.linked_id, u.is_doctor_in_charge, u.is_active, u.created_at,
               d.is_er_assigned,
               COALESCE(CONCAT(d.first_name, ' ', d.last_name),
-                       CONCAT(e.first_name, ' ', e.last_name)) AS linked_name
+                       CONCAT(e.first_name, ' ', e.last_name)) AS linked_name,
+              -- Alert contact details, so an admin can see at a glance who is
+              -- actually reachable when a High/Emergency alert fires.
+              u.email, u.phone, u.alerts_opt_out,
+              -- Ward, for the nurse table's Department column and its editor
+              e.department_id, dept.name AS department_name
        FROM users u
        LEFT JOIN doctors   d ON u.role = 'doctor' AND d.doctor_id = u.linked_id
-       LEFT JOIN employees e ON u.role IN ('nurse','staff') AND e.employee_id = u.linked_id
+       LEFT JOIN employees e ON u.role = 'nurse' AND e.employee_id = u.linked_id
+       LEFT JOIN departments dept ON dept.department_id = e.department_id
        ORDER BY u.created_at DESC`
     );
     return res.status(200).json({ success: true, data: rows });
@@ -139,8 +146,8 @@ const updateUser = async (req, res) => {
   // creation time (createUser), alongside the person record it points to.
   // Accepting it here would let a caller re-point an account at any doctors/
   // employees row and hijack the per-role scoping subqueries.
-  const { role, is_active, is_er_assigned, password } = req.body;
-  const validRoles = ['admin', 'doctor', 'nurse', 'staff'];
+  const { role, is_active, is_er_assigned, password, email, phone, alerts_opt_out } = req.body;
+  const validRoles = ['admin', 'doctor', 'nurse'];
   try {
     const [[target]] = await db.query(
       'SELECT role, linked_id FROM users WHERE user_id = ?',
@@ -175,13 +182,54 @@ const updateUser = async (req, res) => {
       password_hash = await bcrypt.hash(password, salt);
     }
 
-    await db.query(
-      `UPDATE users SET
-         is_active     = COALESCE(?, is_active),
-         password_hash = COALESCE(?, password_hash)
-       WHERE user_id = ?`,
-      [is_active, password_hash, req.params.id]
-    );
+    // Alert contact details. Validated here because a malformed address means a
+    // High/Emergency alert silently fails to reach a real person — the failure
+    // mode this whole channel exists to prevent. Empty string clears the field.
+    let normalizedEmail;
+    if (email !== undefined) {
+      const trimmed = String(email ?? '').trim();
+      if (trimmed && !isEmail(trimmed)) {
+        return res.status(400).json({ success: false, message: 'Enter a valid email address, or leave it blank.' });
+      }
+      normalizedEmail = trimmed || null;
+    }
+
+    let normalizedPhone;
+    if (phone !== undefined) {
+      const trimmed = String(phone ?? '').trim();
+      if (trimmed && !toE164(trimmed)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Enter a valid mobile number (e.g. 09171234567 or +639171234567), or leave it blank.',
+        });
+      }
+      normalizedPhone = trimmed || null;
+    }
+
+    try {
+      await db.query(
+        `UPDATE users SET
+           is_active      = COALESCE(?, is_active),
+           password_hash  = COALESCE(?, password_hash),
+           email          = ${email !== undefined ? '?' : 'email'},
+           phone          = ${phone !== undefined ? '?' : 'phone'},
+           alerts_opt_out = COALESCE(?, alerts_opt_out)
+         WHERE user_id = ?`,
+        [
+          is_active, password_hash,
+          ...(email !== undefined ? [normalizedEmail] : []),
+          ...(phone !== undefined ? [normalizedPhone] : []),
+          alerts_opt_out === undefined ? null : (alerts_opt_out ? 1 : 0),
+          req.params.id,
+        ]
+      );
+    } catch (dupErr) {
+      // uq_users_email — two accounts cannot share an alert destination.
+      if (dupErr.code === 'ER_DUP_ENTRY') {
+        return res.status(409).json({ success: false, message: 'That email address is already used by another account.' });
+      }
+      throw dupErr;
+    }
 
     // ER assignment lives on the doctors row — update it when provided and
     // the target account is a doctor with a person record.

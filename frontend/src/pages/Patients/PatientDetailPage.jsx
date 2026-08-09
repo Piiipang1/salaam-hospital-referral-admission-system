@@ -6,12 +6,14 @@ import { createTriage, assignTriageDoctor } from '../../api/triages.api';
 import { cancelAssignment } from '../../api/assignments.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessment } from '../../api/diagnoses.api';
-import { createReferral } from '../../api/referrals.api';
+import { createReferral, createExternalReferral } from '../../api/referrals.api';
 import { createAdmission } from '../../api/admissions.api';
 import { fetchFileBlob } from '../../api/files.api';
 import { useAuth } from '../../context/AuthContext';
-import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral, canUserAdmit, canUploadLabResult } from '../../utils/roleGuard';
+import { useCapacity } from '../../context/CapacityContext';
+import { canManagePatients, canDiagnose, canManageTriage, canCreateReferral, canUserAdmit, canUploadLabResult, canCreateExternalReferral } from '../../utils/roleGuard';
 import { formatDate } from '../../utils/formatDate';
+import { NO_ROOMS_MESSAGE } from '../../utils/constants';
 import { formatPatientAge, formatPatientDob, formatPatientSex } from '../../utils/patientLabels';
 import Badge from '../../components/ui/Badge';
 import UnidentifiedBadge from '../../components/ui/UnidentifiedBadge';
@@ -20,10 +22,12 @@ import Card from '../../components/ui/Card';
 import Modal from '../../components/ui/Modal';
 import Spinner from '../../components/ui/Spinner';
 import Alert from '../../components/ui/Alert';
+import CapacityBanner from '../../components/ui/CapacityBanner';
 import PatientForm from '../../components/forms/PatientForm';
 import TriageForm from '../../components/forms/TriageForm';
 import DiagnosisForm from '../../components/forms/DiagnosisForm';
 import ReferralForm from '../../components/forms/ReferralForm';
+import ExternalReferralForm from '../../components/forms/ExternalReferralForm';
 import AdmissionForm from '../../components/forms/AdmissionForm';
 import VitalSignsForm from '../../components/forms/VitalSignsForm';
 import TreatmentForm from '../../components/forms/TreatmentForm';
@@ -31,7 +35,7 @@ import DoctorAssessmentForm from '../../components/forms/DoctorAssessmentForm';
 import { addVitalSigns } from '../../api/triages.api';
 import './PatientDetailPage.css';
 
-const TABS = ['Triage', 'Diagnoses', 'Treatment Plan', 'Referrals', 'Admissions', 'Documents'];
+const TABS = ['Triage', 'Diagnoses', 'Treatment Plan', 'Referrals', 'Admissions', 'OPD Follow-ups', 'Documents'];
 
 
 // Pick a readable icon based on file extension
@@ -46,6 +50,10 @@ const fileIcon = (filename = '') => {
 const PatientDetailPage = () => {
   const { id } = useParams();
   const { user } = useAuth();
+  // No free bed → triage and admission are closed for this patient too. Editing
+  // the record, diagnoses, referrals and vitals stay available: this patient is
+  // already inside the system.
+  const { atCapacity } = useCapacity();
   const navigate = useNavigate();
 
   const [patient,  setPatient]  = useState(null);
@@ -56,7 +64,7 @@ const PatientDetailPage = () => {
   const [success,  setSuccess]  = useState('');
   const [modal,    setModal]    = useState(null); // 'edit'|'triage'|'diagnosis'|'referral'|'admission'|'vitals'
   const [saving,   setSaving]   = useState(false);
-  // Triage reads are hospital-wide for nurses/staff but patient registration
+  // Triage reads are hospital-wide for nurses but patient registration
   // records stay scoped to the registering nurse — a 403 here is expected, not a bug.
   const [accessDenied, setAccessDenied] = useState(false);
   const [vitalTriageId, setVitalTriageId] = useState(null);
@@ -209,7 +217,7 @@ const PatientDetailPage = () => {
         <button className="back-link" onClick={() => navigate(-1)}>← Back</button>
         <Alert
           type="warning"
-          message="You don't have access to this patient's registration record — it was registered by another staff member."
+          message="You don't have access to this patient's registration record — it was registered by another user."
         />
       </div>
     );
@@ -230,6 +238,13 @@ const PatientDetailPage = () => {
   const diagnoses = history.diagnoses ?? [];
   const referrals = history.referrals ?? [];
   const admissions= history.admissions?? [];
+  // Outpatient half of the record — booked automatically when an admission is
+  // discharged, and keyed by admission_id so each stay can show the follow-up
+  // it generated.
+  const opdFollowups = history.opd_followups ?? [];
+  const followupByAdmission = Object.fromEntries(
+    opdFollowups.filter((f) => f.admission_id).map((f) => [f.admission_id, f])
+  );
 
   // assignTriageDoctor is keyed by triage_id, so assignment needs a triage —
   // which matches the precondition (a patient is triaged before being routed to
@@ -285,6 +300,7 @@ const PatientDetailPage = () => {
     <div className="patient-detail">
       <button className="back-link" onClick={() => navigate('/patients')}>← Back to Patients</button>
 
+      <CapacityBanner />
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
@@ -383,6 +399,16 @@ const PatientDetailPage = () => {
               ))}
             </span>
           </div>
+          {/* Same derived status as the patient list, so the two never disagree */}
+          <div>
+            <span className="info-label">Care Status</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+              <Badge status={patient.care_status ?? 'Waiting'} />
+              {patient.care_status_detail && (
+                <span className="text-xs text-muted">{patient.care_status_detail}</span>
+              )}
+            </span>
+          </div>
           <div><span className="info-label">Admitting Doctor</span><span>{patient.admitting_doctor ? `Dr. ${patient.admitting_doctor}` : '—'}</span></div>
           <div><span className="info-label">Room</span><span>{patient.room_type ? `${patient.room_type} — ${patient.bed_number}` : patient.admission_status === 'Pending Room' ? 'Awaiting room' : '—'}</span></div>
           <div><span className="info-label">Contact</span><span>{patient.contact_number || '—'}</span></div>
@@ -395,10 +421,19 @@ const PatientDetailPage = () => {
 
       {/* Action buttons */}
       <div className="patient-actions">
-        {canManageTriage(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('triage')}>+ Triage</Button>}
+        {canManageTriage(user?.role) && <Button size="sm" variant="primary" disabled={atCapacity} title={atCapacity ? NO_ROOMS_MESSAGE : undefined} onClick={() => setModal('triage')}>+ Triage</Button>}
         {canDiagnose(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('diagnosis')}>+ Diagnosis</Button>}
         {canCreateReferral(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('referral')}>+ Referral</Button>}
-        {canUserAdmit(user) && <Button size="sm" variant="secondary" onClick={() => setModal('admission')}>+ Admission</Button>}
+        {canUserAdmit(user) && <Button size="sm" variant="secondary" disabled={atCapacity} title={atCapacity ? NO_ROOMS_MESSAGE : undefined} onClick={() => setModal('admission')}>+ Admission</Button>}
+        {/* Appears only at zero availability — the alternative when this
+            facility cannot take the patient. */}
+        {atCapacity && canCreateExternalReferral(user?.role) && (
+          <Button size="sm" variant="danger"
+            title="No beds are free — refer this patient to another hospital"
+            onClick={() => setModal('external-referral')}>
+            Refer to External Hospital
+          </Button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -550,18 +585,58 @@ const PatientDetailPage = () => {
             return (
             <Card key={r.referral_id} className="detail-item">
               <div className="detail-item__header">
-                <span>Referral — {formatDate(r.referral_date)}</span>
-                <Badge status={r.status} />
+                <span>
+                  {r.is_external ? 'External Referral' : 'Referral'} — {formatDate(r.referral_date)}
+                </span>
+                <span style={{ display: 'inline-flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                  {/* External transfers must never be mistaken for an internal
+                      consult — the destination is another facility entirely. */}
+                  {r.is_external ? (
+                    <span style={{
+                      fontSize: 'var(--font-size-xs)',
+                      fontWeight: 600,
+                      padding: '2px var(--space-2)',
+                      borderRadius: 'var(--radius-full)',
+                      background: 'var(--color-warning-muted)',
+                      color: 'var(--color-warning)',
+                      whiteSpace: 'nowrap',
+                    }}>
+                      ↗ External
+                    </span>
+                  ) : null}
+                  <Badge status={r.status} />
+                </span>
               </div>
               <p className="text-sm text-muted">Date: {formatDate(r.referral_date, true)}</p>
               <p className="text-sm text-muted">
                 Referred by: {r.referring_doctor_name ? `Dr. ${r.referring_doctor_name} (${r.referring_specialization || 'General'})` : '—'}
               </p>
+              {r.is_external ? (
+                <>
+                  <p className="text-sm text-muted">
+                    Referred to: <strong>{r.external_hospital_name}</strong>
+                    {r.external_hospital_contact ? ` · ${r.external_hospital_contact}` : ''}
+                  </p>
+                  {r.external_hospital_address && (
+                    <p className="text-sm text-muted">Address: {r.external_hospital_address}</p>
+                  )}
+                  {r.external_reason && (
+                    <p className="text-sm text-muted">Reason: {r.external_reason}</p>
+                  )}
+                </>
+              ) : null}
               {r.assigned_doctor_name && (
                 <p className="text-sm text-muted">Refer to: {r.assigned_doctor_name} ({r.specialization || 'General'})</p>
               )}
               {r.medical_condition && (
                 <p className="text-sm text-muted">Condition: {r.medical_condition}</p>
+              )}
+              {/* Why the patient was referred — mandatory on internal referrals,
+                  so this is the receiving doctor's brief. */}
+              {r.remarks && (
+                <p className="text-sm" style={{ whiteSpace: 'pre-wrap', marginTop: 'var(--space-1)' }}>
+                  <strong>Remarks:</strong> {r.remarks}
+                </p>
               )}
               {/* Attached referral document */}
               {r.file_attachment && (
@@ -609,6 +684,48 @@ const PatientDetailPage = () => {
               </div>
               <p className="text-sm text-muted">Admitted: {formatDate(a.admission_date, true)}</p>
               {a.discharge_date && <p className="text-sm text-muted">Discharged: {formatDate(a.discharge_date, true)}</p>}
+              {/* The OPD visit this discharge routed the patient to — the link
+                  between the inpatient stay and the outpatient record. */}
+              {followupByAdmission[a.admission_id] && (
+                <p className="text-sm" style={{ marginTop: 'var(--space-1)' }}>
+                  <strong>OPD follow-up:</strong>{' '}
+                  {followupByAdmission[a.admission_id].clinic_name ?? 'Clinic not set'} on{' '}
+                  {formatDate(followupByAdmission[a.admission_id].followup_date)}{' '}
+                  <Badge status={followupByAdmission[a.admission_id].status} />
+                </p>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* ── OPD Follow-ups tab ── */}
+      {tab === 'OPD Follow-ups' && (
+        <div className="detail-list">
+          {opdFollowups.length === 0 ? (
+            <p className="text-muted">
+              No outpatient follow-ups. One is booked automatically whenever an admission is discharged.
+            </p>
+          ) : opdFollowups.map((f) => (
+            <Card key={f.followup_id} className="detail-item">
+              <div className="detail-item__header">
+                <span>{f.clinic_name ?? 'Clinic not set'}</span>
+                <Badge status={f.status} />
+              </div>
+              <p className="text-sm text-muted">
+                {f.visit_type} · Scheduled {formatDate(f.followup_date)}
+                {f.doctor_name ? ` · Referred by ${f.doctor_name}` : ''}
+              </p>
+              {f.medical_condition && (
+                <p className="text-sm">Continuing: {f.medical_condition}</p>
+              )}
+              {f.notes && <p className="text-sm">{f.notes}</p>}
+              <p className="text-xs text-muted">
+                {f.classified_by === 'Auto'
+                  ? `Routed automatically${f.routing_basis ? ` — ${f.routing_basis}` : ''}`
+                  : 'Clinic assigned manually'}
+                {f.discharge_date ? ` · from the stay discharged ${formatDate(f.discharge_date)}` : ''}
+              </p>
             </Card>
           ))}
         </div>
@@ -740,13 +857,22 @@ const PatientDetailPage = () => {
       <Modal isOpen={modal === 'complete-registration'} onClose={() => setModal(null)} title="Complete Patient Registration" size="lg">
         <PatientForm initial={cleanedForRegistration} onSubmit={act((d) => updatePatient(id, { ...d, is_unidentified: 0 }))} loading={saving} />
       </Modal>
-      <Modal isOpen={modal === 'triage'}    onClose={() => setModal(null)} title="Record Triage"    size="md"><TriageForm    patientId={id}    onSubmit={act(createTriage)}    loading={saving} /></Modal>
+      <Modal isOpen={modal === 'triage'}    onClose={() => setModal(null)} title="Record Triage"    size="md"><TriageForm    patientId={id}    onSubmit={act(createTriage)}    loading={saving} disabled={atCapacity} /></Modal>
       <Modal isOpen={modal === 'diagnosis'} onClose={() => setModal(null)} title="Record Diagnosis" size="md"><DiagnosisForm patientId={id}    onSubmit={act(createDiagnosis, { skipRefresh: true })} onComplete={load} loading={saving} /></Modal>
       {/* Referral modal — ReferralForm builds FormData; act() passes it straight through */}
       <Modal isOpen={modal === 'referral'} onClose={() => setModal(null)} title="Create Referral" size="md">
         <ReferralForm diagnoses={diagnoses} onSubmit={(fd) => act(createReferral)(fd)} loading={saving} />
       </Modal>
-      <Modal isOpen={modal === 'admission'} onClose={() => setModal(null)} title="Admit Patient"    size="md"><AdmissionForm patientId={id} patientName={`${patient.first_name} ${patient.last_name}`} onSubmit={act(createAdmission)} loading={saving} /></Modal>
+      {/* Refer OUT to a hospital outside this system — patient is fixed here */}
+      <Modal isOpen={modal === 'external-referral'} onClose={() => setModal(null)} title="Refer to External Hospital" size="md">
+        <ExternalReferralForm
+          patientId={id}
+          patientName={`${patient.first_name} ${patient.last_name}`}
+          onSubmit={(fd) => act(createExternalReferral)(fd)}
+          loading={saving}
+        />
+      </Modal>
+      <Modal isOpen={modal === 'admission'} onClose={() => setModal(null)} title="Admit Patient"    size="md"><AdmissionForm patientId={id} patientName={`${patient.first_name} ${patient.last_name}`} onSubmit={act(createAdmission)} loading={saving} disabled={atCapacity} /></Modal>
       <Modal isOpen={modal === 'treatment'} onClose={() => setModal(null)} title="Add Treatment" size="md">
         <TreatmentForm diagnoses={diagnoses} onSubmit={act(handleAddTreatment)} loading={saving} />
       </Modal>

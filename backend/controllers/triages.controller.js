@@ -1,6 +1,8 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
 const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition, isPatientUnassigned } = require('../utils/scoping');
+const { rejectIfAtCapacity } = require('../utils/capacity');
+const { createAlert } = require('../utils/alerts');
 
 // POST /api/triages
 // Assigning an attending doctor is a Doctor-in-Charge responsibility
@@ -9,9 +11,9 @@ const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge,
 const createTriage = async (req, res) => {
   const { patient_id, visit_room_id, triage_level, notes } = req.body;
 
-  // A nurse/staff is always recorded as their own employee_id (cannot spoof another
+  // A nurse is always recorded as their own employee_id (cannot spoof another
   // employee); an admin may record a triage on behalf of an employee via the body.
-  const employee_id = (req.user.role === 'nurse' || req.user.role === 'staff')
+  const employee_id = (req.user.role === 'nurse')
     ? req.user.linked_id
     : req.body.employee_id;
 
@@ -25,6 +27,11 @@ const createTriage = async (req, res) => {
   }
 
   try {
+    // Intake is closed while the hospital has no free bed — see utils/capacity.
+    // Editing an existing triage (updateTriage) and recording vitals are never
+    // blocked: they continue the care of patients already inside.
+    if (await rejectIfAtCapacity(res)) return;
+
     const [result] = await db.query(
       `INSERT INTO triages (patient_id, employee_id, visit_room_id, triage_level, notes, triage_datetime)
        VALUES (?, ?, ?, ?, ?, NOW())`,
@@ -39,30 +46,28 @@ const createTriage = async (req, res) => {
     // ── Respond immediately ───────────────────────────────────────────────────
     res.status(201).json({ success: true, message: 'Triage created.', triage_id: result.insertId });
 
-    // ── Post-insert notifications (best-effort, non-blocking) ─────────────────
+    // ── Post-insert alerts (best-effort, non-blocking) ────────────────────────
+    // A Critical triage is a High-priority alert: it also goes out by email, so
+    // it reaches whoever is not at a screen. Urgent and Non-Urgent stay in-app —
+    // an alert that fires for routine traffic stops being read.
+    const alertPriority = triage_level === 'Critical' ? 'High' : 'Normal';
+
     try {
-      // Resolve patient name
       const [[patient]] = await db.query(
-        'SELECT CONCAT(first_name, \' \', last_name) AS patient_name FROM patients WHERE patient_id = ?',
+        "SELECT CONCAT(first_name, ' ', last_name) AS patient_name FROM patients WHERE patient_id = ?",
         [patient_id]
       );
       const patientName = patient?.patient_name ?? `Patient #${patient_id}`;
 
-      const baseMsg = `New ${triage_level} triage recorded for ${patientName}. Triage ID: ${result.insertId}.`;
+      // 1. Admins — oversight.
+      await createAlert({
+        message: `New ${triage_level} triage recorded for ${patientName}. Triage ID: ${result.insertId}.`,
+        priority: alertPriority,
+        subject: `[${triage_level}] Triage recorded for ${patientName}`,
+        target: { roles: ['admin'], excludeUserId: req.user.user_id },
+      });
 
-      const notifRows = [];
-
-      // 1. Notify all active admins (except the actor if they are admin)
-      const [admins] = await db.query(
-        "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
-      );
-      for (const admin of admins) {
-        if (admin.user_id !== req.user.user_id) {
-          notifRows.push([admin.user_id, baseMsg, null]);
-        }
-      }
-
-      // 2. For Critical or Urgent — also notify any doctor with an active admission for this patient
+      // 2. Critical/Urgent — the doctor already caring for this patient.
       if (triage_level === 'Critical' || triage_level === 'Urgent') {
         const [activeDoctors] = await db.query(
           `SELECT DISTINCT u.user_id
@@ -71,43 +76,28 @@ const createTriage = async (req, res) => {
            WHERE a.patient_id = ? AND a.status = 'Active'`,
           [patient_id]
         );
-        for (const doc of activeDoctors) {
-          // Avoid duplicate if doctor is the actor (unlikely but safe)
-          if (doc.user_id !== req.user.user_id) {
-            notifRows.push([
-              doc.user_id,
-              `Your patient ${patientName} has a new ${triage_level} triage. Triage ID: ${result.insertId}.`,
-              null,
-            ]);
-          }
+        const doctorIds = activeDoctors.map((d) => d.user_id).filter((id) => id !== req.user.user_id);
+        if (doctorIds.length > 0) {
+          await createAlert({
+            message: `Your patient ${patientName} has a new ${triage_level} triage. Triage ID: ${result.insertId}.`,
+            priority: alertPriority,
+            subject: `[${triage_level}] Your patient ${patientName} was re-triaged`,
+            target: { userIds: doctorIds },
+          });
         }
       }
 
-      // 3. If the patient has no doctor coordinating their care, alert every
-      //    active Doctor-in-Charge so one of them assigns an attending doctor.
+      // 3. Nobody is coordinating this patient's care — the DICs assign one.
       if (await isPatientUnassigned(patient_id)) {
-        const [dicUsers] = await db.query(
-          "SELECT user_id FROM users WHERE role = 'doctor' AND is_doctor_in_charge = 1 AND is_active = 1"
-        );
-        for (const dic of dicUsers) {
-          if (dic.user_id !== req.user.user_id) {
-            notifRows.push([
-              dic.user_id,
-              `New ${triage_level} triage recorded for ${patientName} — needs an attending doctor. Triage ID: ${result.insertId}.`,
-              null,
-            ]);
-          }
-        }
-      }
-
-      if (notifRows.length > 0) {
-        await db.query(
-          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
-          [notifRows]
-        );
+        await createAlert({
+          message: `New ${triage_level} triage recorded for ${patientName} — needs an attending doctor. Triage ID: ${result.insertId}.`,
+          priority: alertPriority,
+          subject: `[${triage_level}] ${patientName} needs an attending doctor`,
+          target: { roles: ['doctor'], doctorInChargeOnly: true, excludeUserId: req.user.user_id },
+        });
       }
     } catch (notifErr) {
-      console.warn('createTriage: notification insert failed (non-fatal):', notifErr.message);
+      console.warn('createTriage: alert dispatch failed (non-fatal):', notifErr.message);
     }
 
   } catch (err) {
@@ -161,7 +151,7 @@ const getAllTriages = async (req, res) => {
       conditions.push(cond.sql);
     }
 
-    // Nurses and staff see ALL triages (operational policy — any nurse can act
+    // Nurses see ALL triages (operational policy — any nurse can act
     // on any patient's room assignment/discharge, and the dashboard already
     // shows hospital-wide triage counts). Writes stay strict: updateTriage and
     // addVitalSigns still require being the recording employee.
@@ -259,7 +249,7 @@ const getTriageById = async (req, res) => {
       }
     }
 
-    // Nurses and staff may view any triage (operational policy — matches
+    // Nurses may view any triage (operational policy — matches
     // getAllTriages and the hospital-wide dashboard). Writes stay strict.
 
     return res.status(200).json({ success: true, data: rows[0] });
@@ -287,9 +277,9 @@ const updateTriage = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Triage not found.' });
     }
 
-    // Reads are open to all nurses/staff, but edits stay strict: only the
+    // Reads are open to all nurses, but edits stay strict: only the
     // employee who recorded the triage may change it.
-    if ((req.user.role === 'nurse' || req.user.role === 'staff')
+    if ((req.user.role === 'nurse')
         && triage.employee_id !== req.user.linked_id) {
       return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
     }
@@ -332,9 +322,9 @@ const addVitalSigns = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Triage not found.' });
     }
 
-    // Reads are open to all nurses/staff, but vitals writes stay strict: only
+    // Reads are open to all nurses, but vitals writes stay strict: only
     // the employee who recorded the triage may add/update them.
-    if ((req.user.role === 'nurse' || req.user.role === 'staff')
+    if ((req.user.role === 'nurse')
         && triage.employee_id !== req.user.linked_id) {
       return res.status(403).json({ success: false, message: 'You do not have access to this triage record.' });
     }
@@ -394,9 +384,19 @@ const createEmergencyTriage = async (req, res) => {
     return res.status(400).json({ success: false, message: `triage_level must be one of: ${validLevels.join(', ')}.` });
   }
 
-  const employee_id = (req.user.role === 'nurse' || req.user.role === 'staff')
+  const employee_id = (req.user.role === 'nurse')
     ? req.user.linked_id
     : null;
+
+  // Emergency triage registers a placeholder patient AND a triage in one step,
+  // so the same capacity rule applies — otherwise it would be an open bypass of
+  // the registration/triage guards.
+  try {
+    if (await rejectIfAtCapacity(res)) return;
+  } catch (capErr) {
+    console.error('createEmergencyTriage capacity check error:', capErr);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
 
   const connection = await db.getConnection();
   await connection.beginTransaction();
@@ -445,57 +445,40 @@ const createEmergencyTriage = async (req, res) => {
     message: 'Emergency triage recorded. Patient marked unidentified.',
   });
 
-  // ── Post-commit notifications (best-effort, non-blocking) ─────────────────
-  try {
-    const notifMsg = `EMERGENCY: An unidentified patient has been triaged as ${triage_level}. Immediate attention required. Patient ID: ${newPatientId}.`;
-    const notifRows = [];
+  // ── Post-commit alerts (best-effort, non-blocking) ────────────────────────
+  // Emergency priority: this is the case the multi-channel path exists for —
+  // an unidentified patient nobody owns yet. It goes in-app AND out to email
+  // and SMS, because the people who need to move may not be at a screen.
+  const notifMsg = `EMERGENCY: An unidentified patient has been triaged as ${triage_level}. Immediate attention required. Patient ID: ${newPatientId}.`;
 
-    // Doctor-in-Charge users get a coordination message instead of the plain
-    // broadcast — the new patient always starts unassigned.
-    const [dicUsers] = await db.query(
-      "SELECT user_id FROM users WHERE role = 'doctor' AND is_doctor_in_charge = 1 AND is_active = 1"
-    );
-    const dicUserIds = new Set(dicUsers.map((u) => u.user_id));
+  // Doctors-in-Charge get the coordination wording instead — the new patient
+  // always starts unassigned, and they are who assigns one.
+  await createAlert({
+    message: `New ${triage_level} triage recorded for an unidentified patient — needs an attending doctor. Triage ID: ${triageId}.`,
+    priority: 'Emergency',
+    subject: `[EMERGENCY] Unidentified ${triage_level} patient needs an attending doctor`,
+    target: { roles: ['doctor'], doctorInChargeOnly: true, excludeUserId: req.user.user_id },
+  });
 
-    const [admins] = await db.query(
-      "SELECT user_id FROM users WHERE role = 'admin' AND is_active = 1"
-    );
-    for (const a of admins) {
-      if (a.user_id !== req.user.user_id) notifRows.push([a.user_id, notifMsg, null]);
-    }
+  // Everyone else on duty: admins for oversight, non-DIC doctors and nurses to
+  // respond. resolveRecipients excludes inactive accounts.
+  const [dicRows] = await db.query(
+    "SELECT user_id FROM users WHERE role = 'doctor' AND is_doctor_in_charge = 1 AND is_active = 1"
+  );
+  const dicIds = new Set(dicRows.map((u) => u.user_id));
+  const [others] = await db.query(
+    "SELECT user_id FROM users WHERE is_active = 1 AND role IN ('admin','doctor','nurse')"
+  );
+  const otherIds = others
+    .map((u) => u.user_id)
+    .filter((id) => id !== req.user.user_id && !dicIds.has(id));
 
-    const [doctors] = await db.query(
-      "SELECT user_id FROM users WHERE role = 'doctor' AND is_active = 1"
-    );
-    for (const d of doctors) {
-      if (d.user_id === req.user.user_id) continue;
-      if (dicUserIds.has(d.user_id)) {
-        notifRows.push([
-          d.user_id,
-          `New ${triage_level} triage recorded for an unidentified patient — needs an attending doctor. Triage ID: ${triageId}.`,
-          null,
-        ]);
-      } else {
-        notifRows.push([d.user_id, notifMsg, null]);
-      }
-    }
-
-    const [staff] = await db.query(
-      "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
-    );
-    for (const s of staff) {
-      if (s.user_id !== req.user.user_id) notifRows.push([s.user_id, notifMsg, null]);
-    }
-
-    if (notifRows.length > 0) {
-      await db.query(
-        'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
-        [notifRows]
-      );
-    }
-  } catch (notifErr) {
-    console.warn('createEmergencyTriage: notification insert failed (non-fatal):', notifErr.message);
-  }
+  await createAlert({
+    message: notifMsg,
+    priority: 'Emergency',
+    subject: `[EMERGENCY] Unidentified patient triaged ${triage_level}`,
+    target: { userIds: otherIds },
+  });
 };
 
 // GET /api/triages/visit-rooms/options — dropdown options for the triage form

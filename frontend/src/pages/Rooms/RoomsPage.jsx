@@ -116,7 +116,7 @@ const RoomsPage = () => {
       : rooms.filter(r => r.room_type === selectedWard);
 
   // Doctors never reach this page — the /rooms route is wrapped in a
-  // RoleRoute (admin/nurse/staff) that bounces them to /dashboard.
+  // RoleRoute (admin/nurse) that bounces them to /dashboard.
 
   if (loading) return <Spinner />;
 

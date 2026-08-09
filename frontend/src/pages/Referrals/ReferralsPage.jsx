@@ -31,6 +31,34 @@ const STATUS_MEANINGS = {
   Cancelled: 'The referral has been withdrawn.',
 };
 
+// External referrals have no doctor in this system to accept them, so the same
+// status words mean something different — mirrors allowedNextExternal in
+// referrals.controller (Pending → Completed | Cancelled, never Accepted).
+const EXTERNAL_STATUS_MEANINGS = {
+  Pending:   'Transfer arranged, patient not yet handed over.',
+  Accepted:  'Not used for external referrals.',
+  Completed: 'The patient was successfully transferred.',
+  Cancelled: 'The transfer did not go ahead.',
+};
+
+// Small inline marker distinguishing a transfer-out from an internal consult.
+const ExternalTag = () => (
+  <span
+    title="Referred to a hospital outside this system"
+    style={{
+      fontSize: 'var(--font-size-xs)',
+      fontWeight: 600,
+      padding: '2px var(--space-2)',
+      borderRadius: 'var(--radius-full)',
+      background: 'var(--color-warning-muted)',
+      color: 'var(--color-warning)',
+      whiteSpace: 'nowrap',
+    }}
+  >
+    ↗ External
+  </span>
+);
+
 const ReferralsPage = () => {
   const { user } = useAuth();
 
@@ -159,6 +187,15 @@ const ReferralsPage = () => {
   const columns = [
     { key: 'patient_name',   label: 'Patient'   },
     { key: 'medical_condition', label: 'Condition', hideMobile: true, render: (r) => <span className="truncate" style={{ maxWidth:'200px', display:'block' }}>{r.medical_condition ?? '—'}</span> },
+    // Why the referral was raised. Truncated with the full text on hover — this
+    // is the receiving doctor's brief, so it belongs in the list, not two
+    // clicks away. External referrals carry external_reason instead.
+    { key: 'remarks', label: 'Remarks', hideMobile: true, render: (r) => {
+        const text = r.is_external ? r.external_reason : r.remarks;
+        return text
+          ? <span className="truncate" style={{ maxWidth:'220px', display:'block' }} title={text}>{text}</span>
+          : <span className="text-muted">—</span>;
+      } },
     { key: 'referring_doctor_name', label: 'Referred By', hideMobile: true, render: (r) => {
         // "You" makes incoming vs outgoing referrals obvious at a glance
         if (user?.role === 'doctor' && r.referring_doctor_id === user?.linked_id) {
@@ -166,14 +203,30 @@ const ReferralsPage = () => {
         }
         return r.referring_doctor_name ? `Dr. ${r.referring_doctor_name}` : '—';
       } },
-    { key: 'assigned_doctor_name', label: 'Refer To', render: (r) => r.assigned_doctor_name
-        ? <span style={{ display:'flex', flexDirection:'column' }}>
-            <span>{r.assigned_doctor_name}</span>
-            <span className="text-xs text-muted">{r.specialization || 'General'}</span>
-          </span>
-        : '—' },
+    { key: 'assigned_doctor_name', label: 'Refer To', render: (r) => {
+        // External referrals carry a hospital name instead of a doctor.
+        if (r.is_external) {
+          return (
+            <span style={{ display:'flex', flexDirection:'column' }}>
+              <span>{r.external_hospital_name || 'External hospital'}</span>
+              <span className="text-xs text-muted">{r.external_hospital_contact || 'Outside this system'}</span>
+            </span>
+          );
+        }
+        return r.assigned_doctor_name
+          ? <span style={{ display:'flex', flexDirection:'column' }}>
+              <span>{r.assigned_doctor_name}</span>
+              <span className="text-xs text-muted">{r.specialization || 'General'}</span>
+            </span>
+          : '—';
+      } },
     { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date) },
-    { key: 'status',         label: 'Status',   render: (r) => <Badge status={r.status} /> },
+    { key: 'status',         label: 'Status',   render: (r) => (
+        <span style={{ display:'inline-flex', gap:'var(--space-2)', alignItems:'center', flexWrap:'wrap' }}>
+          <Badge status={r.status} />
+          {r.is_external ? <ExternalTag /> : null}
+        </span>
+      ) },
     {
       key: 'actions', label: '', width: '280px', align: 'right',
       render: (r) => {
@@ -183,6 +236,24 @@ const ReferralsPage = () => {
         const isReferring = user?.role === 'doctor' && r.referring_doctor_id === user?.linked_id;
         const isAdmin     = user?.role === 'admin';
         const openStatus = (target) => (e) => { e.stopPropagation(); setNewStatus(target); setModal({ type:'status', referral:r }); };
+
+        // External referrals: nobody here accepts them, so the actions are
+        // "did the transfer happen or not". Matches the backend's external
+        // branch, which lets the referrer, the recorder, or a DIC resolve it.
+        if (r.is_external) {
+          const canResolve = isReferring || dicActive || r.created_by === user?.user_id;
+          if (!canResolve || !['Pending', 'Accepted'].includes(r.status)) return null;
+          return (
+            <div style={{ display:'flex', gap:'var(--space-2)', justifyContent:'flex-end', alignItems:'center', flexWrap:'wrap', minWidth:'180px' }}>
+              <Button size="sm" variant="primary" title="The patient was successfully transferred" onClick={openStatus('Completed')}>
+                Mark Transferred
+              </Button>
+              <Button size="sm" variant="danger" title="The transfer did not go ahead" onClick={openStatus('Cancelled')}>
+                Cancel
+              </Button>
+            </div>
+          );
+        }
         // minWidth keeps the auto-layout table from crushing the column below
         // two buttons per line; on narrow viewports the buttons wrap inside
         // the cell instead of overflowing it
@@ -394,10 +465,14 @@ const ReferralsPage = () => {
         size="sm"
       >
         <p className="text-sm" style={{ marginBottom:'var(--space-2)' }}>
-          Set the referral for <strong>{modal?.referral?.patient_name}</strong> to <strong>{newStatus}</strong>?
+          Set the {modal?.referral?.is_external ? 'external referral' : 'referral'} for{' '}
+          <strong>{modal?.referral?.patient_name}</strong> to <strong>{newStatus}</strong>?
+          {modal?.referral?.is_external && modal?.referral?.external_hospital_name
+            ? <> Destination: <strong>{modal.referral.external_hospital_name}</strong>.</>
+            : null}
         </p>
         <p className="text-sm text-muted" style={{ marginBottom:'var(--space-6)' }}>
-          {STATUS_MEANINGS[newStatus]}
+          {(modal?.referral?.is_external ? EXTERNAL_STATUS_MEANINGS : STATUS_MEANINGS)[newStatus]}
         </p>
         <div className="form-actions">
           <Button variant="secondary" onClick={() => setModal(null)}>Cancel</Button>

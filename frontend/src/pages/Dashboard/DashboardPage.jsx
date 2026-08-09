@@ -308,8 +308,8 @@ const DoctorPanel = ({ myData, loading, navigate }) => {
   );
 };
 
-// ── Role panel: Nurse / Staff ─────────────────────────────────────────────────
-const NurseStaffPanel = ({ myData, loading, navigate }) => {
+// ── Role panel: Nurse ─────────────────────────────────────────────────────────
+const NursePanel = ({ myData, loading, navigate }) => {
   if (!myData && !loading) return null;
   const triages    = myData?.todays_triages     ?? [];
   const admissions = myData?.pending_admissions ?? [];
@@ -403,7 +403,7 @@ const NurseStaffPanel = ({ myData, loading, navigate }) => {
 const DashboardPage = () => {
   const navigate     = useNavigate();
   const { user }     = useAuth();
-  const role         = user?.role ?? 'staff';
+  const role         = user?.role ?? 'nurse';
 
   const [stats,    setStats]    = useState(null);
   const [activity, setActivity] = useState(null);
@@ -483,7 +483,6 @@ const DashboardPage = () => {
     admin:  'Hospital Operations Overview',
     doctor: `Welcome back, Dr. ${user?.last_name ?? user?.username ?? ''}`,
     nurse:  `Welcome back, ${user?.first_name ?? user?.username ?? ''}`,
-    staff:  `Welcome back, ${user?.first_name ?? user?.username ?? ''}`,
   };
 
   return (
@@ -515,7 +514,7 @@ const DashboardPage = () => {
         </>
       )}
 
-      {/* ── Stat cards — admin only. Doctor/nurse/staff numbers render once,
+      {/* ── Stat cards — admin only. Doctor/nurse numbers render once,
           in their role section below (mini-stats + record lists). ── */}
       {/* Admin cards are read-only aggregates (oversight) — only Rooms, which
           admin can actually open, navigates. */}
@@ -543,8 +542,8 @@ const DashboardPage = () => {
           <DoctorPanel myData={myData} loading={loadMy} navigate={navigate} />
         </>
       )}
-      {(role === 'nurse' || role === 'staff') && (
-        <NurseStaffPanel myData={myData} loading={loadMy} navigate={navigate} />
+      {(role === 'nurse') && (
+        <NursePanel myData={myData} loading={loadMy} navigate={navigate} />
       )}
 
       {/* ── Recent Activity (clinical roles only — admins see aggregates above) ── */}
@@ -595,9 +594,9 @@ const DashboardPage = () => {
               )}
             />
           )}
-          {/* Nurses/staff have no referrals panel — Recent Discharges fills the
+          {/* Nurses have no referrals panel — Recent Discharges fills the
               second column for them instead. */}
-          {(role === 'nurse' || role === 'staff') && (
+          {(role === 'nurse') && (
             <ActivityPanel
               title="Recent Discharges" icon={<DoorOpen size={18} />} loading={loadAct}
               items={recentDischarges} emptyMsg="No discharges recorded yet."
@@ -626,7 +625,7 @@ const DashboardPage = () => {
       <div className="dashboard-footer">
         <p className="text-muted text-sm">
           {role === 'admin'
-            ? 'Aggregate counts refresh automatically · Detailed clinical records are available to clinical staff only.'
+            ? 'Aggregate counts refresh automatically · Detailed clinical records are available to clinical roles only.'
             : 'Stats refresh on page load · Click any card or activity item to navigate.'}
         </p>
       </div>

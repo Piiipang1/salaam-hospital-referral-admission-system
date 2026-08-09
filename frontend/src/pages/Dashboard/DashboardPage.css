@@ -20,7 +20,6 @@
 .role-badge--admin  { background: var(--color-primary-muted); color: var(--color-primary); border: 1px solid var(--color-primary); }
 .role-badge--doctor { background: var(--color-info-muted);    color: var(--color-info);    border: 1px solid var(--color-info); }
 .role-badge--nurse,
-.role-badge--staff  { background: var(--color-success-muted); color: var(--color-success); border: 1px solid var(--color-success); }
 
 /* ─────────────────────────────────────────────────────────────
    Stat card grid
@@ -35,7 +34,7 @@
 @media (max-width: 480px)  { .dashboard-grid { grid-template-columns: 1fr; } }
 
 /* ─────────────────────────────────────────────────────────────
-   Role-specific section (Doctor panel / Nurse-Staff panel)
+   Role-specific section (Doctor panel / Nurse panel)
 ───────────────────────────────────────────────────────────── */
 .role-section {
   display: flex;

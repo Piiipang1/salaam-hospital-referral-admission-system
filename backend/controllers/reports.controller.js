@@ -78,14 +78,19 @@ const referralsReport = async (req, res) => {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const [rows] = await db.query(
+      // Patient resolves via patient_id first, falling back to the diagnosis
+      // path for pre-migration rows — external referrals may have no diagnosis.
+      // is_external + the destination let the report distinguish a transfer-out
+      // from an internal consult.
       `SELECT r.referral_id, r.referral_date, r.status,
+              r.is_external, r.external_hospital_name,
               CONCAT(p.first_name,  ' ', p.last_name)  AS patient_name,
               diag.medical_condition,
               CONCAT(ad.first_name, ' ', ad.last_name) AS assigned_doctor_name,
               ad.specialization
        FROM referrals r
        LEFT JOIN diagnoses diag ON r.diagnosis_id       = diag.diagnosis_id
-       LEFT JOIN patients  p    ON diag.patient_id      = p.patient_id
+       LEFT JOIN patients  p    ON p.patient_id         = COALESCE(r.patient_id, diag.patient_id)
        LEFT JOIN doctors   ad   ON r.assigned_doctor_id = ad.doctor_id
        ${where}
        ORDER BY r.referral_date DESC`,

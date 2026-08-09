@@ -50,7 +50,7 @@ const getStats = async (req, res) => {
 // referring — same OR-scope as referrals.controller getAllReferrals so the
 // dashboard and Referrals page always show the same population); nurses see
 // activity for patients they personally registered (same activity_logs
-// pattern as patients.controller); staff see hospital-wide; admins get none
+// pattern as patients.controller); nurses see hospital-wide; admins get none
 // (oversight-only — aggregates via getStats).
 const getRecentActivity = async (req, res) => {
   try {
@@ -63,7 +63,7 @@ const getRecentActivity = async (req, res) => {
       });
     }
 
-    // Referrals are clinical — only doctors ever see them. Nurses and staff
+    // Referrals are clinical — only doctors ever see them. Nurses
     // receive none, matching the referral route/nav restrictions.
     const canSeeReferrals = req.user.role === 'doctor';
 
@@ -88,7 +88,7 @@ const getRecentActivity = async (req, res) => {
     }
 
     // Recent discharges — same scoping as recent admissions (doctor: their own
-    // admissions; nurse: patients they registered; staff: unscoped), plus the
+    // admissions; nurse: patients they registered; unscoped), plus the
     // Discharged status filter. Ordered by discharge_date since that's the
     // event this panel reports, not the original admission_date.
     let dischargeWhere = "WHERE a.status = 'Discharged'";
@@ -123,13 +123,16 @@ const getRecentActivity = async (req, res) => {
       canSeeReferrals
         ? db.query(`
             SELECT r.referral_id, r.referral_date, r.status AS referral_status,
+                   r.is_external, r.external_hospital_name,
                    CONCAT(p.first_name, ' ', p.last_name)   AS patient_name, p.patient_id,
                    CONCAT(ad.first_name, ' ', ad.last_name) AS assigned_doctor_name,
                    CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name,
                    diag.medical_condition
             FROM referrals r
             LEFT JOIN diagnoses diag ON r.diagnosis_id       = diag.diagnosis_id
-            LEFT JOIN patients  p    ON diag.patient_id      = p.patient_id
+            -- patient_id first, diagnosis path as fallback: an external
+            -- referral may have no diagnosis to reach the patient through.
+            LEFT JOIN patients  p    ON p.patient_id         = COALESCE(r.patient_id, diag.patient_id)
             LEFT JOIN doctors   ad   ON r.assigned_doctor_id  = ad.doctor_id
             LEFT JOIN doctors   rd   ON r.referring_doctor_id = rd.doctor_id
             ${referralWhere}
@@ -237,8 +240,8 @@ const getMyStats = async (req, res) => {
       });
     }
 
-    // ── Nurse / Staff ─────────────────────────────────────────────────────────
-    if (role === 'nurse' || role === 'staff') {
+    // ── Nurse ─────────────────────────────────────────────────────────────────
+    if (role === 'nurse') {
       const [
         [[{ todays_triages }]],
         [[{ available_rooms }]],
@@ -249,7 +252,7 @@ const getMyStats = async (req, res) => {
 
         db.query('SELECT COUNT(*) AS todays_triages FROM triages WHERE DATE(triage_datetime) = CURDATE()'),
         db.query("SELECT COUNT(*) AS available_rooms FROM rooms WHERE availability_status = 'available'"),
-        // "Pending" = admitted but awaiting a room — the admissions nurses/staff act on
+        // "Pending" = admitted but awaiting a room — the admissions nurses act on
         db.query("SELECT COUNT(*) AS pending_admissions FROM admissions WHERE status = 'Pending Room'"),
 
         // List: today's triages (up to 8, newest first)
@@ -277,7 +280,7 @@ const getMyStats = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        role: 'nurse_staff',
+        role: 'nurse',
         data: {
           stats: { todays_triages, available_rooms, pending_admissions },
           todays_triages: todayTriageRows[0],

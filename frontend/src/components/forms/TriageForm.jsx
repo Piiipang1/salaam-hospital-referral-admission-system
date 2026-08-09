@@ -4,11 +4,12 @@ import Alert from '../ui/Alert';
 import { TRIAGE_LEVELS } from '../../utils/constants';
 import { useAuth } from '../../context/AuthContext';
 import { getActiveEmployees } from '../../api/employees.api';
-import { getAllPatients } from '../../api/patients.api';
 import { getVisitRoomOptions } from '../../api/triages.api';
-import { patientLabel } from '../../utils/patientLabels';
+import PatientTypeahead from '../ui/PatientTypeahead';
 
-const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
+// `disabled` locks every field and the submit button — used by the capacity
+// control when the hospital has no available rooms.
+const TriageForm = ({ patientId, initial = {}, onSubmit, loading, disabled = false }) => {
   const { user } = useAuth();
   const [form, setForm] = useState({
     patient_id:          initial.patient_id          ?? patientId ?? '',
@@ -20,20 +21,17 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
   const [error, setError] = useState('');
   const [employees,         setEmployees]         = useState([]);
   const [employeesFetching, setEmployeesFetching] = useState(true);
-  const [patients,          setPatients]          = useState([]);
   const [visitRooms,        setVisitRooms]        = useState([]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  // Load active employees and (standalone only) patients on mount
+  // Patients are no longer bulk-loaded here — PatientTypeahead queries
+  // /api/patients/search as the nurse types, so opening this form costs one
+  // small request instead of pulling the whole patient table into the browser.
   useEffect(() => {
     getActiveEmployees()
       .then((res) => { if (res.success) setEmployees(res.data); })
       .catch(() => setError('Failed to load employees list.'))
       .finally(() => setEmployeesFetching(false));
-
-    if (!patientId) {
-      getAllPatients({ limit: 1000 }).then((res) => { if (res.success) setPatients(res.data); });
-    }
 
     getVisitRoomOptions()
       .then((res) => { if (res.success) setVisitRooms(res.data); })
@@ -44,11 +42,12 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (disabled) return;
     if (!patientId && !form.patient_id) { setError('Patient is required.'); return; }
     if (!form.triage_level) { setError('Triage level is required.'); return; }
     setError('');
 
-    if (user?.role === 'nurse' || user?.role === 'staff') {
+    if (user?.role === 'nurse') {
       const { employee_id, ...rest } = form;
       onSubmit(rest);
     } else {
@@ -63,20 +62,22 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
       {!patientId && (
         <div className="form-group" style={{ marginBottom: 'var(--space-4)' }}>
           <label htmlFor="tf-patient">Patient *</label>
-          <select id="tf-patient" value={form.patient_id} onChange={set('patient_id')} required>
-            <option value="">— Select patient —</option>
-            {patients.map((p) => (
-              <option key={p.patient_id} value={p.patient_id}>
-                {patientLabel(p, patients)}{p.is_unidentified ? ' ⚠ Unidentified' : ''}
-              </option>
-            ))}
-          </select>
+          <PatientTypeahead
+            id="tf-patient"
+            value={form.patient_id}
+            disabled={disabled}
+            required
+            onChange={(p) => setForm((f) => ({ ...f, patient_id: p?.patient_id ?? '' }))}
+          />
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            Type a name in any order, or the patient's ID number.
+          </span>
         </div>
       )}
 
       <div className="form-group">
         <label htmlFor="tf-level">Triage Level *</label>
-        <select id="tf-level" value={form.triage_level} onChange={set('triage_level')} required>
+        <select id="tf-level" value={form.triage_level} onChange={set('triage_level')} required disabled={disabled}>
           <option value="">Select triage level</option>
           {TRIAGE_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
@@ -85,16 +86,16 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
       <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
         <div className="form-group">
           <label htmlFor="tf-room">Visit Room (optional)</label>
-          <select id="tf-room" value={form.visit_room_id} onChange={set('visit_room_id')}>
+          <select id="tf-room" value={form.visit_room_id} onChange={set('visit_room_id')} disabled={disabled}>
             <option value="">— None —</option>
             {visitRooms.map((vr) => (
               <option key={vr.visit_room_id} value={vr.visit_room_id}>{vr.room_label}</option>
             ))}
           </select>
         </div>
-        {(user?.role === 'nurse' || user?.role === 'staff') ? (
+        {(user?.role === 'nurse') ? (
           <div className="form-group">
-            <label htmlFor="tf-emp">Attending Nurse / Staff</label>
+            <label htmlFor="tf-emp">Attending Nurse</label>
             <input
               id="tf-emp"
               type="text"
@@ -110,8 +111,8 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
           </div>
         ) : (
           <div className="form-group">
-            <label htmlFor="tf-emp">Attending Nurse / Staff</label>
-            <select id="tf-emp" value={form.employee_id} onChange={set('employee_id')}>
+            <label htmlFor="tf-emp">Attending Nurse</label>
+            <select id="tf-emp" value={form.employee_id} onChange={set('employee_id')} disabled={disabled}>
               <option value="">— Select employee (optional) —</option>
               {employees.map((e) => (
                 <option key={e.employee_id} value={e.employee_id}>
@@ -125,11 +126,11 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading }) => {
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
         <label htmlFor="tf-notes">Clinical Notes</label>
-        <textarea id="tf-notes" value={form.notes} onChange={set('notes')} rows={4} placeholder="Describe chief complaint, initial assessment..." />
+        <textarea id="tf-notes" value={form.notes} onChange={set('notes')} rows={4} placeholder="Describe chief complaint, initial assessment..." disabled={disabled} />
       </div>
 
       <div className="form-actions">
-        <Button type="submit" variant="primary" loading={loading}>
+        <Button type="submit" variant="primary" loading={loading} disabled={disabled}>
           {initial.triage_id ? 'Update Triage' : 'Record Triage'}
         </Button>
       </div>

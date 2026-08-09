@@ -13,7 +13,7 @@ const getNameForUser = async (role, linkedId) => {
     );
     return { firstName: doc?.first_name ?? null, lastName: doc?.last_name ?? null };
   }
-  if (role === 'nurse' || role === 'staff') {
+  if (role === 'nurse') {
     const [[emp]] = await db.query(
       'SELECT first_name, last_name FROM employees WHERE employee_id = ?',
       [linkedId]
@@ -112,7 +112,7 @@ const logout = async (req, res) => {
 
 // GET /api/auth/me
 // User row (never password_hash) + the linked person record: doctors get
-// specialization / ER / DIC details, nurse/staff get their employee record.
+// specialization / ER / DIC details, nurse get their employee record.
 const getMe = async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -133,7 +133,7 @@ const getMe = async (req, res) => {
         [userRow.linked_id]
       );
       if (doc) person = { ...doc, is_er_assigned: !!doc.is_er_assigned };
-    } else if ((userRow.role === 'nurse' || userRow.role === 'staff') && userRow.linked_id) {
+    } else if ((userRow.role === 'nurse') && userRow.linked_id) {
       const [[emp]] = await db.query(
         'SELECT first_name, last_name, contact_details, employment_status FROM employees WHERE employee_id = ?',
         [userRow.linked_id]

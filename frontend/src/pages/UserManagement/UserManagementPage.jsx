@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Database, Download, RotateCcw, Trash2 } from 'lucide-react';
 import { getAllUsers, createUser, updateUser, deactivateUser, reactivateUser, setDoctorInCharge } from '../../api/users.api';
 import { createBackup, listBackups, getBackupDownloadUrl, restoreBackup, deleteBackup } from '../../api/backup.api';
+import { getAllDepartments, setEmployeeDepartment } from '../../api/departments.api';
 import { formatDate } from '../../utils/formatDate';
 import { ROLE_LABELS } from '../../utils/constants';
 import Badge from '../../components/ui/Badge';
@@ -156,7 +157,7 @@ const UserTableSection = ({ title, rows, loading, columns, emptyMessage, badgeSt
 const UserManagementPage = () => {
   const BACKUPS_ENABLED = import.meta.env.VITE_ENABLE_BACKUPS === 'true';
 
-  // Role filter from the sidebar submenu (?role=doctor|nurse|staff). null = show all.
+  // Role filter from the sidebar submenu (?role=doctor|nurse). null = show all.
   const [searchParams] = useSearchParams();
   const roleFilter = searchParams.get('role');
 
@@ -176,6 +177,14 @@ const UserManagementPage = () => {
   const [dicStep,     setDicStep]     = useState(null);
   const [dicPassword, setDicPassword] = useState('');
   const [dicSaving,   setDicSaving]   = useState(false);
+
+  // ── Nurse ward assignment ──────────────────────────────────────────────────
+  // A nurse with no department cannot use the ward roster or endorsements at
+  // all, so this is the screen that switches those features on for them.
+  const [departments, setDepartments] = useState([]);
+  const [deptTarget,  setDeptTarget]  = useState(null); // nurse row being edited
+  const [deptChoice,  setDeptChoice]  = useState('');
+  const [deptSaving,  setDeptSaving]  = useState(false);
 
   // ── Backup state ───────────────────────────────────────────────────────────
   const [backups,        setBackups]        = useState([]);
@@ -197,6 +206,33 @@ const UserManagementPage = () => {
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Wards for the nurse department picker. Active only — a retired ward has no
+  // roster to join, and the API refuses it anyway.
+  useEffect(() => {
+    getAllDepartments()
+      .then((r) => { if (r.success) setDepartments(r.data); })
+      .catch(() => { /* non-fatal: the column just shows no options */ });
+  }, []);
+
+  const openDeptEditor = (row) => {
+    setDeptChoice(row.department_id ? String(row.department_id) : '');
+    setDeptTarget(row);
+  };
+
+  const handleDeptSave = async () => {
+    if (!deptTarget) return;
+    setError(''); setSuccess('');
+    setDeptSaving(true);
+    try {
+      const res = await setEmployeeDepartment(deptTarget.linked_id, deptChoice ? Number(deptChoice) : null);
+      setSuccess(res.message || 'Department updated.');
+      setDeptTarget(null);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to set department.');
+    } finally { setDeptSaving(false); }
+  };
 
   // ── Backup list load ───────────────────────────────────────────────────────
   const loadBackups = useCallback(() => {
@@ -359,14 +395,35 @@ const UserManagementPage = () => {
     },
   ];
 
+  // Nurses get an extra Department column: their ward is what drives the ward
+  // roster and shift endorsements, and only an admin can set it.
+  const nurseColumns = [
+    ...userColumns.slice(0, 3),
+    {
+      key: 'department_name', label: 'Department',
+      render: (r) => (
+        <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
+          {r.department_name
+            ? <span>{r.department_name}</span>
+            : <span className="text-xs" style={{ color: 'var(--color-warning)' }}>Unassigned</span>}
+          <Button size="sm" variant="ghost"
+            style={{ padding: 0, height: 'auto', fontSize: 'var(--font-size-xs)' }}
+            onClick={(e) => { e.stopPropagation(); openDeptEditor(r); }}>
+            {r.department_name ? 'Change' : 'Set ward'}
+          </Button>
+        </span>
+      ),
+    },
+    ...userColumns.slice(3),
+  ];
+
   // ── Split users by role ────────────────────────────────────────────────────
   const doctors = users.filter((u) => u.role === 'doctor');
   const nurses  = users.filter((u) => u.role === 'nurse');
-  const staffs  = users.filter((u) => u.role === 'staff');
 
   // Subtitle count reflects what's shown: the filtered role's count when a
   // filter is active, otherwise the total.
-  const roleCounts = { doctor: doctors.length, nurse: nurses.length, staff: staffs.length };
+  const roleCounts = { doctor: doctors.length, nurse: nurses.length };
   const shownCount = roleFilter ? (roleCounts[roleFilter] ?? 0) : users.length;
   const subtitle = roleFilter
     ? `${shownCount} ${roleFilter} account${shownCount !== 1 ? 's' : ''}`
@@ -407,23 +464,12 @@ const UserManagementPage = () => {
           title="Nurses"
           rows={nurses}
           loading={loading}
-          columns={userColumns}
+          columns={nurseColumns}
           emptyMessage="No nurse accounts found."
           badgeStyle={{fontSize:'var(--font-size-xs)',background:'var(--color-success-muted)',color:'var(--color-success)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}
         />
       )}
 
-      {/* ── Staff ───────────────────────────────────────────────────────────── */}
-      {(!roleFilter || roleFilter === 'staff') && (
-        <UserTableSection
-          title="Staff"
-          rows={staffs}
-          loading={loading}
-          columns={userColumns}
-          emptyMessage="No staff accounts found."
-          badgeStyle={{fontSize:'var(--font-size-xs)',background:'var(--color-warning-muted)',color:'var(--color-warning)',borderRadius:'var(--radius-full)',padding:'2px 10px',fontWeight:600}}
-        />
-      )}
 
 
       {/* ── Database Backup Section (local dev only — requires mysqldump) ──────── */}
@@ -559,6 +605,38 @@ const UserManagementPage = () => {
       {/* ── Modals ─────────────────────────────────────────────────────────── */}
       <Modal isOpen={!!modal} onClose={()=>setModal(null)} title={modal==='new'?'Create User':'Edit User'} size="md">
         <UserForm initial={modal==='new'?{}:modal??{}} onSubmit={handleSave} loading={saving} />
+      </Modal>
+
+      {/* ── Nurse ward assignment ── */}
+      <Modal
+        isOpen={!!deptTarget}
+        onClose={() => setDeptTarget(null)}
+        title={deptTarget ? `Department — ${deptTarget.linked_name ?? deptTarget.username}` : ''}
+        size="sm"
+      >
+        {deptTarget && (
+          <div>
+            <div className="form-group">
+              <label htmlFor="um-dept">Ward</label>
+              <select id="um-dept" value={deptChoice} onChange={(e) => setDeptChoice(e.target.value)}>
+                <option value="">— Unassigned —</option>
+                {departments.map((d) => (
+                  <option key={d.department_id} value={d.department_id}>
+                    {d.name} ({d.room_count} bed{d.room_count !== 1 ? 's' : ''})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-muted" style={{ marginTop: 'var(--space-3)' }}>
+              A nurse sees the patients admitted to their ward, and can only endorse a shift to
+              another nurse in it. Leaving this unassigned hides My Ward and Endorsements for them.
+            </p>
+            <div className="form-actions">
+              <Button variant="secondary" onClick={() => setDeptTarget(null)}>Cancel</Button>
+              <Button variant="primary" loading={deptSaving} onClick={handleDeptSave}>Save</Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       <ConfirmDialog

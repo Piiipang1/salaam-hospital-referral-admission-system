@@ -12,13 +12,18 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
     last_name:       initial.last_name       ?? '',
     specialization:  initial.specialization  ?? '',
     contact_details: initial.contact_details ?? '',
+    // Alert destinations, held on the account itself — an admin has no person
+    // record to hang them off, and these are what High/Emergency alerts use.
+    email:           initial.email           ?? '',
+    phone:           initial.phone           ?? '',
+    alerts_opt_out:  !!initial.alerts_opt_out,
   });
   const [error, setError] = useState('');
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const isEdit = !!initial.user_id;
 
   // Person fields (first/last name, contact, specialization) only apply when
-  // creating a new doctor/nurse/staff account — editing a person record is out
+  // creating a new doctor/nurse account — editing a person record is out
   // of scope for this form, and admins have no person record at all.
   const showPersonFields = !isEdit && form.role !== 'admin' && form.role !== '';
 
@@ -38,6 +43,13 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
       payload.last_name       = form.last_name;
       payload.contact_details = form.contact_details;
       if (form.role === 'doctor') payload.specialization = form.specialization;
+    }
+    // Contact details are editable on an existing account; the API validates
+    // them and an empty string clears the field.
+    if (isEdit) {
+      payload.email          = form.email.trim();
+      payload.phone          = form.phone.trim();
+      payload.alerts_opt_out = form.alerts_opt_out ? 1 : 0;
     }
     onSubmit(payload);
   };
@@ -97,6 +109,42 @@ const UserForm = ({ initial = {}, onSubmit, loading }) => {
             )}
           </div>
         </>
+      )}
+
+      {/* ── Alert contact details (existing accounts) ────────────────────
+          High and Emergency alerts are mirrored to these. An account with
+          neither is reachable in-app only, which is what the hint says
+          plainly rather than leaving the gap invisible. */}
+      {isEdit && (
+        <div style={{ marginTop: 'var(--space-5)', paddingTop: 'var(--space-4)', borderTop: '1px solid var(--color-border)' }}>
+          <p style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-3)' }}>
+            Alert Contact
+          </p>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="uf-email">Email</label>
+              <input id="uf-email" type="email" value={form.email} onChange={set('email')}
+                placeholder="name@hospital.org" autoComplete="off" />
+            </div>
+            <div className="form-group">
+              <label htmlFor="uf-phone">Mobile Number</label>
+              <input id="uf-phone" value={form.phone} onChange={set('phone')}
+                placeholder="09171234567" autoComplete="off" />
+            </div>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 'var(--space-3)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.alerts_opt_out} style={{ width: 'auto', margin: 0 }}
+              onChange={(e) => setForm((f) => ({ ...f, alerts_opt_out: e.target.checked }))} />
+            <span style={{ fontSize: 'var(--font-size-sm)' }}>
+              Do not send email/SMS alerts to this account (in-app notifications still apply)
+            </span>
+          </label>
+          {!form.email.trim() && !form.phone.trim() && !form.alerts_opt_out && (
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-warning)', marginTop: 'var(--space-2)' }}>
+              No email or mobile on file — this account will only ever see alerts inside the app.
+            </p>
+          )}
+        </div>
       )}
 
       <div className="form-actions">

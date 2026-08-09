@@ -205,7 +205,7 @@ const addTreatment = async (req, res) => {
     // ── Respond immediately — notifications are best-effort ───────────────────
     res.status(201).json({ success: true, message: 'Treatment added.', treatment_id: result.insertId });
 
-    // ── Post-insert: notify nurses/staff to prepare administration ────────────
+    // ── Post-insert: notify nurses to prepare administration ────────────
     try {
       const [[diag]] = await db.query(
         `SELECT d.patient_id, CONCAT(p.first_name, ' ', p.last_name) AS patient_name
@@ -215,15 +215,15 @@ const addTreatment = async (req, res) => {
         [req.params.id]
       );
 
-      const [staffUsers] = await db.query(
-        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
+      const [nurseUsers] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'nurse' AND is_active = 1"
       );
 
       const patientName = diag?.patient_name ?? 'a patient';
       const message = `New treatment prescribed for ${patientName}: ${prescribed_medications}. Please prepare for administration.`;
 
       const notifRows = [];
-      for (const su of staffUsers) {
+      for (const su of nurseUsers) {
         if (su.user_id !== req.user.user_id) {
           notifRows.push([su.user_id, message, null]);
         }
@@ -338,7 +338,7 @@ const saveAssessment = async (req, res) => {
     // ── Respond immediately — notifications are best-effort ───────────────────
     res.status(statusCode).json({ success: true, message, assessment_id: assessmentId });
 
-    // ── Post-save: notify nurses/staff to act on the doctor's disposition ─────
+    // ── Post-save: notify nurses to act on the doctor's disposition ─────
     // Applies to both the create and update paths above.
     try {
       const [[diag]] = await db.query(
@@ -350,8 +350,8 @@ const saveAssessment = async (req, res) => {
       );
 
       const patientName = diag?.patient_name ?? 'a patient';
-      // Referrals are clinical and hidden from nurse/staff — the 'Refer'
-      // disposition intentionally generates no nurse/staff notification.
+      // Referrals are clinical and hidden from nurse — the 'Refer'
+      // disposition intentionally generates no nurse notification.
       // (Guarding on notifMessage also skips any unrecognized disposition.)
       const dispositionMessages = {
         Admit:     `Doctor has ordered ADMISSION for ${patientName}. Please prepare bed assignment.`,
@@ -361,12 +361,12 @@ const saveAssessment = async (req, res) => {
       const notifMessage = dispositionMessages[disposition];
 
       if (notifMessage) {
-        const [staffUsers] = await db.query(
-          "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
+        const [nurseUsers] = await db.query(
+          "SELECT user_id FROM users WHERE role = 'nurse' AND is_active = 1"
         );
 
         const notifRows = [];
-        for (const su of staffUsers) {
+        for (const su of nurseUsers) {
           if (su.user_id !== req.user.user_id) {
             notifRows.push([su.user_id, notifMessage, null]);
           }

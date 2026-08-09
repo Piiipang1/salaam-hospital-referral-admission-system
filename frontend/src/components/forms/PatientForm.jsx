@@ -6,7 +6,9 @@ import { PATIENT_SEX } from '../../utils/constants';
 import { toInputDate } from '../../utils/formatDate';
 import { isValidPHMobile, sanitizePHMobileInput } from '../../utils/validators';
 
-const PatientForm = ({ initial = {}, onSubmit, loading }) => {
+// `disabled` locks every field and the submit button — used by the capacity
+// control when the hospital has no available rooms.
+const PatientForm = ({ initial = {}, onSubmit, loading, disabled = false }) => {
   const [form, setForm] = useState({
     first_name:               initial.first_name ?? '',
     last_name:                initial.last_name  ?? '',
@@ -37,6 +39,7 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (disabled) return;
     if (!form.first_name || !form.last_name || !form.sex || !form.date_of_birth) {
       setError('First name, last name, sex, and date of birth are required.');
       return;
@@ -69,25 +72,25 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
       <div className="form-row">
         <div className="form-group">
           <label htmlFor="pf-first">First Name *</label>
-          <input id="pf-first" value={form.first_name} onChange={set('first_name')} placeholder="First name" required />
+          <input id="pf-first" value={form.first_name} onChange={set('first_name')} placeholder="First name" required disabled={disabled} />
         </div>
         <div className="form-group">
           <label htmlFor="pf-last">Last Name *</label>
-          <input id="pf-last" value={form.last_name} onChange={set('last_name')} placeholder="Last name" required />
+          <input id="pf-last" value={form.last_name} onChange={set('last_name')} placeholder="Last name" required disabled={disabled} />
         </div>
       </div>
 
       <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
         <div className="form-group">
           <label htmlFor="pf-sex">Sex *</label>
-          <select id="pf-sex" value={form.sex} onChange={set('sex')} required>
+          <select id="pf-sex" value={form.sex} onChange={set('sex')} required disabled={disabled}>
             <option value="">Select sex</option>
             {PATIENT_SEX.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
         <div className="form-group">
           <label htmlFor="pf-dob">Date of Birth *</label>
-          <input id="pf-dob" type="date" value={form.date_of_birth} onChange={set('date_of_birth')} max={today} required />
+          <input id="pf-dob" type="date" value={form.date_of_birth} onChange={set('date_of_birth')} max={today} required disabled={disabled} />
         </div>
       </div>
 
@@ -95,26 +98,26 @@ const PatientForm = ({ initial = {}, onSubmit, loading }) => {
         <label htmlFor="pf-contact">Contact Number</label>
         {/* No native maxLength: it would truncate formatted pastes like "0912-345-6789"
             before sanitizePHMobileInput can strip the separators — the sanitizer caps at 11 */}
-        <input id="pf-contact" value={form.contact_number} onChange={setPhone('contact_number')} placeholder="09XX XXX XXXX" inputMode="numeric" />
+        <input id="pf-contact" value={form.contact_number} onChange={setPhone('contact_number')} placeholder="09XX XXX XXXX" inputMode="numeric" disabled={disabled} />
       </div>
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
-        <PhilippineAddressPicker value={initial.address ?? ''} onChange={handleAddress} />
+        <PhilippineAddressPicker value={initial.address ?? ''} onChange={handleAddress} disabled={disabled} />
       </div>
 
       <div className="form-row" style={{ marginTop: 'var(--space-4)' }}>
         <div className="form-group">
           <label htmlFor="pf-ecname">Emergency Contact Name</label>
-          <input id="pf-ecname" value={form.emergency_contact_name} onChange={set('emergency_contact_name')} placeholder="Contact name" />
+          <input id="pf-ecname" value={form.emergency_contact_name} onChange={set('emergency_contact_name')} placeholder="Contact name" disabled={disabled} />
         </div>
         <div className="form-group">
           <label htmlFor="pf-ecnum">Emergency Contact Number</label>
-          <input id="pf-ecnum" value={form.emergency_contact_number} onChange={setPhone('emergency_contact_number')} placeholder="09XX XXX XXXX" inputMode="numeric" />
+          <input id="pf-ecnum" value={form.emergency_contact_number} onChange={setPhone('emergency_contact_number')} placeholder="09XX XXX XXXX" inputMode="numeric" disabled={disabled} />
         </div>
       </div>
 
       <div className="form-actions">
-        <Button type="submit" variant="primary" loading={loading}>
+        <Button type="submit" variant="primary" loading={loading} disabled={disabled}>
           {initial.patient_id ? 'Update Patient' : 'Register Patient'}
         </Button>
       </div>

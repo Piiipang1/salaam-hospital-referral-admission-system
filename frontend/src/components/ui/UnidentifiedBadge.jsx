@@ -1,4 +1,4 @@
-// Shown next to a placeholder patient created by Emergency Triage, so staff know
+// Shown next to a placeholder patient created by Emergency Triage, so clinicians know
 // the real identity still has to be registered. Shared across the patients list,
 // patient detail, and triage detail so the marker looks the same everywhere.
 const UnidentifiedBadge = () => (

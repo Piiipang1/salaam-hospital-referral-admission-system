@@ -15,7 +15,9 @@ const truncate = (str, n) => str?.length > n ? str.slice(0, n) + '…' : (str ??
 // Build the dropdown label for a diagnosis option — date + condition, no internal id
 const diagnosisLabel = (d) => `${formatDate(d.diagnosis_date)} — ${truncate(d.medical_condition, 35)}`;
 
-const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSubmit, loading }) => {
+// `disabled` locks every field and the submit button — used by the capacity
+// control when the hospital has no available rooms.
+const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSubmit, loading, disabled = false }) => {
   const { user } = useAuth();
   const isDoctor = user?.role === 'doctor';
 
@@ -91,6 +93,7 @@ const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSu
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (disabled) return;
     if (!form.patient_id || (!isDoctor && !form.doctor_id) || !form.admission_type) {
       setError('Patient, doctor, and admission type are required.');
       return;
@@ -137,6 +140,7 @@ const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSu
                 placeholder="Search patient by name"
                 autoComplete="off"
                 required
+                disabled={disabled}
               />
               <datalist id="af-patient-options">
                 {patients.map((p) => (
@@ -154,6 +158,7 @@ const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSu
               value={form.diagnosis_id}
               onChange={set('diagnosis_id')}
               size="1"
+              disabled={disabled}
               style={{ width: '100%', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             >
               <option value="">— Select diagnosis —</option>
@@ -201,7 +206,7 @@ const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSu
         ) : (
           <>
             <label htmlFor="af-doc">Admitting Doctor *</label>
-            <select id="af-doc" value={form.doctor_id} onChange={set('doctor_id')} required>
+            <select id="af-doc" value={form.doctor_id} onChange={set('doctor_id')} required disabled={disabled}>
               <option value="">— Select doctor —</option>
               {doctors.map((d) => (
                 <option key={d.doctor_id} value={d.doctor_id}>
@@ -220,7 +225,7 @@ const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSu
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
         <label htmlFor="af-type">Admission Type *</label>
-        <select id="af-type" value={form.admission_type} onChange={set('admission_type')} required>
+        <select id="af-type" value={form.admission_type} onChange={set('admission_type')} required disabled={disabled}>
           <option value="">— Select type —</option>
           {ADMISSION_TYPES.map((t) => (
             <option key={t} value={t}>{t}</option>
@@ -229,7 +234,7 @@ const AdmissionForm = ({ patientId, patientName, diagnosisId, initial = {}, onSu
       </div>
 
       <div className="form-actions">
-        <Button type="submit" variant="primary" loading={loading}>
+        <Button type="submit" variant="primary" loading={loading} disabled={disabled}>
           Admit Patient
         </Button>
       </div>

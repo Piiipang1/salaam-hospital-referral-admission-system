@@ -5,13 +5,16 @@ import { getAllTriages, createTriage, createEmergencyTriage, assignTriageDoctor 
 import { cancelAssignment } from '../../api/assignments.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { useAuth } from '../../context/AuthContext';
+import { useCapacity } from '../../context/CapacityContext';
 import { canManageTriage, canEmergencyTriage } from '../../utils/roleGuard';
 import { formatDate, todayInput } from '../../utils/formatDate';
+import { NO_ROOMS_MESSAGE } from '../../utils/constants';
 import Badge from '../../components/ui/Badge';
 import Table from '../../components/ui/Table';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Alert from '../../components/ui/Alert';
+import CapacityBanner from '../../components/ui/CapacityBanner';
 import TriageForm from '../../components/forms/TriageForm';
 import './TriagePage.css';
 
@@ -27,6 +30,10 @@ const LEVEL_COLORS = {
 const TriagePage = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  // No free bed → triaging is closed. Emergency triage registers a patient and
+  // triages them in one step, so it is gated by the same rule (the backend
+  // refuses both). Assigning an attending doctor to an existing triage is not.
+  const { atCapacity } = useCapacity();
 
   // ER coordinator = admin or a Doctor-in-Charge. Gets read visibility of
   // assignment state and the "Unassigned only" filter.
@@ -270,6 +277,8 @@ const TriagePage = () => {
           {canEmergencyTriage(user?.role) && (
             <Button
               variant="danger"
+              disabled={atCapacity}
+              title={atCapacity ? NO_ROOMS_MESSAGE : undefined}
               onClick={() => { setEmergencyForm({ triage_level: 'Critical', notes: '' }); setEmergencyModal(true); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
             >
@@ -277,7 +286,10 @@ const TriagePage = () => {
             </Button>
           )}
           {canManageTriage(user?.role) && (
-            <Button id="create-triage-btn" variant="primary" onClick={() => setModal(true)}>
+            <Button id="create-triage-btn" variant="primary"
+              disabled={atCapacity}
+              title={atCapacity ? NO_ROOMS_MESSAGE : undefined}
+              onClick={() => setModal(true)}>
               + Record Triage
             </Button>
           )}
@@ -285,6 +297,7 @@ const TriagePage = () => {
       </div>
 
       {/* ── Alerts ── */}
+      <CapacityBanner />
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
@@ -379,7 +392,7 @@ const TriagePage = () => {
 
       {/* ── Create triage modal ── */}
       <Modal isOpen={modal} onClose={() => setModal(false)} title="Record Triage" size="md">
-        <TriageForm onSubmit={handleCreate} loading={saving} />
+        <TriageForm onSubmit={handleCreate} loading={saving} disabled={atCapacity} />
       </Modal>
 
       {/* ── Assign attending doctor modal (ER coordinator) ── */}
@@ -416,6 +429,7 @@ const TriagePage = () => {
             id="et-level"
             value={emergencyForm.triage_level}
             onChange={(e) => setEmergencyForm((f) => ({ ...f, triage_level: e.target.value }))}
+            disabled={atCapacity}
           >
             {TRIAGE_LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
@@ -428,11 +442,12 @@ const TriagePage = () => {
             value={emergencyForm.notes}
             onChange={(e) => setEmergencyForm((f) => ({ ...f, notes: e.target.value }))}
             placeholder="Describe presenting complaint or condition…"
+            disabled={atCapacity}
           />
         </div>
         <div className="form-actions">
           <Button type="button" variant="secondary" onClick={() => setEmergencyModal(false)}>Cancel</Button>
-          <Button type="button" variant="danger" loading={emergencySaving} onClick={handleEmergencyTriage}>
+          <Button type="button" variant="danger" loading={emergencySaving} disabled={atCapacity} onClick={handleEmergencyTriage}>
             Start Emergency Triage
           </Button>
         </div>

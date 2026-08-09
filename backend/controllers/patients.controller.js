@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
 const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition } = require('../utils/scoping');
+const { rejectIfAtCapacity } = require('../utils/capacity');
 
 // Philippine mobile number — exactly 11 digits starting with 09. Both phone
 // fields are optional; only non-empty values are validated. Mirrors the
@@ -16,6 +17,167 @@ const validatePhoneFields = ({ contact_number, emergency_contact_number }) => {
   return null;
 };
 
+// ── Care status ──────────────────────────────────────────────────────────────
+// One badge per patient for the doctor's overview: Admitted, Waiting, or
+// Discharged. Derived live from admissions rather than stored, so it can never
+// go stale against the admission it describes.
+//
+// The patient's CURRENT admission, chosen deterministically. 'Pending Discharge'
+// is included because that patient is still physically in a bed — the old join
+// omitted it, so someone awaiting discharge appeared to have no admission and
+// no room at all. The ordered subquery means that even if a patient somehow
+// ends up with two ongoing admissions, this returns one row rather than
+// duplicating the patient in the list.
+const ONGOING_ADMISSION_JOIN = `
+  LEFT JOIN admissions a ON a.admission_id = (
+    SELECT ad.admission_id FROM admissions ad
+    WHERE ad.patient_id = p.patient_id
+      AND ad.status IN ('Pending Room','Active','Pending Discharge')
+    ORDER BY ad.admission_date DESC, ad.admission_id DESC
+    LIMIT 1
+  )`;
+
+// Admitted        — occupying a bed now (Active, or Pending Discharge: still in it)
+// Waiting         — admitted on paper but with no bed yet (Pending Room), or in
+//                   the system with no admission to date
+// Discharged      — no ongoing admission, and a completed stay on record
+const CARE_STATUS_EXPR = `
+  CASE
+    WHEN a.status IN ('Active','Pending Discharge') THEN 'Admitted'
+    WHEN a.status = 'Pending Room' THEN 'Waiting'
+    WHEN EXISTS (
+      SELECT 1 FROM admissions adx
+      WHERE adx.patient_id = p.patient_id AND adx.status = 'Discharged'
+    ) THEN 'Discharged'
+    ELSE 'Waiting'
+  END AS care_status`;
+
+// The nuance the three badges cannot carry on their own — shown as secondary
+// text so "Admitted" does not hide that a discharge is already in motion.
+const CARE_STATUS_DETAIL_EXPR = `
+  CASE
+    WHEN a.status = 'Active'            THEN 'Currently admitted'
+    WHEN a.status = 'Pending Discharge' THEN 'Discharge in progress'
+    WHEN a.status = 'Pending Room'      THEN 'Awaiting a bed'
+    WHEN EXISTS (
+      SELECT 1 FROM admissions adx
+      WHERE adx.patient_id = p.patient_id AND adx.status = 'Discharged'
+    ) THEN 'Discharged'
+    WHEN EXISTS (
+      SELECT 1 FROM triages t WHERE t.patient_id = p.patient_id
+    ) THEN 'Triaged — awaiting admission'
+    ELSE 'Registered — not yet triaged'
+  END AS care_status_detail`;
+
+// Who may see which patients. Extracted so the list and the typeahead search
+// share ONE definition — a second, hand-copied version of this is exactly how a
+// search endpoint ends up leaking records the list would never show.
+//
+// Returns { conditions: string[], params: [] } to AND into a WHERE clause.
+const buildPatientAccessScope = async (req) => {
+  const conditions = [];
+  const params     = [];
+
+  // Doctors are scoped to their assigned patients. A Doctor-in-Charge (ER
+  // coordinator) also sees currently-unassigned patients. (Fresh DB read —
+  // never trust the JWT for the DIC flag.)
+  if (req.user.role === 'doctor') {
+    const scope = (await isDoctorInCharge(req.user.user_id))
+      ? scopeForDoctorInCharge('p.patient_id', req.user.linked_id, req.user.user_id)
+      : scopeToAssignedPatients('p.patient_id', req.user.linked_id);
+    conditions.push(scope.sql);
+    params.push(...scope.params);
+  }
+
+  // Nurses only see patients they personally registered (issue #10)
+  if (req.user.role === 'nurse') {
+    conditions.push(
+      `p.patient_id IN (
+        SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
+        WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
+      )`
+    );
+    params.push(req.user.user_id);
+  }
+
+  return { conditions, params };
+};
+
+// GET /api/patients/search?q=…&limit=10
+// Lightweight typeahead lookup for patient pickers. Deliberately NOT the same
+// query as getAllPatients: it drops the admission/room/doctor joins and the
+// COUNT(*), because a keystroke-rate endpoint should read as few rows as it can.
+//
+// Matching rules:
+//   * an all-digits query is treated as a patient ID and matched EXACTLY.
+//     The old list used `patient_id LIKE '%1%'`, which cannot use the primary
+//     key and matches 1, 11, 21, 100… — useless as a typeahead.
+//   * name tokens are matched per token, so "cruz juan" finds "Juan Cruz".
+//     Prefix matches on first/last name can use idx_patients_name; the CONCAT
+//     fallback preserves mid-word matching at a cost only paid on the small
+//     number of rows the role scope already allows.
+const searchPatients = async (req, res) => {
+  const q = String(req.query.q ?? '').trim();
+  // Hard cap: this endpoint feeds a dropdown, not a report.
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 25);
+
+  try {
+    // An empty query returns the most recent patients rather than nothing, so
+    // the dropdown is useful the moment it opens.
+    const conditions = [];
+    const params     = [];
+
+    const isIdQuery = /^\d+$/.test(q);
+
+    if (q) {
+      const tokens = q.split(/\s+/).filter(Boolean).slice(0, 5);
+      const tokenClauses = tokens.map(() =>
+        `(p.first_name LIKE ? OR p.last_name LIKE ? OR CONCAT(p.first_name, ' ', p.last_name) LIKE ?)`
+      );
+      const tokenParams = tokens.flatMap((t) => [`${t}%`, `${t}%`, `%${t}%`]);
+
+      if (isIdQuery) {
+        // Either the exact ID, or a name that happens to contain those digits.
+        conditions.push(`(p.patient_id = ? OR (${tokenClauses.join(' AND ')}))`);
+        params.push(Number(q), ...tokenParams);
+      } else {
+        conditions.push(tokenClauses.join(' AND '));
+        params.push(...tokenParams);
+      }
+    }
+
+    const scope = await buildPatientAccessScope(req);
+    conditions.push(...scope.conditions);
+    params.push(...scope.params);
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    // Relevance: an exact ID hit first, then surname-prefix hits, then the rest.
+    const [rows] = await db.query(
+      `SELECT p.patient_id, p.first_name, p.last_name, p.sex, p.date_of_birth,
+              p.is_unidentified
+       FROM patients p
+       ${where}
+       ORDER BY
+         ${isIdQuery ? 'p.patient_id = ? DESC,' : ''}
+         ${q ? 'p.last_name LIKE ? DESC,' : ''}
+         p.last_name, p.first_name
+       LIMIT ?`,
+      [
+        ...params,
+        ...(isIdQuery ? [Number(q)] : []),
+        ...(q ? [`${q.split(/\s+/)[0]}%`] : []),
+        limit,
+      ]
+    );
+
+    return res.status(200).json({ success: true, data: rows, query: q, limit });
+  } catch (err) {
+    console.error('searchPatients error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
 // GET /api/patients
 const getAllPatients = async (req, res) => {
   const { search, sex, from_date, to_date, page = 1, limit = 20 } = req.query;
@@ -25,10 +187,17 @@ const getAllPatients = async (req, res) => {
     const conditions = [];
     const params     = [];
 
-    // Text search — full name OR patient_id
+    // Text search — full name, or an exact patient_id when the term is all
+    // digits. `patient_id LIKE '%N%'` used to match 1, 11, 21, 100… which is
+    // noise in a filter box; an ID is looked up, not fuzzily matched.
     if (search) {
-      conditions.push("(CONCAT(p.first_name, ' ', p.last_name) LIKE ? OR p.patient_id LIKE ?)");
-      params.push(`%${search}%`, `%${search}%`);
+      if (/^\d+$/.test(String(search).trim())) {
+        conditions.push("(CONCAT(p.first_name, ' ', p.last_name) LIKE ? OR p.patient_id = ?)");
+        params.push(`%${search}%`, Number(search));
+      } else {
+        conditions.push("CONCAT(p.first_name, ' ', p.last_name) LIKE ?");
+        params.push(`%${search}%`);
+      }
     }
 
     // Sex filter — 'Male' | 'Female' | 'Other'
@@ -47,38 +216,18 @@ const getAllPatients = async (req, res) => {
       params.push(to_date);
     }
 
-    // Doctors only see patients they are/were assigned to (doctor_in_charge,
-    // referrals assigned to them, or admissions under their care) — for
-    // continuity of care this includes past as well as active assignments.
-    // Doctor-in-Charge mode (fresh DB read, so admin toggles apply live)
-    // bypasses this scoping entirely; nurse scoping is never bypassed.
-    // Doctors are scoped to their assigned patients. A Doctor-in-Charge (ER
-    // coordinator) also sees currently-unassigned patients. (Fresh DB read —
-    // never trust the JWT for the DIC flag.)
-    if (req.user.role === 'doctor') {
-      const scope = (await isDoctorInCharge(req.user.user_id))
-        ? scopeForDoctorInCharge('p.patient_id', req.user.linked_id, req.user.user_id)
-        : scopeToAssignedPatients('p.patient_id', req.user.linked_id);
-      conditions.push(scope.sql);
-      params.push(...scope.params);
-    }
+    // Role scoping — doctors to their assigned patients (a Doctor-in-Charge
+    // also sees unassigned ones), nurses to patients they registered.
+    // Shared with the typeahead so the two can never diverge.
+    const scope = await buildPatientAccessScope(req);
+    conditions.push(...scope.conditions);
+    params.push(...scope.params);
 
     // Optional "unassigned only" filter (used by the DIC/admin coordination
     // views). AND-composes with the role scope above.
     if (['true', '1'].includes(String(req.query.unassigned))) {
       const cond = unassignedPatientsCondition('p.patient_id');
       conditions.push(cond.sql);
-    }
-
-    // Nurses and staff only see patients they personally registered (issue #10)
-    if (req.user.role === 'nurse' || req.user.role === 'staff') {
-      conditions.push(
-        `p.patient_id IN (
-          SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
-          WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-        )`
-      );
-      params.push(req.user.user_id);
     }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -92,13 +241,14 @@ const getAllPatients = async (req, res) => {
               p.emergency_contact_name, p.emergency_contact_number,
               p.is_unidentified, p.created_at,
               a.status AS admission_status,
+              ${CARE_STATUS_EXPR},
+              ${CARE_STATUS_DETAIL_EXPR},
               rm.room_type, rm.bed_number,
               -- the current admission's doctor; NOT the doctor_in_charge attending
               -- doctor (see getPatientById for the attending_doctor_* fields)
               CONCAT(d.first_name, ' ', d.last_name) AS admitting_doctor
        FROM patients p
-       LEFT JOIN admissions a
-         ON a.patient_id = p.patient_id AND a.status IN ('Pending Room','Active')
+       ${ONGOING_ADMISSION_JOIN}
        LEFT JOIN rooms   rm ON rm.room_id  = a.room_id
        LEFT JOIN doctors d  ON d.doctor_id = a.doctor_id
        ${where}
@@ -138,6 +288,8 @@ const getPatientById = async (req, res) => {
       // doctor_in_charge rows from multiplying the result (same as getAllTriages).
       `SELECT p.*,
               a.status AS admission_status,
+              ${CARE_STATUS_EXPR},
+              ${CARE_STATUS_DETAIL_EXPR},
               rm.room_type, rm.bed_number,
               CONCAT(d.first_name, ' ', d.last_name) AS admitting_doctor,
               adoc.doctor_id AS attending_doctor_id,
@@ -147,8 +299,7 @@ const getPatientById = async (req, res) => {
               adic.status AS assignment_status,
               adic.assigned_by AS assignment_assigned_by
        FROM patients p
-       LEFT JOIN admissions a
-         ON a.patient_id = p.patient_id AND a.status IN ('Pending Room','Active')
+       ${ONGOING_ADMISSION_JOIN}
        LEFT JOIN rooms   rm ON rm.room_id  = a.room_id
        LEFT JOIN doctors d  ON d.doctor_id = a.doctor_id
        LEFT JOIN doctor_in_charge adic ON adic.dic_id = (
@@ -175,8 +326,8 @@ const getPatientById = async (req, res) => {
       }
     }
 
-    // Nurses and staff only see patients they personally registered (issue #10)
-    if (req.user.role === 'nurse' || req.user.role === 'staff') {
+    // Nurses only see patients they personally registered (issue #10)
+    if (req.user.role === 'nurse') {
       const [[nurseAccess]] = await db.query(
         `SELECT 1 AS allowed FROM activity_logs
          WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
@@ -211,8 +362,8 @@ const getPatientHistory = async (req, res) => {
       }
     }
 
-    // Nurses and staff only see history for patients they personally registered (issue #10)
-    if (req.user.role === 'nurse' || req.user.role === 'staff') {
+    // Nurses only see history for patients they personally registered (issue #10)
+    if (req.user.role === 'nurse') {
       const [[nurseAccess]] = await db.query(
         `SELECT 1 AS allowed FROM activity_logs
          WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
@@ -271,6 +422,11 @@ const getPatientHistory = async (req, res) => {
       }
     }
 
+    // Matches on patient_id OR the older diagnosis path. External referrals may
+    // have no diagnosis at all, so the diagnosis-only filter this used to have
+    // would have hidden every transfer-out from the patient's chart. This is
+    // also the ONLY referral read nurses can reach — the /api/referrals
+    // routes are doctor-only — so it is where they see a diversion they logged.
     const [referrals] = await db.query(
       `SELECT r.*, CONCAT(d.first_name, ' ', d.last_name) AS assigned_doctor_name,
               d.specialization,
@@ -279,9 +435,10 @@ const getPatientHistory = async (req, res) => {
        FROM referrals r
        LEFT JOIN doctors d ON r.assigned_doctor_id = d.doctor_id
        LEFT JOIN doctors rd ON r.referring_doctor_id = rd.doctor_id
-       WHERE r.diagnosis_id IN (SELECT diagnosis_id FROM diagnoses WHERE patient_id = ?)
+       WHERE r.patient_id = ?
+          OR r.diagnosis_id IN (SELECT diagnosis_id FROM diagnoses WHERE patient_id = ?)
        ORDER BY r.referral_date DESC`,
-      [id]
+      [id, id]
     );
     const [admissions] = await db.query(
       `SELECT a.*, r.room_type, r.bed_number,
@@ -293,7 +450,31 @@ const getPatientHistory = async (req, res) => {
       [id]
     );
 
-    return res.status(200).json({ success: true, data: { triages, diagnoses, referrals, admissions } });
+    // OPD follow-ups — the outpatient half of the record. Booked automatically
+    // when an admission is discharged, so this is what ties a completed
+    // inpatient stay to the outpatient visit that continues it.
+    const [opd_followups] = await db.query(
+      `SELECT f.followup_id, f.admission_id, f.clinic_id, f.diagnosis_id,
+              f.visit_type, f.followup_date, f.status,
+              f.classified_by, f.routing_basis, f.notes, f.created_at,
+              c.name AS clinic_name, c.specialization AS clinic_specialization,
+              CONCAT(doc.first_name, ' ', doc.last_name) AS doctor_name,
+              dg.medical_condition,
+              a.discharge_date, a.admission_type
+       FROM opd_followups f
+       LEFT JOIN opd_clinics c ON c.clinic_id = f.clinic_id
+       LEFT JOIN doctors doc   ON doc.doctor_id = f.doctor_id
+       LEFT JOIN diagnoses dg  ON dg.diagnosis_id = f.diagnosis_id
+       LEFT JOIN admissions a  ON a.admission_id = f.admission_id
+       WHERE f.patient_id = ?
+       ORDER BY f.followup_date DESC`,
+      [id]
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: { triages, diagnoses, referrals, admissions, opd_followups },
+    });
   } catch (err) {
     console.error('getPatientHistory error:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
@@ -332,6 +513,10 @@ const createPatient = async (req, res) => {
   }
 
   try {
+    // Intake is closed while the hospital has no free bed — see utils/capacity.
+    // Editing an existing patient (updatePatient) is never blocked.
+    if (await rejectIfAtCapacity(res)) return;
+
     const [result] = await db.query(
       `INSERT INTO patients
        (first_name, last_name, sex, date_of_birth, contact_number, address, emergency_contact_name, emergency_contact_number)
@@ -429,10 +614,10 @@ const updatePatient = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Patient not found.' });
     }
 
-    // Nurses and staff may only edit patients they personally registered — the
-    // same ownership check getPatientById applies (this route is nurse/staff
+    // Nurses may only edit patients they personally registered — the
+    // same ownership check getPatientById applies (this route is nurse
     // only, so no doctor branch is needed).
-    if (req.user.role === 'nurse' || req.user.role === 'staff') {
+    if (req.user.role === 'nurse') {
       const [[nurseAccess]] = await db.query(
         `SELECT 1 AS allowed FROM activity_logs
          WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
@@ -473,4 +658,4 @@ const updatePatient = async (req, res) => {
   }
 };
 
-module.exports = { getAllPatients, getPatientById, getPatientHistory, createPatient, updatePatient };
+module.exports = { getAllPatients, searchPatients, getPatientById, getPatientHistory, createPatient, updatePatient };

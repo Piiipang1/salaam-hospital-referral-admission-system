@@ -179,7 +179,7 @@ const doctorInChargeCanAccessPatient = async (doctorId, patientId, { userId = nu
  * copy-pasting it across the diagnoses/referrals handlers.
  *
  * Returns null when access is allowed, or a { status, message } object to send
- * when denied. Roles other than doctor/nurse/staff fall through as allowed —
+ * when denied. Roles other than doctor/nurse fall through as allowed —
  * the clinical routes already gate which roles can reach these handlers.
  *
  * Pass { forWrite: true } from mutation handlers: a Pending assignment proposal
@@ -203,7 +203,7 @@ const assertCanAccessPatient = async (req, patientId, { forWrite = false } = {})
     return allowed ? null : { status: 403, message: 'You are not assigned to this patient.' };
   }
 
-  if (req.user.role === 'nurse' || req.user.role === 'staff') {
+  if (req.user.role === 'nurse') {
     const [[nurseAccess]] = await db.query(
       `SELECT 1 AS allowed FROM activity_logs
        WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'

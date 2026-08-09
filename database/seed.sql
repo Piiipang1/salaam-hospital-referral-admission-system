@@ -13,8 +13,8 @@
 --  doctor  │ doctor3   │ doctor123   │ Dr. Abdullah Maulana (Surgery)
 --  nurse   │ nurse1    │ nurse123    │ Aisha Dimaampao
 --  nurse   │ nurse2    │ nurse123    │ Mariam Sinolinding
---  staff   │ staff1    │ staff123    │ Hassan Mangudadatu
---  staff   │ staff2    │ staff123    │ Karim Balindong
+--  nurse   │ nurse3    │ nurse123    │ Hassan Mangudadatu
+--  nurse   │ nurse4    │ nurse123    │ Karim Balindong
 -- =============================================================================
 
 USE salaam_hospital;
@@ -28,23 +28,29 @@ USE salaam_hospital;
 -- doctor_id: 1=Ahmad Salim, 2=Fatima Hadji, 3=Abdullah Maulana,
 --            4=Zainab Pangandaman, 5=Ibrahim Macabuat
 -- -----------------------------------------------------------------------------
+-- doctor_id 6 and 7 are the headline specialists the referral rules rely on:
+-- a referral is only valid when the receiving doctor's specialization differs
+-- from the referring doctor's, so the seed must contain specialties that a
+-- General/Internal Medicine doctor genuinely cannot cover — heart and eye.
 INSERT INTO doctors (first_name, last_name, specialization, contact_details, employment_status) VALUES
 ('Ahmad',    'Salim',       'General Medicine',    '09171000001', 'Active'),
 ('Fatima',   'Hadji',       'Internal Medicine',   '09171000002', 'Active'),
 ('Abdullah', 'Maulana',     'Surgery',             '09171000003', 'Active'),
 ('Zainab',   'Pangandaman', 'Pediatrics',          '09171000004', 'Active'),
-('Ibrahim',  'Macabuat',    'Emergency Medicine',  '09171000005', 'Active');
+('Ibrahim',  'Macabuat',    'Emergency Medicine',  '09171000005', 'Active'),
+('Nur-Aina', 'Balindong',   'Cardiology',          '09171000101', 'Active'),
+('Yusuf',    'Macapaar',    'Ophthalmology',       '09171000102', 'Active');
 
 
 -- -----------------------------------------------------------------------------
--- employees (5 — nurses and staff linked to user accounts)
+-- employees (5 — nurses linked to user accounts)
 -- employee_id: 1=Aisha, 2=Hassan, 3=Mariam, 4=Karim, 5=Sittie
 -- -----------------------------------------------------------------------------
 INSERT INTO employees (first_name, last_name, role, contact_details, employment_status) VALUES
 ('Aisha',   'Dimaampao',   'nurse', '09181000001', 'Active'),
-('Hassan',  'Mangudadatu', 'staff', '09181000002', 'Active'),
+('Hassan',  'Mangudadatu', 'nurse', '09181000002', 'Active'),
 ('Mariam',  'Sinolinding',  'nurse', '09181000003', 'Active'),
-('Karim',   'Balindong',   'staff', '09181000004', 'Active'),
+('Karim',   'Balindong',   'nurse', '09181000004', 'Active'),
 ('Sittie',  'Ampuan',      'nurse', '09181000005', 'Active');
 
 
@@ -121,7 +127,7 @@ INSERT INTO rooms (room_type, bed_number, availability_status) VALUES
 -- -----------------------------------------------------------------------------
 -- users (8 — one per role type; bcrypt hashes verified with bcryptjs@3.0.3)
 -- user_id: 1=admin, 2=doctor1, 3=doctor2, 4=doctor3,
---           5=nurse1, 6=nurse2, 7=staff1, 8=staff2
+--           5=nurse1, 6=nurse2, 7=nurse3, 8=nurse4
 -- -----------------------------------------------------------------------------
 INSERT INTO users (username, password_hash, role, linked_id, is_active) VALUES
 (
@@ -149,6 +155,20 @@ INSERT INTO users (username, password_hash, role, linked_id, is_active) VALUES
   'doctor', 3, 1
 ),
 (
+  'doctor.cardio',
+  '$2b$10$QHnXJlX52blgSMQdJzZOLOTCr0EfPZFqd9vCJ3OEAEjI0v/3/b922',
+  -- plaintext: doctor123 | linked to doctor_id=6 (Nur-Aina Balindong, Cardiology)
+  -- Headline specialist: referral targets for heart conditions a General or
+  -- Internal Medicine doctor cannot treat.
+  'doctor', 6, 1
+),
+(
+  'doctor.eye',
+  '$2b$10$QHnXJlX52blgSMQdJzZOLOTCr0EfPZFqd9vCJ3OEAEjI0v/3/b922',
+  -- plaintext: doctor123 | linked to doctor_id=7 (Yusuf Macapaar, Ophthalmology)
+  'doctor', 7, 1
+),
+(
   'nurse1',
   '$2b$10$S/Rg0VcJzDODJTEJ0qz0FuE3HotxWpplB6ZPyx56S.O52/SHcLr5G',
   -- plaintext: nurse123 | linked to employee_id=1 (Aisha Dimaampao)
@@ -161,16 +181,16 @@ INSERT INTO users (username, password_hash, role, linked_id, is_active) VALUES
   'nurse', 3, 1
 ),
 (
-  'staff1',
-  '$2b$10$wWFj6X55j49Ou7DxabzCVe1YUtyBmNzOzVh/HzHZsjsVSa/kI5eOC',
-  -- plaintext: staff123 | linked to employee_id=2 (Hassan Mangudadatu)
-  'staff', 2, 1
+  'nurse3',
+  '$2b$10$S/Rg0VcJzDODJTEJ0qz0FuE3HotxWpplB6ZPyx56S.O52/SHcLr5G',
+  -- plaintext: nurse123 | linked to employee_id=2 (Hassan Mangudadatu)
+  'nurse', 2, 1
 ),
 (
-  'staff2',
-  '$2b$10$wWFj6X55j49Ou7DxabzCVe1YUtyBmNzOzVh/HzHZsjsVSa/kI5eOC',
-  -- plaintext: staff123 | linked to employee_id=4 (Karim Balindong)
-  'staff', 4, 1
+  'nurse4',
+  '$2b$10$S/Rg0VcJzDODJTEJ0qz0FuE3HotxWpplB6ZPyx56S.O52/SHcLr5G',
+  -- plaintext: nurse123 | linked to employee_id=4 (Karim Balindong)
+  'nurse', 4, 1
 );
 
 

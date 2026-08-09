@@ -29,6 +29,7 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
     diagnosis_id:        initial.diagnosis_id        ?? diagnosisId ?? '',
     referring_doctor_id: initial.referring_doctor_id ?? '',
     assigned_doctor_id:  initial.assigned_doctor_id  ?? '',
+    remarks:             initial.remarks             ?? '',
   });
   const [file,     setFile]     = useState(null);
   const [fileName, setFileName] = useState('');
@@ -53,7 +54,36 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
   const excludedReferToId = user?.role === 'doctor'
     ? user?.linked_id
     : (form.referring_doctor_id !== '' ? Number(form.referring_doctor_id) : null);
-  const referToDoctors = doctors.filter((d) => Number(d.doctor_id) !== Number(excludedReferToId));
+
+  // The referring doctor's specialty decides who is a valid target: a referral
+  // must reach someone who can treat what this doctor cannot, so colleagues in
+  // the SAME specialty are not referral targets (that is a reassignment).
+  // Backend enforces this too — the filter is UX, and the count below explains
+  // the omission rather than silently shortening the list.
+  const referrer = user?.role === 'doctor'
+    ? selfDoctor
+    : doctors.find((d) => Number(d.doctor_id) === Number(form.referring_doctor_id));
+  const referrerSpecialty = referrer?.specialization?.trim().toLowerCase() ?? null;
+
+  const sameSpecialtyAsReferrer = (d) =>
+    !!referrerSpecialty &&
+    !!d.specialization &&
+    d.specialization.trim().toLowerCase() === referrerSpecialty;
+
+  const candidateDoctors = doctors.filter((d) => Number(d.doctor_id) !== Number(excludedReferToId));
+  const referToDoctors   = candidateDoctors.filter((d) => !sameSpecialtyAsReferrer(d));
+  const hiddenSameSpecialty = candidateDoctors.length - referToDoctors.length;
+
+  // An admin switching "Referred By" can invalidate an already-chosen target
+  // (same specialty as the new referrer). Drop it rather than submit a value the
+  // API will reject and the dropdown no longer shows.
+  useEffect(() => {
+    if (!form.assigned_doctor_id) return;
+    const stillValid = referToDoctors.some(
+      (d) => Number(d.doctor_id) === Number(form.assigned_doctor_id)
+    );
+    if (!stillValid) setForm((f) => ({ ...f, assigned_doctor_id: '' }));
+  }, [form.referring_doctor_id, doctors]);
 
   const fileRef     = useRef(null);
   const canvasRef   = useRef(null);
@@ -177,11 +207,22 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
       setError('Diagnosis and assigned doctor are required.');
       return;
     }
+    // Mirrors the API's rule so the user is told before a round trip.
+    const remarks = form.remarks.trim();
+    if (!remarks) {
+      setError('Notes/Remarks are required — state why this patient needs another doctor.');
+      return;
+    }
+    if (remarks.length < 10) {
+      setError('Notes/Remarks must be at least 10 characters — briefly describe why the referral is needed.');
+      return;
+    }
     setError('');
 
     const fd = new FormData();
     fd.append('diagnosis_id',        String(form.diagnosis_id));
     fd.append('assigned_doctor_id',  String(form.assigned_doctor_id));
+    fd.append('remarks',             remarks);
     if (user?.role !== 'doctor' && form.referring_doctor_id) {
       fd.append('referring_doctor_id', String(form.referring_doctor_id));
     }
@@ -301,7 +342,7 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
         </div>
       )}
 
-      {/* Refer To — the doctor who receives the referral (must differ from Referred By) */}
+      {/* Refer To — must differ from Referred By AND be a different specialty */}
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
         <label htmlFor="rf-assdr">Refer To *</label>
         <select id="rf-assdr" value={form.assigned_doctor_id} onChange={set('assigned_doctor_id')} required>
@@ -312,6 +353,39 @@ const ReferralForm = ({ diagnosisId, diagnoses, initial = {}, onSubmit, loading 
             </option>
           ))}
         </select>
+        {hiddenSameSpecialty > 0 && (
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            {hiddenSameSpecialty} {referrer?.specialization} doctor{hiddenSameSpecialty !== 1 ? 's are' : ' is'} not
+            listed — a referral must reach a specialty that can treat what you cannot.
+          </span>
+        )}
+        {referToDoctors.length === 0 && (
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}>
+            No doctor of another specialty is available to receive this referral.
+          </span>
+        )}
+      </div>
+
+      {/* Notes / Remarks — mandatory. The receiving doctor is picking up a
+          patient they have not been managing; this is where they learn why. */}
+      <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
+        <label htmlFor="rf-remarks">Notes / Remarks *</label>
+        <textarea
+          id="rf-remarks"
+          rows={4}
+          value={form.remarks}
+          onChange={set('remarks')}
+          placeholder="Why does this patient need another specialty? Findings so far, what has been tried, and what you are asking for."
+          required
+        />
+        <span style={{
+          fontSize: 'var(--font-size-xs)',
+          color: form.remarks.trim().length > 0 && form.remarks.trim().length < 10
+            ? 'var(--color-danger)'
+            : 'var(--color-text-muted)',
+        }}>
+          Required — at least 10 characters. {form.remarks.trim().length}/2000
+        </span>
       </div>
 
       {/* ── File attachment (optional) ───────────────────────────── */}

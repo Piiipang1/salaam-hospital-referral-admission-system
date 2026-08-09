@@ -19,6 +19,12 @@ const admissionsRoutes    = require('./routes/admissions.routes');
 const assignmentsRoutes   = require('./routes/assignments.routes');
 const filesRoutes         = require('./routes/files.routes');
 const roomsRoutes         = require('./routes/rooms.routes');
+const extHospitalsRoutes  = require('./routes/externalHospitals.routes');
+const departmentsRoutes   = require('./routes/departments.routes');
+const nursingRoutes       = require('./routes/nursing.routes');
+const endorsementsRoutes  = require('./routes/endorsements.routes');
+const opdRoutes           = require('./routes/opd.routes');
+const { logAlertConfig }  = require('./utils/notifier');
 const doctorsRoutes       = require('./routes/doctors.routes');
 const employeesRoutes     = require('./routes/employees.routes');
 const dashboardRoutes     = require('./routes/dashboard.routes');
@@ -95,6 +101,11 @@ app.use('/api/admissions',    admissionsRoutes);
 app.use('/api/assignments',   assignmentsRoutes);
 app.use('/api/files',         filesRoutes);
 app.use('/api/rooms',         roomsRoutes);
+app.use('/api/external-hospitals', extHospitalsRoutes);
+app.use('/api/departments',   departmentsRoutes);
+app.use('/api/nursing',       nursingRoutes);
+app.use('/api/endorsements',  endorsementsRoutes);
+app.use('/api/opd',           opdRoutes);
 app.use('/api/doctors',       doctorsRoutes);
 app.use('/api/employees',     employeesRoutes);
 app.use('/api/dashboard',     dashboardRoutes);
@@ -128,6 +139,8 @@ app.listen(PORT, () => {
   console.log(`  Health  : http://localhost:${PORT}/api/health`);
   console.log(`  Client  : ${process.env.CLIENT_URL || 'http://localhost:5173'}`);
   console.log(`  DB      : ${process.env.DB_NAME}@${process.env.DB_HOST}`);
+  // A silently-off alert channel is the failure mode worth a startup line.
+  logAlertConfig();
   console.log('─────────────────────────────────────────');
 });
 

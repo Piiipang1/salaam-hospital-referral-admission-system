@@ -1,6 +1,15 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
 const { doctorCanAccessPatient, doctorInChargeCanAccessPatient } = require('../utils/scoping');
+const { rejectIfAtCapacity } = require('../utils/capacity');
+const {
+  CLEARANCE_ITEMS, ITEM_LABELS, ITEM_ROLES, isValidItem,
+  getClearanceState, blockIfNotCleared,
+} = require('../utils/dischargeClearance');
+const {
+  resolveClinicForAdmission, getActiveClinic, validateFollowupDate, defaultFollowupDate,
+} = require('../utils/opdRouting');
+const { resolveDischargeNotificationTargets } = require('../utils/nursing');
 
 // GET /api/admissions
 const getAllAdmissions = async (req, res) => {
@@ -49,7 +58,14 @@ const getAllAdmissions = async (req, res) => {
                 CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
                 CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
                 r.room_type, r.bed_number,
-                CONCAT(e_conf.first_name, ' ', e_conf.last_name) AS confirmed_by_name
+                CONCAT(e_conf.first_name, ' ', e_conf.last_name) AS confirmed_by_name,
+                -- Clearance state, so the list can disable "Confirm Discharge"
+                -- without a round trip per row. ENUM values contain no commas,
+                -- so GROUP_CONCAT is safe to split on the client.
+                (SELECT COUNT(*) FROM discharge_clearance_items ci
+                  WHERE ci.admission_id = a.admission_id) AS cleared_count,
+                (SELECT GROUP_CONCAT(ci.item) FROM discharge_clearance_items ci
+                  WHERE ci.admission_id = a.admission_id) AS cleared_items
          FROM admissions a
          LEFT JOIN patients p ON a.patient_id = p.patient_id
          LEFT JOIN doctors d ON a.doctor_id = d.doctor_id
@@ -139,6 +155,12 @@ const createAdmission = async (req, res) => {
   }
 
   try {
+    // ── Guard: the hospital must have at least one free bed ──────────────────
+    // An admission starts as 'Pending Room', so admitting with zero available
+    // beds only builds an unassignable queue. assignRoom stays the authoritative
+    // atomic claim — this is the early, user-facing refusal.
+    if (await rejectIfAtCapacity(res)) return;
+
     // ── Guard: a doctor may only admit patients assigned or referred to them.
     // A Doctor-in-Charge (live-checked, never from the JWT) may additionally
     // admit currently-unassigned patients — the ER-coordinator flow for new/
@@ -307,14 +329,14 @@ const createAdmission = async (req, res) => {
         ]);
       }
 
-      // 3c. Notify all active nurses/staff that a room needs to be assigned
-      const [staffUsers] = await db.query(
-        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
+      // 3c. Notify all active nurses that a room needs to be assigned
+      const [nurseUsers] = await db.query(
+        "SELECT user_id FROM users WHERE role = 'nurse' AND is_active = 1"
       );
-      const staffMsg = `${patientName} has been admitted and is awaiting room assignment.`;
-      for (const su of staffUsers) {
+      const nurseMsg = `${patientName} has been admitted and is awaiting room assignment.`;
+      for (const su of nurseUsers) {
         if (su.user_id !== req.user.user_id) {
-          notifRows.push([su.user_id, staffMsg, null]);
+          notifRows.push([su.user_id, nurseMsg, null]);
         }
       }
 
@@ -491,27 +513,56 @@ const dischargePatient = async (req, res) => {
       "UPDATE admissions SET status = 'Pending Discharge', discharge_notes = ? WHERE admission_id = ?",
       [discharge_notes?.trim() || null, req.params.id]
     );
+
+    // THIS ACTION IS the doctor's discharge order, so it satisfies that
+    // checklist item directly — a nurse is never asked to assert that a doctor
+    // ordered something. INSERT IGNORE covers re-initiation after a cancel.
+    await db.query(
+      `INSERT IGNORE INTO discharge_clearance_items (admission_id, item, verified_by, notes)
+       VALUES (?, 'DoctorOrder', ?, ?)`,
+      [req.params.id, req.user.user_id, 'Recorded automatically when the discharge was ordered']
+    );
+
     await db.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'admissions', ?)",
       [req.user.user_id, req.params.id]
     );
 
     // ── Respond immediately — notifications are best-effort ───────────────────
-    res.status(200).json({ success: true, message: 'Discharge initiated. Awaiting nurse/staff confirmation.' });
+    res.status(200).json({ success: true, message: 'Discharge initiated. Awaiting nurse confirmation.' });
 
-    // Notify all active nurses to review and confirm
+    // Notify the nurse responsible for this patient — NOT every nurse on shift.
+    // A discharge order that alerts the whole floor is an alert nobody owns, so
+    // it gets dismissed rather than acted on. Targeting falls back to the ward,
+    // and only then to everyone (see resolveDischargeNotificationTargets).
     try {
-      const [nurses] = await db.query(
-        "SELECT user_id FROM users WHERE role IN ('nurse','staff') AND is_active = 1"
-      );
+      const { userIds, basis, departmentName } =
+        await resolveDischargeNotificationTargets(adm.patient_id, adm.room_id);
+
       const roomLabel = adm.room_type ? `${adm.room_type} — ${adm.bed_number}` : 'no room assigned';
-      const notifRows = nurses.map((n) => [
-        n.user_id,
-        `Discharge requested for ${adm.patient_name} — ${roomLabel}. Please review and confirm.`,
-        null,
-      ]);
-      if (notifRows.length > 0) {
-        await db.query('INSERT INTO notifications (user_id, message, referral_id) VALUES ?', [notifRows]);
+
+      // The wording tells the recipient why THEY got it, so a ward-wide or
+      // floor-wide fallback is never mistaken for a personal assignment.
+      const message = {
+        assigned: `Discharge ordered for your patient ${adm.patient_name} — ${roomLabel}. Please complete the clearance checklist and confirm.`,
+        ward:     `Discharge ordered for ${adm.patient_name} — ${roomLabel}. No nurse is currently assigned to this patient, so any ${departmentName ?? 'ward'} nurse can review and confirm.`,
+        all:      `Discharge ordered for ${adm.patient_name} — ${roomLabel}. No assigned nurse or ward nurse could be identified — please review and confirm.`,
+      }[basis];
+
+      if (userIds.length > 0) {
+        await db.query(
+          'INSERT INTO notifications (user_id, message, referral_id) VALUES ?',
+          [userIds.map((id) => [id, message, null])]
+        );
+      }
+
+      // A fallback means the ward roster has a gap worth fixing — surface it
+      // rather than letting the wide alert look like normal routing.
+      if (basis !== 'assigned') {
+        console.warn(
+          `dischargePatient: no assigned nurse for patient ${adm.patient_id}; ` +
+          `notified ${userIds.length} recipient(s) via '${basis}' fallback.`
+        );
       }
     } catch (notifErr) {
       console.warn('dischargePatient: notification insert failed (non-fatal):', notifErr.message);
@@ -525,13 +576,22 @@ const dischargePatient = async (req, res) => {
 
 // Two-step discharge, step 2 (nurse confirms): Pending Discharge → Discharged,
 // discharge_date stamped, room freed.
+//
+// Also the point at which the patient's OPD follow-up is booked. The follow-up
+// is REQUIRED and is written in the same transaction as the discharge, so a
+// discharged patient with no follow-up on record is not a reachable state.
+// Body: { followup_date (required), clinic_id (optional override), followup_notes }
 const confirmDischarge = async (req, res) => {
+  const { followup_date, clinic_id, followup_notes } = req.body ?? {};
+
   try {
     const [admRows] = await db.query(
-      `SELECT a.room_id, a.status, a.doctor_id, a.patient_id,
-              CONCAT(p.first_name, ' ', p.last_name) AS patient_name
+      `SELECT a.room_id, a.status, a.doctor_id, a.patient_id, a.admission_type,
+              CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+              d.specialization
        FROM admissions a
        LEFT JOIN patients p ON a.patient_id = p.patient_id
+       LEFT JOIN doctors  d ON d.doctor_id  = a.doctor_id
        WHERE a.admission_id = ?`,
       [req.params.id]
     );
@@ -543,9 +603,53 @@ const confirmDischarge = async (req, res) => {
       return res.status(409).json({ success: false, message: 'Only admissions pending discharge can be confirmed.' });
     }
 
+    // Validate the follow-up BEFORE opening the transaction — a bad date should
+    // cost nothing and change nothing.
+    const dateError = validateFollowupDate(followup_date);
+    if (dateError) {
+      return res.status(400).json({ success: false, message: dateError, requires_followup: true });
+    }
+
+    // An explicit clinic choice is honoured or rejected — never silently
+    // replaced with a different clinic than the one the nurse picked.
+    let chosenClinic = null;
+    if (clinic_id) {
+      chosenClinic = await getActiveClinic(clinic_id);
+      if (!chosenClinic) {
+        return res.status(400).json({ success: false, message: 'That OPD clinic was not found or is no longer active.' });
+      }
+    }
+
+    // Populated inside the transaction, reported in the response so the UI can
+    // tell the nurse which clinic the patient was routed to.
+    let followupSummary = null;
+
     const connection = await db.getConnection();
     await connection.beginTransaction();
     try {
+      // Re-read the admission under a lock and re-check the checklist INSIDE
+      // the transaction. Checking before opening it would leave a window where
+      // an item is unticked, or a second confirm lands, between the check and
+      // the discharge — and this is the guard that must not be bypassable.
+      const [[locked]] = await connection.query(
+        'SELECT status FROM admissions WHERE admission_id = ? FOR UPDATE',
+        [req.params.id]
+      );
+      if (!locked || locked.status !== 'Pending Discharge') {
+        await connection.rollback(); connection.release();
+        return res.status(409).json({ success: false, message: 'Only admissions pending discharge can be confirmed.' });
+      }
+
+      const blocked = await blockIfNotCleared(req.params.id, connection);
+      if (blocked) {
+        await connection.rollback(); connection.release();
+        return res.status(blocked.status).json({
+          success: false,
+          message: blocked.message,
+          missing: blocked.missing,
+        });
+      }
+
       await connection.query(
         "UPDATE admissions SET status = 'Discharged', discharge_date = NOW(), discharge_confirmed_by = ? WHERE admission_id = ?",
         [req.user.user_id, req.params.id]
@@ -554,9 +658,66 @@ const confirmDischarge = async (req, res) => {
         "UPDATE rooms SET availability_status = 'available' WHERE room_id = ?",
         [adm.room_id]
       );
+      // The patient has left the ward, so the nurse holding them is no longer
+      // responsible. Released in the same transaction as the discharge, so a
+      // discharged patient can never linger on a nurse's active caseload.
+      await connection.query(
+        `UPDATE nurse_assignments SET released_at = NOW(), release_reason = 'Discharged'
+         WHERE patient_id = ? AND released_at IS NULL`,
+        [adm.patient_id]
+      );
+      // ── OPD follow-up routing ───────────────────────────────────────────
+      // Booked inside the discharge transaction: if the follow-up cannot be
+      // written, the discharge does not happen either. That is the whole point
+      // of the requirement — it must not degrade into "discharged, booking
+      // failed silently".
+      //
+      // The clinic is resolved automatically from the attending doctor's
+      // specialization, then the admission type, then the default clinic;
+      // an explicit choice by the nurse overrides all of it.
+      const routed = chosenClinic
+        ? { ...chosenClinic, basis: null }
+        : await resolveClinicForAdmission(adm, connection);
+
+      // Continue the most recent diagnosis, so the follow-up sits on the same
+      // clinical thread rather than floating free of the reason for admission.
+      const [[latestDiagnosis]] = await connection.query(
+        `SELECT diagnosis_id FROM diagnoses
+         WHERE patient_id = ? ORDER BY diagnosis_date DESC LIMIT 1`,
+        [adm.patient_id]
+      );
+
+      const [followupResult] = await connection.query(
+        `INSERT INTO opd_followups
+           (patient_id, admission_id, clinic_id, diagnosis_id, doctor_id,
+            visit_type, followup_date, status, classified_by, routing_basis, notes, created_by)
+         VALUES (?, ?, ?, ?, ?, 'Outpatient', ?, 'Scheduled', ?, ?, ?, ?)`,
+        [
+          adm.patient_id, req.params.id, routed?.clinic_id ?? null,
+          latestDiagnosis?.diagnosis_id ?? null, adm.doctor_id,
+          followup_date,
+          chosenClinic ? 'Manual' : 'Auto',
+          chosenClinic ? null : (routed?.basis ?? null),
+          followup_notes?.trim() || null,
+          req.user.user_id,
+        ]
+      );
+      followupSummary = {
+        followup_id:   followupResult.insertId,
+        clinic_id:     routed?.clinic_id ?? null,
+        clinic_name:   routed?.name ?? null,
+        followup_date,
+        classified_by: chosenClinic ? 'Manual' : 'Auto',
+        routing_basis: chosenClinic ? null : (routed?.basis ?? null),
+      };
+
       await connection.query(
         "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'DISCHARGE', 'admissions', ?)",
         [req.user.user_id, req.params.id]
+      );
+      await connection.query(
+        "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE_OPD_FOLLOWUP', 'opd_followups', ?)",
+        [req.user.user_id, followupResult.insertId]
       );
       await connection.commit();
       connection.release();
@@ -567,7 +728,13 @@ const confirmDischarge = async (req, res) => {
     }
 
     // ── Respond immediately — notifications are best-effort ───────────────────
-    res.status(200).json({ success: true, message: 'Discharge confirmed. Room is now available.' });
+    res.status(200).json({
+      success: true,
+      message: followupSummary?.clinic_name
+        ? `Discharge confirmed. Room is now available. OPD follow-up booked at ${followupSummary.clinic_name} on ${followupSummary.followup_date}.`
+        : 'Discharge confirmed. Room is now available.',
+      followup: followupSummary,
+    });
 
     // Notify the admitting doctor that the discharge was confirmed
     try {
@@ -612,6 +779,15 @@ const cancelDischarge = async (req, res) => {
       "UPDATE admissions SET status = 'Active' WHERE admission_id = ?",
       [req.params.id]
     );
+
+    // The order has been withdrawn, so the item it satisfied must go with it —
+    // otherwise a re-initiated discharge would inherit a stale doctor's order.
+    // Billing and Administrative ticks are kept: that work really was done.
+    await db.query(
+      "DELETE FROM discharge_clearance_items WHERE admission_id = ? AND item = 'DoctorOrder'",
+      [req.params.id]
+    );
+
     await db.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE', 'admissions', ?)",
       [req.user.user_id, req.params.id]
@@ -623,4 +799,202 @@ const cancelDischarge = async (req, res) => {
   }
 };
 
-module.exports = { getAllAdmissions, getAdmissionById, createAdmission, assignRoom, dischargePatient, confirmDischarge, cancelDischarge };
+// GET /api/admissions/:id/followup-suggestion
+// What the OPD routing WOULD choose for this admission, plus the default date.
+// Lets the discharge dialog show the nurse where the patient is being sent
+// before they commit, instead of finding out from the success message.
+const getFollowupSuggestion = async (req, res) => {
+  try {
+    const [[adm]] = await db.query(
+      `SELECT a.admission_id, a.admission_type, a.doctor_id, a.status,
+              CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
+              d.specialization
+       FROM admissions a
+       LEFT JOIN doctors d ON d.doctor_id = a.doctor_id
+       WHERE a.admission_id = ?`,
+      [req.params.id]
+    );
+    if (!adm) {
+      return res.status(404).json({ success: false, message: 'Admission not found.' });
+    }
+
+    const routed = await resolveClinicForAdmission(adm);
+
+    // An already-discharged admission has a real booking; show that instead of
+    // a hypothetical one.
+    const [[existing]] = await db.query(
+      `SELECT f.followup_id, f.followup_date, f.status, f.clinic_id, c.name AS clinic_name
+       FROM opd_followups f
+       LEFT JOIN opd_clinics c ON c.clinic_id = f.clinic_id
+       WHERE f.admission_id = ?`,
+      [req.params.id]
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        admission_id:      adm.admission_id,
+        admission_type:    adm.admission_type,
+        doctor_name:       adm.doctor_name,
+        specialization:    adm.specialization,
+        suggested_clinic:  routed ? { clinic_id: routed.clinic_id, name: routed.name } : null,
+        routing_basis:     routed?.basis ?? null,
+        default_date:      defaultFollowupDate(),
+        existing_followup: existing ?? null,
+      },
+    });
+  } catch (err) {
+    console.error('getFollowupSuggestion error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// ── Pre-discharge clearance checklist ────────────────────────────────────────
+// Billing and Administrative are ticked by whoever does that work (nurse or
+// nurses). DoctorOrder is written automatically when a doctor initiates the
+// discharge and is not offered to nurses — see utils/dischargeClearance.
+
+// GET /api/admissions/:id/clearance — the full checklist, verified or not.
+const getDischargeClearance = async (req, res) => {
+  try {
+    const [[adm]] = await db.query(
+      'SELECT admission_id, status FROM admissions WHERE admission_id = ?',
+      [req.params.id]
+    );
+    if (!adm) {
+      return res.status(404).json({ success: false, message: 'Admission not found.' });
+    }
+
+    const state = await getClearanceState(adm.admission_id);
+    return res.status(200).json({ success: true, data: { ...state, status: adm.status } });
+  } catch (err) {
+    console.error('getDischargeClearance error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// PUT /api/admissions/:id/clearance/:item — mark an item cleared.
+const verifyClearanceItem = async (req, res) => {
+  const { item } = req.params;
+  const { notes } = req.body ?? {};
+
+  if (!isValidItem(item)) {
+    return res.status(400).json({
+      success: false,
+      message: `Unknown clearance item. Expected one of: ${CLEARANCE_ITEMS.join(', ')}.`,
+    });
+  }
+  if (!ITEM_ROLES[item].includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      message: item === 'DoctorOrder'
+        ? "The doctor's discharge order is recorded when a doctor initiates the discharge — it cannot be ticked here."
+        : `Your role cannot clear ${ITEM_LABELS[item]}.`,
+    });
+  }
+  if (notes && String(notes).length > 255) {
+    return res.status(400).json({ success: false, message: 'Notes must be 255 characters or fewer.' });
+  }
+
+  try {
+    const [[adm]] = await db.query(
+      'SELECT admission_id, status FROM admissions WHERE admission_id = ?',
+      [req.params.id]
+    );
+    if (!adm) {
+      return res.status(404).json({ success: false, message: 'Admission not found.' });
+    }
+    // Clearing an already-closed discharge would be recording work on a record
+    // nobody can act on.
+    if (adm.status === 'Discharged') {
+      return res.status(409).json({ success: false, message: 'This patient has already been discharged.' });
+    }
+
+    // Idempotent: re-ticking keeps the original verifier and timestamp rather
+    // than silently rewriting who signed it off.
+    await db.query(
+      `INSERT IGNORE INTO discharge_clearance_items (admission_id, item, verified_by, notes)
+       VALUES (?, ?, ?, ?)`,
+      [adm.admission_id, item, req.user.user_id, notes?.trim() || null]
+    );
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CLEAR_DISCHARGE_ITEM', 'admissions', ?)",
+      [req.user.user_id, adm.admission_id]
+    );
+
+    const state = await getClearanceState(adm.admission_id);
+    return res.status(200).json({
+      success: true,
+      message: state.complete
+        ? `${ITEM_LABELS[item]} cleared. All clearances complete — this patient can now be discharged.`
+        : `${ITEM_LABELS[item]} cleared. ${state.missing.length} item(s) still outstanding.`,
+      data: state,
+    });
+  } catch (err) {
+    console.error('verifyClearanceItem error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// DELETE /api/admissions/:id/clearance/:item — undo a tick made in error.
+const unverifyClearanceItem = async (req, res) => {
+  const { item } = req.params;
+
+  if (!isValidItem(item)) {
+    return res.status(400).json({
+      success: false,
+      message: `Unknown clearance item. Expected one of: ${CLEARANCE_ITEMS.join(', ')}.`,
+    });
+  }
+  if (!ITEM_ROLES[item].includes(req.user.role)) {
+    return res.status(403).json({
+      success: false,
+      message: item === 'DoctorOrder'
+        ? "The doctor's discharge order is withdrawn by cancelling the discharge, not from this checklist."
+        : `Your role cannot change ${ITEM_LABELS[item]}.`,
+    });
+  }
+
+  try {
+    const [[adm]] = await db.query(
+      'SELECT admission_id, status FROM admissions WHERE admission_id = ?',
+      [req.params.id]
+    );
+    if (!adm) {
+      return res.status(404).json({ success: false, message: 'Admission not found.' });
+    }
+    // Once discharged the checklist is the record of why it was allowed.
+    if (adm.status === 'Discharged') {
+      return res.status(409).json({
+        success: false,
+        message: 'This patient has already been discharged — their clearance record cannot be changed.',
+      });
+    }
+
+    await db.query(
+      'DELETE FROM discharge_clearance_items WHERE admission_id = ? AND item = ?',
+      [adm.admission_id, item]
+    );
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UNCLEAR_DISCHARGE_ITEM', 'admissions', ?)",
+      [req.user.user_id, adm.admission_id]
+    );
+
+    const state = await getClearanceState(adm.admission_id);
+    return res.status(200).json({
+      success: true,
+      message: `${ITEM_LABELS[item]} marked outstanding again.`,
+      data: state,
+    });
+  } catch (err) {
+    console.error('unverifyClearanceItem error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+module.exports = {
+  getAllAdmissions, getAdmissionById, createAdmission, assignRoom,
+  dischargePatient, confirmDischarge, cancelDischarge,
+  getDischargeClearance, verifyClearanceItem, unverifyClearanceItem,
+  getFollowupSuggestion,
+};

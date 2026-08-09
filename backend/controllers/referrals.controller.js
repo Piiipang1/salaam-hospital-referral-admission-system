@@ -1,10 +1,17 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
 const { assertCanAccessPatient } = require('../utils/scoping');
+const { getRoomCapacity } = require('../utils/capacity');
+
+// Every referral query resolves the patient the same way. Internal referrals
+// have always reached the patient through their diagnosis; external ones may
+// have no diagnosis at all and carry patient_id directly. The migration
+// backfilled patient_id for pre-existing rows, so the COALESCE covers both.
+const PATIENT_ID_EXPR = 'COALESCE(r.patient_id, diag.patient_id)';
 
 // POST /api/referrals
 const createReferral = async (req, res) => {
-  const { diagnosis_id, assigned_doctor_id, e_signature } = req.body;
+  const { diagnosis_id, assigned_doctor_id, e_signature, remarks } = req.body;
 
   // A doctor is always recorded as their own referrer (cannot spoof another doctor);
   // an admin may create a referral on behalf of a doctor via referring_doctor_id in the body.
@@ -15,6 +22,32 @@ const createReferral = async (req, res) => {
 
   if (!diagnosis_id || !assigned_doctor_id) {
     return res.status(400).json({ success: false, message: 'diagnosis_id and assigned_doctor_id are required.' });
+  }
+
+  // Remarks are mandatory: a referral hands a patient to someone who was not
+  // managing them, and the receiving doctor needs to know WHY without having to
+  // reconstruct it from the chart. Enforced here, not only in the form.
+  const trimmedRemarks = String(remarks ?? '').trim();
+  if (!trimmedRemarks) {
+    return res.status(400).json({
+      success: false,
+      message: 'Notes/Remarks are required — state why this patient needs another doctor.',
+      field: 'remarks',
+    });
+  }
+  if (trimmedRemarks.length < 10) {
+    return res.status(400).json({
+      success: false,
+      message: 'Notes/Remarks must be at least 10 characters — briefly describe why the referral is needed.',
+      field: 'remarks',
+    });
+  }
+  if (trimmedRemarks.length > 2000) {
+    return res.status(400).json({
+      success: false,
+      message: 'Notes/Remarks must be 2000 characters or fewer.',
+      field: 'remarks',
+    });
   }
 
   // e_signature is a base64 PNG data URL from the signature canvas. Cap it before
@@ -49,7 +82,8 @@ const createReferral = async (req, res) => {
 
     // 3. The assigned doctor must exist and be employed (mirrors reassignReferral).
     const [[targetDoctor]] = await db.query(
-      "SELECT doctor_id FROM doctors WHERE doctor_id = ? AND employment_status = 'Active'",
+      `SELECT doctor_id, specialization, CONCAT(first_name, ' ', last_name) AS name
+       FROM doctors WHERE doctor_id = ? AND employment_status = 'Active'`,
       [assigned_doctor_id]
     );
     if (!targetDoctor) {
@@ -66,11 +100,50 @@ const createReferral = async (req, res) => {
       });
     }
 
+    // 5. A referral must reach a doctor who can treat something the referring
+    //    doctor cannot. Two doctors of the SAME specialization can treat the
+    //    same conditions, so handing the case sideways has no clinical basis —
+    //    that is a reassignment, not a referral. Specialization is the only
+    //    signal the schema carries for "what this doctor can treat".
+    //
+    //    Skipped when either specialization is unrecorded: refusing on missing
+    //    data would block legitimate referrals for a reason the user cannot see
+    //    or fix from this form.
+    if (referring_doctor_id != null) {
+      const [[referringDoctor]] = await db.query(
+        `SELECT doctor_id, specialization, CONCAT(first_name, ' ', last_name) AS name
+         FROM doctors WHERE doctor_id = ?`,
+        [referring_doctor_id]
+      );
+
+      const sameSpecialty =
+        referringDoctor?.specialization &&
+        targetDoctor.specialization &&
+        referringDoctor.specialization.trim().toLowerCase() ===
+          targetDoctor.specialization.trim().toLowerCase();
+
+      if (sameSpecialty) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `Dr. ${targetDoctor.name} is also a ${targetDoctor.specialization} specialist, ` +
+            'so this referral would not reach anyone who can treat what you cannot. ' +
+            'Refer to a different specialty, or hand the case over by reassigning it instead.',
+          field: 'assigned_doctor_id',
+          referring_specialization: referringDoctor.specialization,
+          assigned_specialization: targetDoctor.specialization,
+        });
+      }
+    }
+
+    // patient_id is denormalised from the diagnosis so internal and external
+    // referrals share one patient link (see PATIENT_ID_EXPR).
     const [result] = await db.query(
       `INSERT INTO referrals
-         (diagnosis_id, referring_doctor_id, assigned_doctor_id, referral_date, status, file_attachment, e_signature)
-       VALUES (?, ?, ?, NOW(), 'Pending', ?, ?)`,
-      [diagnosis_id, referring_doctor_id || null, assigned_doctor_id, file_attachment, e_signature || null]
+         (diagnosis_id, patient_id, referring_doctor_id, assigned_doctor_id, referral_date, status, remarks, is_external, created_by, file_attachment, e_signature)
+       VALUES (?, ?, ?, ?, NOW(), 'Pending', ?, 0, ?, ?, ?)`,
+      [diagnosis_id, diag.patient_id, referring_doctor_id || null, assigned_doctor_id,
+       trimmedRemarks, req.user.user_id, file_attachment, e_signature || null]
     );
 
     await db.query(
@@ -141,9 +214,219 @@ const createReferral = async (req, res) => {
   }
 };
 
+// POST /api/referrals/external
+// Divert a patient to a hospital OUTSIDE this system — the escape hatch when
+// this facility is at capacity and cannot admit. Unlike an internal referral
+// there is no receiving doctor here, so assigned_doctor_id stays NULL and the
+// destination is picked from the admin-managed external_hospitals directory.
+//
+// Open to doctors, nurses: turning a patient away happens at the
+// intake desk, not only at the bedside. Nurses are linked to `employees`,
+// not `doctors`, so they cannot be the referring_doctor — created_by records
+// who actually wrote the record for them.
+const createExternalReferral = async (req, res) => {
+  const {
+    patient_id, diagnosis_id, external_hospital_id,
+    external_reason, e_signature,
+  } = req.body;
+
+  const file_attachment = req.file ? req.file.filename : null;
+
+  if (!patient_id) {
+    return res.status(400).json({ success: false, message: 'patient_id is required.' });
+  }
+  if (!external_hospital_id) {
+    return res.status(400).json({ success: false, message: 'external_hospital_id is required.' });
+  }
+
+  // Same 2 MB signature cap as createReferral — a real signature is a few KB.
+  if (e_signature && Buffer.byteLength(e_signature, 'utf8') > 2 * 1024 * 1024) {
+    return res.status(400).json({
+      success: false,
+      message: 'Signature image is too large (max 2 MB). Please re-capture a smaller signature.',
+    });
+  }
+
+  try {
+    const [[patient]] = await db.query(
+      "SELECT patient_id, CONCAT(first_name, ' ', last_name) AS patient_name FROM patients WHERE patient_id = ?",
+      [patient_id]
+    );
+    if (!patient) {
+      return res.status(400).json({ success: false, message: 'Patient not found.' });
+    }
+
+    // Doctors stay bound to their own patients (same per-patient scope as every
+    // other clinical write). Nurses are NOT scoped here, matching triage
+    // and room assignment: any nurse on shift may act on any patient at intake.
+    if (req.user.role === 'doctor') {
+      const denied = await assertCanAccessPatient(req, patient.patient_id, { forWrite: true });
+      if (denied) {
+        return res.status(denied.status).json({ success: false, message: denied.message });
+      }
+    }
+
+    // An optional diagnosis must actually belong to this patient — otherwise a
+    // typo'd id would silently attach another patient's clinical record.
+    let linkedDiagnosisId = null;
+    if (diagnosis_id) {
+      const [[diag]] = await db.query(
+        'SELECT diagnosis_id FROM diagnoses WHERE diagnosis_id = ? AND patient_id = ?',
+        [diagnosis_id, patient.patient_id]
+      );
+      if (!diag) {
+        return res.status(400).json({ success: false, message: 'Diagnosis not found for this patient.' });
+      }
+      linkedDiagnosisId = diag.diagnosis_id;
+    }
+
+    // The destination must be a live entry in the directory. A retired one is
+    // refused rather than silently accepted: is_active = 0 means the admin has
+    // said this facility no longer takes our transfers.
+    const [[hospital]] = await db.query(
+      'SELECT hospital_id, name, contact_number, address, is_active FROM external_hospitals WHERE hospital_id = ?',
+      [external_hospital_id]
+    );
+    if (!hospital) {
+      return res.status(400).json({ success: false, message: 'Receiving hospital not found.' });
+    }
+    if (!hospital.is_active) {
+      return res.status(409).json({
+        success: false,
+        message: `${hospital.name} is no longer accepting transfers. Pick another hospital, or ask an admin to reactivate it.`,
+      });
+    }
+
+    // A doctor is always their own referrer; nurses have no doctor_id.
+    const referring_doctor_id = req.user.role === 'doctor' ? req.user.linked_id : null;
+
+    // The external_hospital_* columns are a SNAPSHOT copied from the directory,
+    // not a duplicate to keep in sync: if an admin later corrects this
+    // hospital's phone number, this referral must still show the number the
+    // transfer was actually arranged on.
+    const [result] = await db.query(
+      `INSERT INTO referrals
+         (diagnosis_id, patient_id, referring_doctor_id, assigned_doctor_id, referral_date, status,
+          is_external, external_hospital_id, external_hospital_name, external_hospital_contact,
+          external_hospital_address, external_reason, created_by, file_attachment, e_signature)
+       VALUES (?, ?, ?, NULL, NOW(), 'Pending', 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        linkedDiagnosisId, patient.patient_id, referring_doctor_id,
+        hospital.hospital_id, hospital.name, hospital.contact_number, hospital.address,
+        external_reason?.trim() || null,
+        req.user.user_id, file_attachment, e_signature || null,
+      ]
+    );
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'CREATE_EXTERNAL', 'referrals', ?)",
+      [req.user.user_id, result.insertId]
+    );
+
+    // ── Respond immediately — notifications are best-effort ───────────────────
+    res.status(201).json({
+      success: true,
+      message: `${patient.patient_name} referred to ${hospital.name}.`,
+      referral_id: result.insertId,
+      file_attachment,
+    });
+
+    // ── Post-insert notifications ────────────────────────────────────────────
+    // Diverting a patient is an operational event the whole floor cares about:
+    // admins for oversight, and Doctors-in-Charge because the patient may still
+    // be sitting in their ER coordination queue.
+    try {
+      const message =
+        `${patient.patient_name} has been referred to an external hospital (${hospital.name}). ` +
+        `Referral ID: ${result.insertId}.`;
+
+      const [recipients] = await db.query(
+        `SELECT user_id FROM users
+         WHERE is_active = 1
+           AND (role = 'admin' OR (role = 'doctor' AND is_doctor_in_charge = 1))`
+      );
+
+      const notifRows = [];
+      for (const recipient of recipients) {
+        if (recipient.user_id !== req.user.user_id) {
+          notifRows.push([recipient.user_id, message, result.insertId]);
+        }
+      }
+
+      // The patient's attending doctor, if one has accepted them, should know
+      // their patient is leaving — they are not necessarily an admin or a DIC.
+      const [[attending]] = await db.query(
+        `SELECT u.user_id
+         FROM doctor_in_charge dic
+         JOIN users u ON u.linked_id = dic.doctor_id AND u.role = 'doctor' AND u.is_active = 1
+         WHERE dic.patient_id = ? AND dic.status = 'Accepted'
+         LIMIT 1`,
+        [patient.patient_id]
+      );
+      if (attending && attending.user_id !== req.user.user_id
+          && !notifRows.some((row) => row[0] === attending.user_id)) {
+        notifRows.push([attending.user_id, message, result.insertId]);
+      }
+
+      if (notifRows.length > 0) {
+        await db.query('INSERT INTO notifications (user_id, message, referral_id) VALUES ?', [notifRows]);
+      }
+    } catch (notifErr) {
+      console.warn('createExternalReferral: notification insert failed (non-fatal):', notifErr.message);
+    }
+
+  } catch (err) {
+    console.error('createExternalReferral error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
+// GET /api/referrals/external/context?patient_id=…
+// Everything the external-referral form needs in one round trip: current bed
+// availability (so the form can state WHY the diversion is happening), the
+// active hospital directory to choose a destination from, and the patient's
+// diagnoses for the optional clinical link. Same role set as
+// createExternalReferral, so nurses can open the form.
+const getExternalReferralContext = async (req, res) => {
+  const { patient_id } = req.query;
+
+  try {
+    const capacity = await getRoomCapacity();
+
+    // Retired entries are excluded — createExternalReferral refuses them, so
+    // offering one in the dropdown would only produce a dead end.
+    const [hospitals] = await db.query(
+      `SELECT hospital_id, name, contact_number, address
+       FROM external_hospitals WHERE is_active = 1 ORDER BY name`
+    );
+
+    let diagnoses = [];
+    if (patient_id) {
+      if (req.user.role === 'doctor') {
+        const denied = await assertCanAccessPatient(req, patient_id);
+        if (denied) {
+          return res.status(denied.status).json({ success: false, message: denied.message });
+        }
+      }
+      const [rows] = await db.query(
+        `SELECT diagnosis_id, medical_condition, diagnosis_date
+         FROM diagnoses WHERE patient_id = ?
+         ORDER BY diagnosis_date DESC`,
+        [patient_id]
+      );
+      diagnoses = rows;
+    }
+
+    return res.status(200).json({ success: true, data: { capacity, hospitals, diagnoses } });
+  } catch (err) {
+    console.error('getExternalReferralContext error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
 // GET /api/referrals
 const getAllReferrals = async (req, res) => {
-  const { status, from_date, to_date, page = 1, limit = 20 } = req.query;
+  const { status, from_date, to_date, external, page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
 
   try {
@@ -154,6 +437,12 @@ const getAllReferrals = async (req, res) => {
     if (status) {
       conditions.push('r.status = ?');
       params.push(status);
+    }
+
+    // Optional internal/external filter for the Referrals page tabs.
+    if (external != null && external !== '') {
+      conditions.push('r.is_external = ?');
+      params.push(['true', '1'].includes(String(external)) ? 1 : 0);
     }
 
     // Date range filter on referral_date
@@ -169,9 +458,23 @@ const getAllReferrals = async (req, res) => {
     // Doctors see referrals they are involved in — assigned to them (incoming)
     // OR referred by them (outgoing). Matches the dashboard recent-activity
     // scope so the two lists always show the same population.
+    //
+    // External referrals have no assigned doctor, and when a NURSE recorded one
+    // no referring doctor either — the base scope alone would hide them from
+    // every doctor. So a doctor also sees external referrals they recorded
+    // (created_by), and a Doctor-in-Charge sees all of them, since coordinating
+    // diversions is exactly the DIC role.
     if (req.user.role === 'doctor') {
-      conditions.push('(r.assigned_doctor_id = ? OR r.referring_doctor_id = ?)');
-      params.push(req.user.linked_id, req.user.linked_id);
+      const scopeClauses = [
+        'r.assigned_doctor_id = ?',
+        'r.referring_doctor_id = ?',
+        'r.created_by = ?',
+      ];
+      params.push(req.user.linked_id, req.user.linked_id, req.user.user_id);
+      if (await isDoctorInCharge(req.user.user_id)) {
+        scopeClauses.push('r.is_external = 1');
+      }
+      conditions.push(`(${scopeClauses.join(' OR ')})`);
     }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
@@ -186,7 +489,7 @@ const getAllReferrals = async (req, res) => {
                 diag.medical_condition
          FROM referrals r
          LEFT JOIN diagnoses diag ON r.diagnosis_id = diag.diagnosis_id
-         LEFT JOIN patients p ON diag.patient_id = p.patient_id
+         LEFT JOIN patients p ON p.patient_id = ${PATIENT_ID_EXPR}
          LEFT JOIN doctors ad ON r.assigned_doctor_id = ad.doctor_id
          LEFT JOIN doctors rd ON r.referring_doctor_id = rd.doctor_id
          ${where}
@@ -220,12 +523,16 @@ const getReferralById = async (req, res) => {
               ad.specialization,
               CONCAT(rd.first_name, ' ', rd.last_name) AS referring_doctor_name,
               rd.specialization AS referring_specialization,
-              diag.medical_condition
+              diag.medical_condition,
+              CONCAT(e_cb.first_name, ' ', e_cb.last_name) AS created_by_name,
+              u_cb.role AS created_by_role
        FROM referrals r
        LEFT JOIN diagnoses diag ON r.diagnosis_id = diag.diagnosis_id
-       LEFT JOIN patients p ON diag.patient_id = p.patient_id
+       LEFT JOIN patients p ON p.patient_id = ${PATIENT_ID_EXPR}
        LEFT JOIN doctors ad ON r.assigned_doctor_id = ad.doctor_id
        LEFT JOIN doctors rd ON r.referring_doctor_id = rd.doctor_id
+       LEFT JOIN users u_cb ON u_cb.user_id = r.created_by
+       LEFT JOIN employees e_cb ON u_cb.linked_id = e_cb.employee_id AND u_cb.role = 'nurse'
        WHERE r.referral_id = ?`,
       [req.params.id]
     );
@@ -237,8 +544,11 @@ const getReferralById = async (req, res) => {
     // assigned doctor (Doctor-in-Charge bypasses this).
     if (req.user.role === 'doctor' && !(await isDoctorInCharge(req.user.user_id))) {
       const ref = rows[0];
+      // created_by covers external referrals, which have no assigned doctor and
+      // — when a nurse recorded one — no referring doctor either.
       const isParty = ref.referring_doctor_id === req.user.linked_id
-        || ref.assigned_doctor_id === req.user.linked_id;
+        || ref.assigned_doctor_id === req.user.linked_id
+        || ref.created_by === req.user.user_id;
       if (!isParty) {
         return res.status(403).json({ success: false, message: 'You do not have access to this referral.' });
       }
@@ -269,14 +579,57 @@ const updateReferralStatus = async (req, res) => {
     Cancelled: [],
   };
 
+  // External referrals skip 'Accepted' entirely — no doctor in THIS system
+  // receives them, so there is nobody to accept. The transfer either happens
+  // (Completed) or falls through (Cancelled).
+  const allowedNextExternal = {
+    Pending:   ['Completed', 'Cancelled'],
+    Accepted:  ['Completed', 'Cancelled'],
+    Completed: [],
+    Cancelled: [],
+  };
+
   try {
     // Load current state + parties for the transition/ownership checks
     const [[referral]] = await db.query(
-      'SELECT status, assigned_doctor_id, referring_doctor_id FROM referrals WHERE referral_id = ?',
+      'SELECT status, assigned_doctor_id, referring_doctor_id, is_external, created_by FROM referrals WHERE referral_id = ?',
       [req.params.id]
     );
     if (!referral) {
       return res.status(404).json({ success: false, message: 'Referral not found.' });
+    }
+
+    const isExternal = referral.is_external === 1;
+
+    // ── External branch: different state machine AND different ownership ──────
+    // The parties are whoever arranged the transfer — the referring doctor or
+    // the user who recorded it (a nurse at the intake desk). A DIC may
+    // also resolve one, since they coordinate diversions.
+    if (isExternal) {
+      const nextOptions = allowedNextExternal[referral.status] ?? [];
+      if (!nextOptions.includes(status)) {
+        const message = nextOptions.length
+          ? `Cannot change a ${referral.status} external referral to ${status}. Allowed next status: ${nextOptions.join(' or ')}.`
+          : `This external referral is ${referral.status} and can no longer change status.`;
+        return res.status(409).json({ success: false, message });
+      }
+
+      const isReferrer = req.user.role === 'doctor' && referral.referring_doctor_id === req.user.linked_id;
+      const isRecorder = referral.created_by === req.user.user_id;
+      const isDic      = req.user.role === 'doctor' && await isDoctorInCharge(req.user.user_id);
+      if (!isReferrer && !isRecorder && !isDic) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only the nurse who arranged this transfer, or a Doctor-in-Charge, may update it.',
+        });
+      }
+
+      await db.query('UPDATE referrals SET status = ? WHERE referral_id = ?', [status, req.params.id]);
+      await db.query(
+        "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'UPDATE_STATUS', 'referrals', ?)",
+        [req.user.user_id, req.params.id]
+      );
+      return res.status(200).json({ success: true, message: `External referral marked ${status}.` });
     }
 
     // 1. Transition validity (state machine)
@@ -394,7 +747,7 @@ const getReferralHistory = async (req, res) => {
        FROM referrals r
        LEFT JOIN diagnoses diag ON r.diagnosis_id = diag.diagnosis_id
        LEFT JOIN doctors ad ON r.assigned_doctor_id = ad.doctor_id
-       WHERE diag.patient_id = ?
+       WHERE ${PATIENT_ID_EXPR} = ?
        ORDER BY r.referral_date DESC`,
       [req.params.patient_id]
     );
@@ -419,17 +772,28 @@ const reassignReferral = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Doctor-in-Charge mode required.' });
     }
 
+    // LEFT JOINs + PATIENT_ID_EXPR: an external referral may have no diagnosis,
+    // and the old inner joins would have made it simply "not found" here.
     const [[referral]] = await db.query(
-      `SELECT r.referral_id, r.status, r.referring_doctor_id,
+      `SELECT r.referral_id, r.status, r.referring_doctor_id, r.is_external,
               CONCAT(p.first_name, ' ', p.last_name) AS patient_name
        FROM referrals r
-       JOIN diagnoses dx ON dx.diagnosis_id = r.diagnosis_id
-       JOIN patients p ON p.patient_id = dx.patient_id
+       LEFT JOIN diagnoses dx ON dx.diagnosis_id = r.diagnosis_id
+       LEFT JOIN patients p ON p.patient_id = COALESCE(r.patient_id, dx.patient_id)
        WHERE r.referral_id = ?`,
       [req.params.id]
     );
     if (!referral) {
       return res.status(404).json({ success: false, message: 'Referral not found.' });
+    }
+    // Reassignment moves a referral between doctors in THIS system. An external
+    // referral has no internal assignee; converting one would silently turn a
+    // transfer-out into an internal consult.
+    if (referral.is_external === 1) {
+      return res.status(409).json({
+        success: false,
+        message: 'External referrals cannot be reassigned. Cancel it and create an internal referral instead.',
+      });
     }
     if (!['Pending', 'Accepted'].includes(referral.status)) {
       return res.status(409).json({ success: false, message: 'Only Pending or Accepted referrals can be reassigned.' });
@@ -505,4 +869,13 @@ const reassignReferral = async (req, res) => {
   }
 };
 
-module.exports = { createReferral, getAllReferrals, getReferralById, updateReferralStatus, getReferralHistory, reassignReferral };
+module.exports = {
+  createReferral,
+  createExternalReferral,
+  getExternalReferralContext,
+  getAllReferrals,
+  getReferralById,
+  updateReferralStatus,
+  getReferralHistory,
+  reassignReferral,
+};
