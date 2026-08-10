@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, Siren, BedDouble, Menu,
   Bell, Repeat, DoorOpen, BarChart3, UserCog, ScrollText, LogOut, X,
-  CircleUserRound, ChevronDown,
+  CircleUserRound, ChevronDown, ClipboardList, ArrowLeftRight, Hospital,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import './BottomNav.css';
@@ -36,14 +36,20 @@ const DEFAULT_BAR_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
 ];
 
-// Nav links that appear in the More sheet (role-restricted where noted)
+// Nav links that appear in the More sheet (role-restricted where noted).
+// MUST mirror NAV_ITEMS in Sidebar.jsx — the bottom nav REPLACES the sidebar on
+// mobile, so anything missing here is unreachable on a phone, not merely harder
+// to find. My Ward, Endorsements and External Hospitals were exactly that.
 const SHEET_ITEMS = [
   { to: '/profile',       icon: CircleUserRound, label: 'My Profile' },
   { to: '/triage',        icon: Siren,           label: 'Triage',    roles: ['doctor', 'nurse'] },
+  { to: '/ward',          icon: ClipboardList,   label: 'My Ward',         roles: ['nurse'] },
+  { to: '/endorsements',  icon: ArrowLeftRight,  label: 'Endorsements',    roles: ['nurse'] },
   { to: '/notifications', icon: Bell,       label: 'Notifications'    },
   { to: '/referrals',     icon: Repeat,     label: 'Referrals',       roles: ['doctor'] },
   { to: '/rooms',         icon: DoorOpen,   label: 'Rooms',           roles: ['admin', 'nurse'] },
   { to: '/reports',       icon: BarChart3,  label: 'Reports',         roles: ['admin'] },
+  { to: '/external-hospitals', icon: Hospital, label: 'External Hospitals', roles: ['admin'] },
   { to: '/users',         icon: UserCog,    label: 'User Management', roles: ['admin'] },
   { to: '/audit',         icon: ScrollText, label: 'Audit Trail',     roles: ['admin'] },
 ];

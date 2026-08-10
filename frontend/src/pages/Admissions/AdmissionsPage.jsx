@@ -411,7 +411,7 @@ const AdmissionsPage = () => {
           {/* Current / History tabs */}
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
             {['Current', 'History'].map((t) => (
-              <button key={t} onClick={() => setTab(t)} style={tabButtonStyle(tab === t)}>
+              <button key={t} className="pill-tab" onClick={() => setTab(t)} style={tabButtonStyle(tab === t)}>
                 {t}
               </button>
             ))}
@@ -428,7 +428,7 @@ const AdmissionsPage = () => {
           {/* Admissions / Discharge History tabs */}
           <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
             {['Admissions', 'Discharge History'].map((k) => (
-              <button key={k} onClick={() => setNurseTab(k)} style={tabButtonStyle(nurseTab === k)}>
+              <button key={k} className="pill-tab" onClick={() => setNurseTab(k)} style={tabButtonStyle(nurseTab === k)}>
                 {k}
               </button>
             ))}

@@ -676,3 +676,133 @@ hr {
   .live-dot { animation: none; }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE / TOUCH REFINEMENTS
+   Applies to every role. Added after the ward, endorsement, OPD and
+   clearance screens landed — those introduced denser tables and more
+   in-row buttons than the original layouts assumed.
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  /* iOS Safari auto-zooms the page when a focused control is under 16px,
+     which throws the layout off mid-entry and needs a manual pinch back.
+     The base controls are already 16px; these two overrode it down to 14px. */
+  .filter-select,
+  .filter-date,
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* Raising .filter-date to 16px above makes each date input intrinsically
+     wider, and .filter-date-group is an inline-flex with no wrap — two of them
+     side by side then overflowed the viewport (measured 433px against 375px on
+     Triage). Let the group wrap and the inputs shrink. */
+  .filter-date-group {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .filter-date {
+    flex: 1 1 140px;
+    min-width: 0;
+  }
+  /* Same reasoning for the filter bar as a whole. */
+  .filter-select {
+    max-width: 100%;
+  }
+
+  /* Tables stay wrapping and scroll inside .table-wrapper (already
+     overflow-x:auto). Deliberately NOT forcing nowrap/max-content here: some
+     medical_condition values run to 150+ characters, so a nowrap table would
+     be several thousand pixels wide and unusable. Fewer columns beats wider
+     columns — see the hideMobile flags on each table's low-priority columns. */
+  .table-wrapper {
+    scrollbar-width: thin;
+  }
+
+  /* Keep clinical prose from collapsing to a two-character column when the
+     table is already scrolling. Opt-in per column, not blanket. */
+  .data-table td .cell-prose {
+    display: inline-block;
+    min-width: 150px;
+  }
+
+  /* Row action buttons.
+     Every table's last column is its actions cell, laid out with inline flex
+     styles that reserve 180–340px so buttons stay on one line on desktop
+     (UserManagement even sets flex-wrap:nowrap). On a phone that reservation is
+     precisely what drags the table hundreds of pixels wider than the screen —
+     /users measured 720px against a 375px viewport.
+     Let them wrap instead. !important is required because the widths are inline
+     styles, which no ordinary selector can outrank. */
+  .data-table td:last-child > div {
+    flex-wrap: wrap !important;
+    white-space: normal !important;
+    min-width: 0 !important;
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+}
+
+/* Touch targets. Pointer:coarse rather than a width query, so a small tablet
+   with a stylus/finger gets the same treatment as a phone.
+   44px is the Apple HIG minimum; the previous 34px is comfortably under it,
+   and these screens now stack two or three buttons per table row. */
+@media (pointer: coarse) {
+  .btn--sm {
+    min-height: 44px;
+    padding-inline: var(--space-4);
+  }
+  .data-table td button,
+  .data-table td a {
+    min-height: 44px;
+  }
+  /* Checkbox-style controls in the clearance checklist and endorsement form */
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 22px;
+    min-height: 22px;
+  }
+
+  /* App chrome — the theme and notification buttons sit in the top bar on every
+     screen and are among the most-tapped controls in the app, but were sized
+     for a mouse pointer. */
+  .topbar__theme-btn,
+  .topbar__notif-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Primary page actions ("+ Record Triage", "Shift Endorsements",
+     "Emergency Triage") measured 41px — just under the threshold. */
+  .btn--md,
+  .btn--lg {
+    min-height: 44px;
+  }
+
+  /* Tab strips and filter pills are navigation, tapped as often as any button:
+     the Ward Patients / My Patients and Admissions / Discharge History tabs
+     measured 33px, the triage level filters 38px. */
+  .detail-tab,
+  .triage-level-pill,
+  .pill-tab {
+    min-height: 44px;
+  }
+
+  /* Closing the More sheet was a 28px target in the corner of the screen. */
+  .bottom-nav__sheet-close {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Pagination. The audit pager (also reused by User Management) measured 25px
+     — the smallest interactive control in the app, and one you tap repeatedly
+     while paging through records. */
+  .audit-page-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

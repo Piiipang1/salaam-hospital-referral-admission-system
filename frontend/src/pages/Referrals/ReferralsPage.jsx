@@ -361,6 +361,7 @@ const ReferralsPage = () => {
         {['', ...REFERRAL_STATUSES].map((s) => (
           <button
             key={s || 'all'}
+            className="pill-tab"
             onClick={() => setFilter(s)}
             style={{
               ...pillBase,

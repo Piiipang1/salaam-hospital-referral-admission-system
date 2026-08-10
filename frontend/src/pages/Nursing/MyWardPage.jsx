@@ -81,13 +81,19 @@ const MyWardPage = () => {
           </span>
         </span>
       ) },
-    { key: 'triage_level', label: 'Triage', hideMobile: true,
+    // Triage level stays visible on mobile: on a phone a nurse is scanning for
+    // "who is Critical", and the badge is narrow. Condition and admission
+    // status are the ones that cost width without changing what you do next.
+    { key: 'triage_level', label: 'Triage',
       render: (r) => (r.triage_level ? <Badge status={r.triage_level} /> : '—') },
     { key: 'medical_condition', label: 'Condition', hideMobile: true,
       render: (r) => r.medical_condition || <span className="text-muted">No diagnosis yet</span> },
     { key: 'admission_status', label: 'Status', hideMobile: true,
       render: (r) => <Badge status={r.admission_status} /> },
-    { key: 'assigned_nurse_name', label: 'Assigned Nurse', render: (r) => {
+    // Hidden on mobile: the action button already states ownership — "Release"
+    // means it is yours, "Take Over" means it is not — so this column costs
+    // 140px to repeat what the row already says.
+    { key: 'assigned_nurse_name', label: 'Assigned Nurse', hideMobile: true, render: (r) => {
         if (!r.assigned_nurse_id) return <span className="text-muted">Unassigned</span>;
         const mine = Number(r.assigned_nurse_id) === Number(myEmployeeId);
         return (

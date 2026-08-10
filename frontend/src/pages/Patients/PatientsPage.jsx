@@ -190,8 +190,11 @@ const PatientsPage = () => {
     { key: 'room', label: 'Room', render: (r) => r.room_type
         ? `${r.room_type} — ${r.bed_number}`
         : (r.admission_status === 'Pending Room' ? 'Awaiting room' : '—') },
-    { key: 'sex',            label: 'Sex',       width: '80px', render: (r) => formatPatientSex(r) },
-    { key: 'age',            label: 'Age',       width: '70px', render: (r) => formatPatientAge(r) },
+    // Sex and age are demographic detail, not triage signal — hidden on a phone
+    // so Status and Room (added this session) fit without the list scrolling
+    // sideways. Both remain on the patient's own page.
+    { key: 'sex',            label: 'Sex',       width: '80px', hideMobile: true, render: (r) => formatPatientSex(r) },
+    { key: 'age',            label: 'Age',       width: '70px', hideMobile: true, render: (r) => formatPatientAge(r) },
     { key: 'contact_number', label: 'Contact', hideMobile: true },
     { key: 'created_at',     label: 'Registered', render: (r) => formatDate(r.created_at), hideMobile: true },
     {
