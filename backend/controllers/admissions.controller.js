@@ -385,7 +385,8 @@ const assignRoom = async (req, res) => {
     }
 
     const [room] = await db.query(
-      'SELECT room_type, bed_number, availability_status FROM rooms WHERE room_id = ?',
+      // department_id drives the auto nurse-assignment below.
+      'SELECT room_type, bed_number, availability_status, department_id FROM rooms WHERE room_id = ?',
       [room_id]
     );
     if (room.length === 0) {
@@ -421,6 +422,55 @@ const assignRoom = async (req, res) => {
         await connection.rollback();
         connection.release();
         return res.status(409).json({ success: false, message: 'This admission already has a room assigned.' });
+      }
+
+      // ── Auto-assign the rooming nurse to this patient ─────────────────────
+      // The ward's "My Patients" list is built from active nurse_assignments
+      // rows, and those were only ever created by the manual "Assign to Me"
+      // endpoint or by accepting an endorsement. A patient who had just been
+      // given a bed therefore landed in the ward with nobody attached, showing
+      // as Unassigned to the very nurse who roomed them.
+      //
+      // Same invariants as assignPatient in nursing.controller: nurses only,
+      // and only into their OWN ward. Anything that does not qualify — an admin
+      // assigning the room, a nurse from another ward, a room with no
+      // department — leaves the patient Unassigned rather than failing. Rooming
+      // the patient is what the caller asked for; the assignment is a bonus.
+      if (req.user.role === 'nurse' && req.user.linked_id && room[0].department_id) {
+        // A nurse's linked_id IS their employees.employee_id (see getNurseContext
+        // in utils/nursing, which resolves the employee row by linked_id).
+        const [[actingNurse]] = await connection.query(
+          'SELECT department_id FROM employees WHERE employee_id = ?',
+          [req.user.linked_id]
+        );
+
+        const sameWard =
+          actingNurse?.department_id != null &&
+          Number(actingNurse.department_id) === Number(room[0].department_id);
+
+        if (sameWard) {
+          // Locked read, mirroring assignPatient: if anyone already holds this
+          // patient, skip rather than collide with the unique key on
+          // active_patient_id.
+          const [[current]] = await connection.query(
+            `SELECT assignment_id FROM nurse_assignments
+             WHERE patient_id = ? AND released_at IS NULL LIMIT 1 FOR UPDATE`,
+            [adm.patient_id]
+          );
+
+          if (!current) {
+            await connection.query(
+              `INSERT INTO nurse_assignments (patient_id, nurse_id, department_id, admission_id, assigned_by)
+               VALUES (?, ?, ?, ?, ?)`,
+              [adm.patient_id, req.user.linked_id, room[0].department_id, req.params.id, req.user.user_id]
+            );
+            // target_id is the PATIENT, matching how assignPatient logs it.
+            await connection.query(
+              "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'ASSIGN_NURSE', 'nurse_assignments', ?)",
+              [req.user.user_id, adm.patient_id]
+            );
+          }
+        }
       }
 
       await connection.query(
