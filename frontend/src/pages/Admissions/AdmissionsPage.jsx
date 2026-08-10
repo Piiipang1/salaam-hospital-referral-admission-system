@@ -527,7 +527,11 @@ const AdmissionsPage = () => {
                 onClick={() => {
                   const row = clearanceRow;
                   setClearanceRow(null); setClearanceState(null);
-                  setNurseConfirm(row);
+                  // list row's cleared_items is stale (fetched before these ticks); the
+                  // follow-up modal's isFullyCleared() gate reads it. Hand it a row that
+                  // reflects the checklist we just verified complete. Backend re-checks
+                  // authoritatively, so this cannot discharge an uncleared patient.
+                  setNurseConfirm({ ...row, cleared_items: CLEARANCE_ITEMS.join(',') });
                 }}
               >
                 Continue to Discharge
