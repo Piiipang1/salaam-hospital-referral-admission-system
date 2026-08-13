@@ -84,9 +84,10 @@ const createTriage = async (req, res) => {
     const visitNumber = visitRow.visit_number;
 
     const [result] = await db.query(
-      `INSERT INTO triages (patient_id, employee_id, visit_room_id, triage_level, visit_number, notes, triage_datetime)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [patient_id, employee_id || null, visit_room_id || null, triage_level, visitNumber, notes || null]
+      `INSERT INTO triages (patient_id, employee_id, visit_room_id, triage_level, visit_number, visit_type, notes, triage_datetime)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [patient_id, employee_id || null, visit_room_id || null, triage_level, visitNumber,
+       isDischargedPatient ? 'Outpatient' : 'Inpatient', notes || null]
     );
 
     await db.query(

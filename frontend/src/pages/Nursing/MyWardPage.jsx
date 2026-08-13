@@ -187,6 +187,12 @@ const MyWardPage = () => {
       {error   && <Alert type="error"   message={error}   onDismiss={() => setError('')}   />}
       {success && <Alert type="success" message={success} onDismiss={() => setSuccess('')} />}
 
+      {/* Access model explanation — shown always so the behaviour is never a surprise */}
+      <Alert
+        type="info"
+        message="You can see all patients in your ward. Medical condition details are only visible to the nurse currently assigned to that patient. Access transfers automatically when a shift endorsement is acknowledged."
+      />
+
       <div className="detail-tabs">
         {TABS.map((t) => (
           <button

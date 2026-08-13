@@ -33,6 +33,8 @@ import AdmissionForm from '../../components/forms/AdmissionForm';
 import VitalSignsForm from '../../components/forms/VitalSignsForm';
 import TreatmentForm from '../../components/forms/TreatmentForm';
 import DoctorAssessmentForm from '../../components/forms/DoctorAssessmentForm';
+import PatientPrintView from '../../components/print/PatientPrintView';
+import DiagnosisPrintView from '../../components/print/DiagnosisPrintView';
 import { addVitalSigns } from '../../api/triages.api';
 import './PatientDetailPage.css';
 
@@ -107,6 +109,14 @@ const PatientDetailPage = () => {
   const [labSaving,      setLabSaving]      = useState(false);
   const [labError,       setLabError]       = useState('');
   const labFileRef = useRef(null);
+
+  // Print state
+  // printMode: null | 'full' | number (diagnosis_id for single-diagnosis print)
+  const [printMode, setPrintMode] = useState(null);
+  // Assessment fetched on-demand for single-diagnosis print
+  const [printDiagnosis, setPrintDiagnosis] = useState(null);
+  const [printAssessment, setPrintAssessment] = useState(null);
+  const [printLoading, setPrintLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -518,10 +528,6 @@ const PatientDetailPage = () => {
       {/* Action buttons */}
       <div className="patient-actions">
         {canManageTriage(user?.role) && (() => {
-          // Returning (discharged) patients are a front-door workflow — only an
-          // authorized nurse (ER, and OPD once it exists) may triage them back
-          // in. Non-discharged patients are completely unaffected: any nurse
-          // keeps normal triage access, exactly as before.
           const dischargedTriageBlocked =
             user?.role === 'nurse' && patient?.care_status === 'Discharged' && !canTriageDischarged;
           return (
@@ -543,8 +549,6 @@ const PatientDetailPage = () => {
         {canDiagnose(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('diagnosis')}>+ Diagnosis</Button>}
         {canCreateReferral(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('referral')}>+ Referral</Button>}
         {canUserAdmit(user) && <Button size="sm" variant="secondary" disabled={atCapacity} title={atCapacity ? NO_ROOMS_MESSAGE : undefined} onClick={() => setModal('admission')}>+ Admission</Button>}
-        {/* Appears only at zero availability — the alternative when this
-            facility cannot take the patient. */}
         {atCapacity && canCreateExternalReferral(user?.role) && (
           <Button size="sm" variant="danger"
             title="No beds are free — refer this patient to another hospital"
@@ -552,6 +556,16 @@ const PatientDetailPage = () => {
             Refer to External Hospital
           </Button>
         )}
+        {/* Print whole record — visible to anyone who can see this page */}
+        <Button
+          size="sm"
+          variant="outline"
+          loading={printLoading && printMode === 'full'}
+          onClick={() => setPrintMode('full')}
+          title="Print complete patient medical record"
+        >
+          🖨 Print Record
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -624,9 +638,35 @@ const PatientDetailPage = () => {
           <Card key={d.diagnosis_id} className="detail-item">
             <div className="detail-item__header">
               <p className="font-semibold">{d.medical_condition}</p>
-              {canUploadLabResult(user?.role) && (
-                <Button size="sm" variant="ghost" onClick={() => openLabModal(d.diagnosis_id)}>+ Lab Result</Button>
-              )}
+              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                {canDiagnose(user?.role) && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={printLoading && printMode === d.diagnosis_id}
+                    title="Print this diagnosis with treatments and assessment"
+                    onClick={async () => {
+                      setPrintLoading(true);
+                      setPrintMode(d.diagnosis_id);
+                      try {
+                        const aRes = await getAssessment(d.diagnosis_id);
+                        setPrintDiagnosis(d);
+                        setPrintAssessment(aRes.success ? aRes.data : null);
+                      } catch {
+                        setPrintDiagnosis(d);
+                        setPrintAssessment(null);
+                      } finally {
+                        setPrintLoading(false);
+                      }
+                    }}
+                  >
+                    🖨 Print
+                  </Button>
+                )}
+                {canUploadLabResult(user?.role) && (
+                  <Button size="sm" variant="ghost" onClick={() => openLabModal(d.diagnosis_id)}>+ Lab Result</Button>
+                )}
+              </div>
             </div>
             <p className="text-sm text-muted">Date: {formatDate(d.diagnosis_date, true)}</p>
             {d.treatments?.length > 0 && (
@@ -1090,7 +1130,7 @@ const PatientDetailPage = () => {
                     </span>
                   </div>
                   <p className="text-xs text-muted">{doc.source}</p>
-                  {doc.date && <p className="text-xs text-muted">{formatDate(doc.date)}</p>}
+                  {doc.date && <p className="text-xs text-muted">{formatDate(doc.date, true)}</p>}
                 </div>
                 <a
                   role="button"
@@ -1225,6 +1265,27 @@ const PatientDetailPage = () => {
           </div>
         </form>
       </Modal>
+
+      {/* ── Print: full patient record ── */}
+      {printMode === 'full' && (
+        <PatientPrintView
+          patient={patient}
+          history={history}
+          printedBy={user?.username ?? user?.role ?? 'Staff'}
+          onClose={() => setPrintMode(null)}
+        />
+      )}
+
+      {/* ── Print: single diagnosis ── */}
+      {typeof printMode === 'number' && printDiagnosis && (
+        <DiagnosisPrintView
+          patient={patient}
+          diagnosis={printDiagnosis}
+          assessment={printAssessment}
+          printedBy={user?.username ?? user?.role ?? 'Staff'}
+          onClose={() => { setPrintMode(null); setPrintDiagnosis(null); setPrintAssessment(null); }}
+        />
+      )}
     </div>
   );
 };

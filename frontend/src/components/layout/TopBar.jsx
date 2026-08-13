@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Sun, Moon } from 'lucide-react';
 import { useNotif } from '../../context/NotifContext';
@@ -10,6 +11,16 @@ const TopBar = () => {
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
+  // Real-time clock — updates every second, cleaned up on unmount.
+  const [clockTime, setClockTime] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setClockTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const clockStr = clockTime.toLocaleTimeString('en-PH', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  });
+
   return (
     <header className="topbar">
       {/* Brand — shown only on mobile, where the sidebar (which carries the
@@ -21,6 +32,10 @@ const TopBar = () => {
 
       {/* Page titles live in each page's own .page-header — no duplicate here */}
       <div className="topbar__actions">
+        {/* Live clock */}
+        <span className="topbar__clock" aria-label="Current time" aria-live="off">
+          {clockStr}
+        </span>
         {/* Theme Toggle */}
         <button
           className="topbar__theme-btn"

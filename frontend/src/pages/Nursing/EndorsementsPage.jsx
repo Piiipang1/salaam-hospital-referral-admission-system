@@ -121,6 +121,11 @@ const EndorsementsPage = () => {
         <span style={{ display: 'flex', flexDirection: 'column' }}>
           <span style={{ fontWeight: 600 }}>{e.shift}</span>
           <span className="text-xs text-muted">{formatDate(e.shift_date)}</span>
+          {e.derived_shift && e.derived_shift !== e.shift && (
+            <span className="text-xs" style={{ color: 'var(--color-primary)', marginTop: '2px' }}>
+              Submitted during {e.derived_shift}
+            </span>
+          )}
         </span>
       ) },
     { key: 'nurse', label: isIncoming ? 'From' : 'To',
@@ -130,8 +135,11 @@ const EndorsementsPage = () => {
     { key: 'status', label: 'Status', render: (e) => (
         <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
           <Badge status={e.status === 'Acknowledged' ? 'Completed' : 'Pending'} label={e.status} />
+          <span className="text-xs text-muted">
+            {formatDate(e.created_at, true)}
+          </span>
           {e.status === 'Acknowledged' && (
-            <span className="text-xs text-muted">{formatDate(e.acknowledged_at, true)}</span>
+            <span className="text-xs text-muted">Ack: {formatDate(e.acknowledged_at, true)}</span>
           )}
         </span>
       ) },
@@ -275,10 +283,20 @@ const EndorsementsPage = () => {
               )}
             </div>
 
-            <p className="text-xs text-muted">
-              Submitted {formatDate(detail.created_at, true)}
-              {detail.acknowledged_at ? ` · Acknowledged ${formatDate(detail.acknowledged_at, true)}` : ''}
-            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginTop: 'var(--space-2)' }}>
+              <p className="text-xs text-muted">
+                <strong>Declared shift:</strong> {detail.shift} ({formatDate(detail.shift_date)})
+              </p>
+              {detail.derived_shift && (
+                <p className="text-xs text-muted">
+                  <strong>Submitted during:</strong> {detail.derived_shift} period
+                </p>
+              )}
+              <p className="text-xs text-muted">
+                <strong>Submitted at:</strong> {formatDate(detail.created_at, true)}
+                {detail.acknowledged_at ? ` · Acknowledged ${formatDate(detail.acknowledged_at, true)}` : ''}
+              </p>
+            </div>
 
             {/* Acknowledge only appears for the receiving nurse on a Pending row */}
             {detail.status === 'Pending' && Number(detail.to_nurse_id) === Number(context?.employee_id) && (

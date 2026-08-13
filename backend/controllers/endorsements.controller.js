@@ -175,7 +175,12 @@ const listEndorsements = async (req, res, direction) => {
               CONCAT(tn.first_name, ' ', tn.last_name) AS to_nurse_name,
               d.name AS department_name,
               (SELECT COUNT(*) FROM endorsement_patients ep
-                WHERE ep.endorsement_id = e.endorsement_id) AS patient_count
+                WHERE ep.endorsement_id = e.endorsement_id) AS patient_count,
+              CASE
+                WHEN HOUR(e.created_at) >= 6  AND HOUR(e.created_at) < 14 THEN 'Morning'
+                WHEN HOUR(e.created_at) >= 14 AND HOUR(e.created_at) < 22 THEN 'Afternoon'
+                ELSE 'Night'
+              END AS derived_shift
        FROM endorsements e
        JOIN employees fn ON fn.employee_id = e.from_nurse_id
        JOIN employees tn ON tn.employee_id = e.to_nurse_id
@@ -211,7 +216,12 @@ const getEndorsementById = async (req, res) => {
       `SELECT e.*,
               CONCAT(fn.first_name, ' ', fn.last_name) AS from_nurse_name,
               CONCAT(tn.first_name, ' ', tn.last_name) AS to_nurse_name,
-              d.name AS department_name
+              d.name AS department_name,
+              CASE
+                WHEN HOUR(e.created_at) >= 6  AND HOUR(e.created_at) < 14 THEN 'Morning'
+                WHEN HOUR(e.created_at) >= 14 AND HOUR(e.created_at) < 22 THEN 'Afternoon'
+                ELSE 'Night'
+              END AS derived_shift
        FROM endorsements e
        JOIN employees fn ON fn.employee_id = e.from_nurse_id
        JOIN employees tn ON tn.employee_id = e.to_nurse_id

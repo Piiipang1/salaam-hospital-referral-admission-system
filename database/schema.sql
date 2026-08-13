@@ -253,6 +253,7 @@ CREATE TABLE triages (
     patient_id      INT UNSIGNED    NOT NULL,
     employee_id     INT UNSIGNED    DEFAULT NULL,
     visit_room_id   INT UNSIGNED    DEFAULT NULL,
+    visit_number    INT UNSIGNED    NOT NULL DEFAULT 1,
     triage_level    ENUM('Critical','Urgent','Non-Urgent') NOT NULL,
     visit_type      ENUM('Inpatient','Outpatient') DEFAULT NULL,
     notes           TEXT            DEFAULT NULL,
@@ -311,7 +312,7 @@ CREATE TABLE diagnoses (
     triage_id         INT UNSIGNED    DEFAULT NULL,
     doctor_id         INT UNSIGNED    NOT NULL,
     medical_condition TEXT            NOT NULL,
-    diagnosis_date    DATE            NOT NULL,
+    diagnosis_date    DATETIME        NOT NULL,
     PRIMARY KEY (diagnosis_id),
     CONSTRAINT fk_diagnoses_patient
         FOREIGN KEY (patient_id) REFERENCES patients (patient_id)

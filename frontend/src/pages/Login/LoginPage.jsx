@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Alert from '../../components/ui/Alert';
@@ -12,6 +12,19 @@ const LoginPage = () => {
   const [form, setForm]     = useState({ username: '', password: '' });
   const [error, setError]   = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Real-time clock — updates every second, cleaned up on unmount.
+  const [clockTime, setClockTime] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setClockTime(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const clockStr = clockTime.toLocaleTimeString('en-PH', {
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
+  });
+  const dateStr = clockTime.toLocaleDateString('en-PH', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  });
 
   const handleChange = (e) => {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
@@ -40,10 +53,31 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="login-page">
+    <div className="login-page" style={{ position: 'relative' }}>
       {/* Background decorative circles */}
       <div className="login-page__bg-circle login-page__bg-circle--1" />
       <div className="login-page__bg-circle login-page__bg-circle--2" />
+
+      {/* Clock fixed to top right */}
+      <div className="login-page__clock-container" style={{
+        position: 'absolute',
+        top: 'var(--space-4)',
+        right: 'var(--space-6)',
+        textAlign: 'right',
+        zIndex: 10,
+        background: 'var(--color-surface)',
+        padding: 'var(--space-2) var(--space-4)',
+        borderRadius: 'var(--radius-md)',
+        boxShadow: 'var(--shadow-sm)',
+        border: '1px solid var(--color-border)',
+      }}>
+        <div className="login-page__clock-time" style={{ fontSize: '1.25rem', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+          {clockStr}
+        </div>
+        <div className="login-page__clock-date" style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+          {dateStr}
+        </div>
+      </div>
 
       <div className="login-card">
         {/* Brand */}

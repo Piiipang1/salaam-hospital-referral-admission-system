@@ -55,7 +55,7 @@ const OCCUPYING_STATUSES = ['Active', 'Pending Discharge'];
 // 'OPD' (or 'Outpatient' — whichever the admin actually creates) and add that
 // same string here. Nothing else needs to change; isDischargedTriageDepartment
 // reads this list.
-const DISCHARGED_TRIAGE_DEPARTMENTS = ['Emergency Room'];
+const DISCHARGED_TRIAGE_DEPARTMENTS = ['Emergency Room', 'OPD', 'Outpatient'];
 
 // Case/whitespace-insensitive on purpose: department names are admin-entered
 // free text (departments.name), so 'emergency room ' must still match.
