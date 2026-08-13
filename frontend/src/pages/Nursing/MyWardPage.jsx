@@ -86,8 +86,14 @@ const MyWardPage = () => {
     // status are the ones that cost width without changing what you do next.
     { key: 'triage_level', label: 'Triage',
       render: (r) => (r.triage_level ? <Badge status={r.triage_level} /> : '—') },
+    // The API nulls medical_condition on rows this nurse does not hold, so the
+    // two cases read differently: "no diagnosis recorded" vs "not yours to see".
     { key: 'medical_condition', label: 'Condition', hideMobile: true,
-      render: (r) => r.medical_condition || <span className="text-muted">No diagnosis yet</span> },
+      render: (r) => {
+        const mine = Number(r.assigned_nurse_id) === Number(myEmployeeId);
+        if (!mine) return <span className="text-muted">— not assigned to you</span>;
+        return r.medical_condition || <span className="text-muted">No diagnosis yet</span>;
+      } },
     { key: 'admission_status', label: 'Status', hideMobile: true,
       render: (r) => <Badge status={r.admission_status} /> },
     // Hidden on mobile: the action button already states ownership — "Release"
@@ -196,7 +202,14 @@ const MyWardPage = () => {
       <Table
         columns={columns}
         data={shown}
-        onRowClick={(r) => navigate(`/patients/${r.patient_id}`)}
+        // Presence is visible for every ward patient, but the RECORD follows the
+        // active assignment — so only rows this nurse holds navigate through.
+        // Tapping another nurse's row would otherwise land on a 403 screen.
+        onRowClick={(r) => {
+          if (Number(r.assigned_nurse_id) === Number(myEmployeeId)) {
+            navigate(`/patients/${r.patient_id}`);
+          }
+        }}
         emptyMessage={
           tab === 'My Patients'
             ? 'No patients are assigned to you. Take one from the Ward Patients tab.'

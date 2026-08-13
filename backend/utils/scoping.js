@@ -172,6 +172,78 @@ const doctorInChargeCanAccessPatient = async (doctorId, patientId, { userId = nu
   || (await isPatientUnassigned(patientId))
   || (userId != null && await dicHasPendingProposalFor(userId, patientId));
 
+// ── Nurse access to a patient's MEDICAL RECORD ───────────────────────────────
+// Custody, not authorship. A nurse may open a record when they currently hold
+// the patient (an active nurse_assignments row), NOT because they happened to
+// register them months ago. The registration fallback exists only for the gap
+// between intake and the first assignment — the intake nurse must be able to
+// finish what they started.
+//
+// THE RULE, applied everywhere for role === 'nurse':
+//   (a) an ACTIVE assignment for this patient names me                → allow
+//   (b) NO active assignment exists at all AND I registered them,
+//       OR I received them back as a returning discharged patient
+//       (activity_logs action='RECEIVE_RETURNING', see
+//       nursing.controller receiveReturningPatient)                   → allow
+//   otherwise                                                        → deny
+//
+// Clause (b) switches OFF the moment ANY nurse holds the patient — not just
+// when I do. That is what makes the endorsement handoff actually transfer
+// access: once Nurse 2 acknowledges, Nurse 1 loses the record even though
+// activity_logs still shows they registered the patient.
+//
+// This does NOT govern ward presence (nursing.controller getWardPatients stays
+// department-scoped so every ward nurse still sees who is in which bed).
+//
+// req.user.linked_id is the nurse's employees.employee_id; registration is
+// recorded against req.user.user_id — the two are different keys, which is why
+// both are needed.
+
+/**
+ * @param {object} req Express request (reads req.user.linked_id / user_id)
+ * @param {number|string} patientId
+ * @returns {Promise<boolean>}
+ */
+const nurseCanAccessPatient = async (req, patientId) => {
+  const [[flags]] = await db.query(
+    `SELECT
+       EXISTS(SELECT 1 FROM nurse_assignments
+               WHERE patient_id = ? AND released_at IS NULL AND nurse_id = ?) AS assigned_to_me,
+       EXISTS(SELECT 1 FROM nurse_assignments
+               WHERE patient_id = ? AND released_at IS NULL)                  AS any_active,
+       EXISTS(SELECT 1 FROM activity_logs
+               WHERE user_id = ? AND action IN ('CREATE', 'RECEIVE_RETURNING') AND target_table = 'patients'
+                 AND CAST(target_id AS UNSIGNED) = ?)                         AS i_registered`,
+    [patientId, req.user.linked_id, patientId, req.user.user_id, patientId]
+  );
+  return !!flags.assigned_to_me || (!flags.any_active && !!flags.i_registered);
+};
+
+/**
+ * List-scope form of the same rule, for WHERE clauses.
+ * Returns { sql, params } to AND into a query.
+ *
+ * The NOT IN on the registration branch is what enforces clause (b): a patient
+ * someone else now holds drops out of my list even if I registered them.
+ *
+ * @param {string} patientColumn e.g. 'p.patient_id'
+ * @param {number} nurseEmployeeId req.user.linked_id
+ * @param {number} nurseUserId     req.user.user_id
+ */
+const scopeToNurseAccessiblePatients = (patientColumn, nurseEmployeeId, nurseUserId) => ({
+  sql: `${patientColumn} IN (
+          SELECT patient_id FROM nurse_assignments
+           WHERE released_at IS NULL AND nurse_id = ?
+          UNION
+          SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
+           WHERE user_id = ? AND action IN ('CREATE', 'RECEIVE_RETURNING') AND target_table = 'patients'
+             AND CAST(target_id AS UNSIGNED) NOT IN (
+                   SELECT patient_id FROM nurse_assignments WHERE released_at IS NULL
+                 )
+        )`,
+  params: [nurseEmployeeId, nurseUserId],
+});
+
 /**
  * Per-patient access guard, mirroring patients.controller getPatientById exactly,
  * for any detail/mutation handler that has already resolved a patient_id. Keeps
@@ -204,13 +276,8 @@ const assertCanAccessPatient = async (req, patientId, { forWrite = false } = {})
   }
 
   if (req.user.role === 'nurse') {
-    const [[nurseAccess]] = await db.query(
-      `SELECT 1 AS allowed FROM activity_logs
-       WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
-      [req.user.user_id, patientId]
-    );
-    return nurseAccess ? null : { status: 403, message: 'You do not have access to this patient record.' };
+    const allowed = await nurseCanAccessPatient(req, patientId);
+    return allowed ? null : { status: 403, message: 'You do not have access to this patient record.' };
   }
 
   return null;
@@ -228,4 +295,6 @@ module.exports = {
   isPatientUnassigned,
   doctorInChargeCanAccessPatient,
   assertCanAccessPatient,
+  nurseCanAccessPatient,
+  scopeToNurseAccessiblePatients,
 };

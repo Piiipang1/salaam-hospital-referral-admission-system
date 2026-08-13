@@ -45,6 +45,26 @@ const requireNurseDepartment = async (req, res) => {
 // ward. Discharged patients are gone.
 const OCCUPYING_STATUSES = ['Active', 'Pending Discharge'];
 
+// ── Front-door departments for a returning (discharged) patient ─────────────
+// A discharged patient walking back in is a new episode of care, not a
+// continuation of their old ward stay — so only a front-door department may
+// triage them in. Ward/ICU/Private Room nurses have no reason to be the ones
+// re-opening a closed case.
+//
+// To authorize OPD once it exists: create a department row named exactly
+// 'OPD' (or 'Outpatient' — whichever the admin actually creates) and add that
+// same string here. Nothing else needs to change; isDischargedTriageDepartment
+// reads this list.
+const DISCHARGED_TRIAGE_DEPARTMENTS = ['Emergency Room'];
+
+// Case/whitespace-insensitive on purpose: department names are admin-entered
+// free text (departments.name), so 'emergency room ' must still match.
+const isDischargedTriageDepartment = (departmentName) => {
+  if (!departmentName) return false;
+  const normalized = String(departmentName).trim().toLowerCase();
+  return DISCHARGED_TRIAGE_DEPARTMENTS.some((d) => d.trim().toLowerCase() === normalized);
+};
+
 // ── Discharge-order notification routing ─────────────────────────────────────
 // A discharge order used to notify EVERY active nurse, which
 // made the alert something to dismiss rather than act on. It now goes to the
@@ -107,4 +127,6 @@ module.exports = {
   requireNurseDepartment,
   OCCUPYING_STATUSES,
   resolveDischargeNotificationTargets,
+  DISCHARGED_TRIAGE_DEPARTMENTS,
+  isDischargedTriageDepartment,
 };

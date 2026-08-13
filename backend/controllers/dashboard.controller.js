@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { scopeToNurseAccessiblePatients } = require('../utils/scoping');
 
 // GET /api/dashboard/stats
 const getStats = async (req, res) => {
@@ -79,16 +80,18 @@ const getRecentActivity = async (req, res) => {
       referralParams.push(req.user.linked_id, req.user.linked_id);
     }
 
+    // CHANGED: was "patients I registered". Realigned to the same custody rule
+    // the patient record itself now uses (scopeToNurseAccessiblePatients), so
+    // this panel lists exactly the patients the nurse can actually open — a row
+    // here that 403s when tapped is worse than no row at all.
     if (req.user.role === 'nurse') {
-      admissionWhere = `WHERE a.patient_id IN (
-        SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
-        WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-      )`;
-      admissionParams.push(req.user.user_id);
+      const nurseScope = scopeToNurseAccessiblePatients('a.patient_id', req.user.linked_id, req.user.user_id);
+      admissionWhere = `WHERE ${nurseScope.sql}`;
+      admissionParams.push(...nurseScope.params);
     }
 
     // Recent discharges — same scoping as recent admissions (doctor: their own
-    // admissions; nurse: patients they registered; unscoped), plus the
+    // admissions; nurse: patients they hold or registered-and-unassigned), plus the
     // Discharged status filter. Ordered by discharge_date since that's the
     // event this panel reports, not the original admission_date.
     let dischargeWhere = "WHERE a.status = 'Discharged'";
@@ -99,12 +102,11 @@ const getRecentActivity = async (req, res) => {
       dischargeParams.push(req.user.linked_id);
     }
 
+    // CHANGED: same realignment as recent admissions above.
     if (req.user.role === 'nurse') {
-      dischargeWhere += ` AND a.patient_id IN (
-        SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
-        WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-      )`;
-      dischargeParams.push(req.user.user_id);
+      const nurseScope = scopeToNurseAccessiblePatients('a.patient_id', req.user.linked_id, req.user.user_id);
+      dischargeWhere += ` AND ${nurseScope.sql}`;
+      dischargeParams.push(...nurseScope.params);
     }
 
     const [admissions, referrals, discharges] = await Promise.all([

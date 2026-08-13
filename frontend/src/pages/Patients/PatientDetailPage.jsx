@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { FileText, Image, Paperclip, FlaskConical, ClipboardList } from 'lucide-react';
+import { FileText, Image, Paperclip, FlaskConical, ClipboardList, ChevronDown, ChevronRight } from 'lucide-react';
 import { getPatientById, getPatientHistory, updatePatient } from '../../api/patients.api';
 import { createTriage, assignTriageDoctor } from '../../api/triages.api';
+import { getMyNursingContext } from '../../api/nursing.api';
 import { cancelAssignment } from '../../api/assignments.api';
 import { getActiveDoctors } from '../../api/doctors.api';
 import { createDiagnosis, addLabResult, addTreatment, getAssessment, saveAssessment } from '../../api/diagnoses.api';
@@ -64,10 +65,27 @@ const PatientDetailPage = () => {
   const [success,  setSuccess]  = useState('');
   const [modal,    setModal]    = useState(null); // 'edit'|'triage'|'diagnosis'|'referral'|'admission'|'vitals'
   const [saving,   setSaving]   = useState(false);
-  // Triage reads are hospital-wide for nurses but patient registration
-  // records stay scoped to the registering nurse — a 403 here is expected, not a bug.
+  // Triage reads stay hospital-wide for nurses, but the patient RECORD follows
+  // the active nurse assignment (backend utils/scoping nurseCanAccessPatient),
+  // so a 403 here is expected after a shift handoff, not a bug. Both
+  // getPatientById and getPatientHistory can raise it; Promise.all below means
+  // either one lands in the same catch.
   const [accessDenied, setAccessDenied] = useState(false);
   const [vitalTriageId, setVitalTriageId] = useState(null);
+
+  // Visit grouping (Triage/Diagnoses tabs) — collapsed state keyed by
+  // visit_number ('unlinked' for diagnoses with no triage_id). Undefined means
+  // "use the default" (only the most recent visit starts expanded), so this
+  // stays correct as new data loads without needing to be reset on refresh.
+  const [collapsedVisits, setCollapsedVisits] = useState({});
+
+  // Nurse-only: whether this nurse's department may triage a RETURNING
+  // (discharged) patient — see backend utils/nursing isDischargedTriageDepartment.
+  // Comes from /api/nursing/me, not /auth/me — department is nursing context,
+  // not part of the auth payload. Defaults to true so a non-discharged patient
+  // (the common case) never flickers the button while this loads; the backend
+  // is the actual boundary regardless of what this holds.
+  const [canTriageDischarged, setCanTriageDischarged] = useState(true);
 
   // Attending-doctor assignment (Doctor-in-Charge only). Reuses the existing
   // assignTriageDoctor endpoint, keyed by the patient's latest triage_id taken
@@ -114,6 +132,15 @@ const PatientDetailPage = () => {
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, [id]);
+
+  // Fetch once on mount, nurses only — doctors/admins have no ward department
+  // and this gate never applies to them.
+  useEffect(() => {
+    if (user?.role !== 'nurse') return;
+    getMyNursingContext()
+      .then((res) => { if (res.success) setCanTriageDischarged(!!res.data.can_triage_discharged); })
+      .catch(() => { /* non-fatal: button stays at its default; backend still enforces */ });
+  }, [user?.role]);
 
   const act = (fn, { skipRefresh = false } = {}) => async (data) => {
     setSaving(true);
@@ -217,7 +244,7 @@ const PatientDetailPage = () => {
         <button className="back-link" onClick={() => navigate(-1)}>← Back</button>
         <Alert
           type="warning"
-          message="You don't have access to this patient's registration record — it was registered by another user."
+          message="You don't have access to this patient's record. Records follow the active nurse assignment — the nurse currently responsible for this patient can open it, and it transfers when a shift is endorsed."
         />
       </div>
     );
@@ -245,6 +272,75 @@ const PatientDetailPage = () => {
   const followupByAdmission = Object.fromEntries(
     opdFollowups.filter((f) => f.admission_id).map((f) => [f.admission_id, f])
   );
+
+  // ── Visit grouping (Triage/Diagnoses tabs) ──────────────────────────────
+  // visit_number distinguishes a discharged patient's new episode of care from
+  // their old one (backend: triages.controller createTriage). triages is
+  // already sorted newest-first, so within a group the order is preserved, and
+  // the LAST item in a group is the earliest triage of that visit — the one
+  // whose date the group header shows.
+  const triagesByVisit = {};
+  for (const t of triages) {
+    const vn = t.visit_number ?? 1;
+    (triagesByVisit[vn] ??= []).push(t);
+  }
+  const visitNumbers = Object.keys(triagesByVisit).map(Number).sort((a, b) => b - a);
+  const maxVisitNumber = visitNumbers[0];
+
+  // Diagnoses inherit their visit from the triage that started the encounter
+  // (diagnosis.triage_id). A diagnosis with no triage_id (or one whose triage
+  // no longer resolves) falls into an "Unlinked" section rather than being
+  // silently dropped or mis-grouped.
+  const visitByTriageId = Object.fromEntries(triages.map((t) => [t.triage_id, t.visit_number ?? 1]));
+  const diagnosesByVisit = {};
+  const unlinkedDiagnoses = [];
+  for (const d of diagnoses) {
+    const vn = d.triage_id != null ? visitByTriageId[d.triage_id] : undefined;
+    if (vn == null) { unlinkedDiagnoses.push(d); continue; }
+    (diagnosesByVisit[vn] ??= []).push(d);
+  }
+  const diagnosisVisitNumbers = Object.keys(diagnosesByVisit).map(Number).sort((a, b) => b - a);
+
+  // Treatments, referrals, and admissions don't carry a triage_id of their own,
+  // but they all carry diagnosis_id — so they inherit their visit the same way
+  // diagnoses do, one hop further down the chain.
+  const visitByDiagnosisId = Object.fromEntries(
+    diagnoses
+      .filter((d) => d.triage_id != null && visitByTriageId[d.triage_id] != null)
+      .map((d) => [d.diagnosis_id, visitByTriageId[d.triage_id]])
+  );
+  // Visit grouping headers only earn their keep once a patient actually has a
+  // return visit — a single-visit patient sees the same flat list as before.
+  const isMultiVisit = visitNumbers.length > 1;
+
+  // Only the most recent visit starts expanded; every older one starts
+  // collapsed. `key` is a visit_number for triages/diagnoses, or 'unlinked'.
+  const isVisitCollapsed = (key, defaultExpanded) =>
+    collapsedVisits[key] ?? !defaultExpanded;
+  const toggleVisit = (key, defaultExpanded) =>
+    setCollapsedVisits((c) => ({ ...c, [key]: !(c[key] ?? !defaultExpanded) }));
+
+  const VisitHeader = ({ visitKey, label, dateLabel, defaultExpanded }) => {
+    const collapsed = isVisitCollapsed(visitKey, defaultExpanded);
+    return (
+      <button
+        type="button"
+        onClick={() => toggleVisit(visitKey, defaultExpanded)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+          width: '100%', textAlign: 'left', background: 'var(--color-surface-2)',
+          border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)',
+          padding: 'var(--space-2) var(--space-3)', cursor: 'pointer',
+          fontWeight: 600, fontSize: 'var(--font-size-sm)',
+        }}
+        aria-expanded={!collapsed}
+      >
+        {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+        {label}
+        {dateLabel && <span className="text-xs text-muted" style={{ fontWeight: 400 }}>— {dateLabel}</span>}
+      </button>
+    );
+  };
 
   // assignTriageDoctor is keyed by triage_id, so assignment needs a triage —
   // which matches the precondition (a patient is triaged before being routed to
@@ -290,7 +386,7 @@ const PatientDetailPage = () => {
     }
   };
   const treatments = diagnoses.flatMap((d) =>
-    (d.treatments ?? []).map((tx) => ({ ...tx, medical_condition: d.medical_condition }))
+    (d.treatments ?? []).map((tx) => ({ ...tx, medical_condition: d.medical_condition, diagnosis_id: d.diagnosis_id }))
   );
   const latestDiagnosis = diagnoses[0] ?? null;
 
@@ -415,13 +511,35 @@ const PatientDetailPage = () => {
           <div><span className="info-label">Address</span><span>{patient.address || '—'}</span></div>
           <div><span className="info-label">Emergency Contact</span><span>{patient.emergency_contact_name || '—'}</span></div>
           <div><span className="info-label">Emergency Number</span><span>{patient.emergency_contact_number || '—'}</span></div>
-          <div><span className="info-label">Registered</span><span>{formatDate(patient.created_at)}</span></div>
+          <div><span className="info-label">Registered</span><span>{formatDate(patient.created_at, true)}</span></div>
         </div>
       </Card>
 
       {/* Action buttons */}
       <div className="patient-actions">
-        {canManageTriage(user?.role) && <Button size="sm" variant="primary" disabled={atCapacity} title={atCapacity ? NO_ROOMS_MESSAGE : undefined} onClick={() => setModal('triage')}>+ Triage</Button>}
+        {canManageTriage(user?.role) && (() => {
+          // Returning (discharged) patients are a front-door workflow — only an
+          // authorized nurse (ER, and OPD once it exists) may triage them back
+          // in. Non-discharged patients are completely unaffected: any nurse
+          // keeps normal triage access, exactly as before.
+          const dischargedTriageBlocked =
+            user?.role === 'nurse' && patient?.care_status === 'Discharged' && !canTriageDischarged;
+          return (
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={atCapacity || dischargedTriageBlocked}
+              title={
+                atCapacity ? NO_ROOMS_MESSAGE
+                  : dischargedTriageBlocked ? 'Only ER/OPD nurses can triage a returning patient.'
+                  : undefined
+              }
+              onClick={() => setModal('triage')}
+            >
+              + Triage
+            </Button>
+          );
+        })()}
         {canDiagnose(user?.role) && <Button size="sm" variant="primary" onClick={() => setModal('diagnosis')}>+ Diagnosis</Button>}
         {canCreateReferral(user?.role) && <Button size="sm" variant="secondary" onClick={() => setModal('referral')}>+ Referral</Button>}
         {canUserAdmit(user) && <Button size="sm" variant="secondary" disabled={atCapacity} title={atCapacity ? NO_ROOMS_MESSAGE : undefined} onClick={() => setModal('admission')}>+ Admission</Button>}
@@ -444,95 +562,174 @@ const PatientDetailPage = () => {
       </div>
 
       {/* Tab content */}
-      {tab === 'Triage' && (
-        <div className="detail-list">
-          {triages.length === 0 ? <p className="text-muted">No triage records.</p> : triages.map((t) => (
-            <Card key={t.triage_id} className="detail-item">
-              <div className="detail-item__header">
-                <div className="flex items-center gap-2">
-                  <Badge status={t.triage_level} />
-                  <span className="text-sm text-muted">{formatDate(t.triage_datetime, true)}</span>
-                </div>
-                {canManageTriage(user?.role) && (
-                  <Button size="sm" variant="outline" onClick={() => { setVitalTriageId(t.triage_id); setModal('vitals'); }}>+ Vitals</Button>
-                )}
+      {tab === 'Triage' && (() => {
+        const TriageCard = (t) => (
+          <Card key={t.triage_id} className="detail-item">
+            <div className="detail-item__header">
+              <div className="flex items-center gap-2">
+                <Badge status={t.triage_level} />
+                <span className="text-sm text-muted">{formatDate(t.triage_datetime, true)}</span>
               </div>
-              <p className="text-sm" style={{ marginTop:'var(--space-3)' }}>{t.notes || '—'}</p>
-              {t.blood_pressure && (
-                <div className="vitals-grid">
-                  <span>BP: {t.blood_pressure}</span>
-                  <span>HR: {t.heart_rate} bpm</span>
-                  <span>Temp: {t.temperature}°C</span>
-                  <span>RR: {t.respiratory_rate}/min</span>
-                  <span>Recorded: {formatDate(t.vitals_recorded_at, true)}</span>
-                  {t.vitals_updated_at && <span>Updated: {formatDate(t.vitals_updated_at, true)}</span>}
-                </div>
+              {canManageTriage(user?.role) && (
+                <Button size="sm" variant="outline" onClick={() => { setVitalTriageId(t.triage_id); setModal('vitals'); }}>+ Vitals</Button>
               )}
-            </Card>
-          ))}
-        </div>
-      )}
+            </div>
+            <p className="text-sm" style={{ marginTop:'var(--space-3)' }}>{t.notes || '—'}</p>
+            {t.blood_pressure && (
+              <div className="vitals-grid">
+                <span>BP: {t.blood_pressure}</span>
+                <span>HR: {t.heart_rate} bpm</span>
+                <span>Temp: {t.temperature}°C</span>
+                <span>RR: {t.respiratory_rate}/min</span>
+                <span>Recorded: {formatDate(t.vitals_recorded_at, true)}</span>
+                {t.vitals_updated_at && <span>Updated: {formatDate(t.vitals_updated_at, true)}</span>}
+              </div>
+            )}
+          </Card>
+        );
 
-      {tab === 'Diagnoses' && (
-        <div className="detail-list">
-          {diagnoses.length === 0 ? <p className="text-muted">No diagnoses.</p> : diagnoses.map((d) => (
-            <Card key={d.diagnosis_id} className="detail-item">
-              <div className="detail-item__header">
-                <p className="font-semibold">{d.medical_condition}</p>
-                {canUploadLabResult(user?.role) && (
-                  <Button size="sm" variant="ghost" onClick={() => openLabModal(d.diagnosis_id)}>+ Lab Result</Button>
-                )}
-              </div>
-              <p className="text-sm text-muted">Date: {formatDate(d.diagnosis_date)}</p>
-              {d.treatments?.length > 0 && (
-                <div style={{ marginTop:'var(--space-3)' }}>
-                  <p className="text-sm font-medium" style={{ marginBottom:'var(--space-2)' }}>Treatments:</p>
-                  {d.treatments.map((tx) => (
-                    <p key={tx.treatment_id} className="text-sm text-muted">
-                      {tx.prescribed_medications} — {tx.dosage}, {tx.frequency}, {tx.treatment_duration}
-                    </p>
-                  ))}
+        if (triages.length === 0) return <div className="detail-list"><p className="text-muted">No triage records.</p></div>;
+
+        if (!isMultiVisit) {
+          return <div className="detail-list">{triages.map(TriageCard)}</div>;
+        }
+
+        return (
+          <div className="detail-list">
+            {visitNumbers.map((vn) => {
+              const group = triagesByVisit[vn];
+              const defaultExpanded = vn === maxVisitNumber;
+              const collapsed = isVisitCollapsed(vn, defaultExpanded);
+              // Group is a subset of the newest-first `triages` array, so its
+              // order is preserved — the last item is the earliest of the group.
+              const firstDate = group[group.length - 1].triage_datetime;
+              return (
+                <div key={vn} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <VisitHeader
+                    visitKey={vn}
+                    label={`Visit ${vn}`}
+                    dateLabel={formatDate(firstDate, true)}
+                    defaultExpanded={defaultExpanded}
+                  />
+                  {!collapsed && group.map(TriageCard)}
                 </div>
+              );
+            })}
+          </div>
+        );
+      })()}
+
+      {tab === 'Diagnoses' && (() => {
+        const DiagnosisCard = (d) => (
+          <Card key={d.diagnosis_id} className="detail-item">
+            <div className="detail-item__header">
+              <p className="font-semibold">{d.medical_condition}</p>
+              {canUploadLabResult(user?.role) && (
+                <Button size="sm" variant="ghost" onClick={() => openLabModal(d.diagnosis_id)}>+ Lab Result</Button>
               )}
-              {d.lab_results?.length > 0 && (
-                <div className="lab-results-section">
-                  <p className="text-sm font-medium lab-results-heading">Lab Results:</p>
-                  <div className="lab-results-list">
-                    {d.lab_results.map((lr) => {
-                      const LrIcon = fileIcon(lr.file_attachment);
-                      return (
-                      <div key={lr.lab_result_id} className="lab-result-item">
-                        <span className="lab-result-icon">
-                          <LrIcon size={16} />
-                        </span>
-                        <div className="lab-result-info">
-                          <a
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => openFile(lr.file_attachment)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(lr.file_attachment); } }}
-                            className="lab-result-link"
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {lr.test_type || 'Lab Result'}
-                          </a>
-                          {lr.results && <p className="text-xs text-muted">{lr.results}</p>}
-                          {lr.date_conducted && (
-                            <p className="text-xs text-muted">{formatDate(lr.date_conducted)}</p>
-                          )}
-                        </div>
+            </div>
+            <p className="text-sm text-muted">Date: {formatDate(d.diagnosis_date, true)}</p>
+            {d.treatments?.length > 0 && (
+              <div style={{ marginTop:'var(--space-3)' }}>
+                <p className="text-sm font-medium" style={{ marginBottom:'var(--space-2)' }}>Treatments:</p>
+                {d.treatments.map((tx) => (
+                  <p key={tx.treatment_id} className="text-sm text-muted">
+                    {tx.prescribed_medications} — {tx.dosage}, {tx.frequency}, {tx.treatment_duration}
+                  </p>
+                ))}
+              </div>
+            )}
+            {d.lab_results?.length > 0 && (
+              <div className="lab-results-section">
+                <p className="text-sm font-medium lab-results-heading">Lab Results:</p>
+                <div className="lab-results-list">
+                  {d.lab_results.map((lr) => {
+                    const LrIcon = fileIcon(lr.file_attachment);
+                    return (
+                    <div key={lr.lab_result_id} className="lab-result-item">
+                      <span className="lab-result-icon">
+                        <LrIcon size={16} />
+                      </span>
+                      <div className="lab-result-info">
+                        <a
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => openFile(lr.file_attachment)}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(lr.file_attachment); } }}
+                          className="lab-result-link"
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {lr.test_type || 'Lab Result'}
+                        </a>
+                        {lr.results && <p className="text-xs text-muted">{lr.results}</p>}
+                        {lr.date_conducted && (
+                          <p className="text-xs text-muted">{formatDate(lr.date_conducted, true)}</p>
+                        )}
                       </div>
-                      );
-                    })}
-                  </div>
+                    </div>
+                    );
+                  })}
                 </div>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
+              </div>
+            )}
+          </Card>
+        );
 
-      {tab === 'Treatment Plan' && (
+        if (diagnoses.length === 0) return <div className="detail-list"><p className="text-muted">No diagnoses.</p></div>;
+
+        if (!isMultiVisit) {
+          return <div className="detail-list">{diagnoses.map(DiagnosisCard)}</div>;
+        }
+
+        return (
+          <div className="detail-list">
+            {diagnosisVisitNumbers.map((vn) => {
+              const defaultExpanded = vn === maxVisitNumber;
+              const collapsed = isVisitCollapsed(vn, defaultExpanded);
+              return (
+                <div key={vn} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <VisitHeader visitKey={vn} label={`Visit ${vn}`} defaultExpanded={defaultExpanded} />
+                  {!collapsed && diagnosesByVisit[vn].map(DiagnosisCard)}
+                </div>
+              );
+            })}
+            {unlinkedDiagnoses.length > 0 && (() => {
+              const collapsed = isVisitCollapsed('unlinked', false);
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <VisitHeader visitKey="unlinked" label="Unlinked" defaultExpanded={false} />
+                  {!collapsed && unlinkedDiagnoses.map(DiagnosisCard)}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
+
+      {tab === 'Treatment Plan' && (() => {
+        const TreatmentCard = (tx) => (
+          <Card key={tx.treatment_id} className="detail-item">
+            <div className="detail-item__header">
+              <span className="font-semibold">{tx.prescribed_medications}</span>
+            </div>
+            <p className="text-sm text-muted">Diagnosis: {tx.medical_condition || '—'}</p>
+            <p className="text-sm text-muted">Dosage: {tx.dosage || '—'}</p>
+            <p className="text-sm text-muted">Frequency: {tx.frequency || '—'}</p>
+            <p className="text-sm text-muted">Duration: {tx.treatment_duration || '—'}</p>
+            <p className="text-sm text-muted">Recorded: {formatDate(tx.created_at, true)}</p>
+          </Card>
+        );
+
+        // Same visit-inheritance chain as Diagnoses: treatment → diagnosis_id → visit.
+        const treatmentsByVisit = {};
+        const unlinkedTreatments = [];
+        for (const tx of treatments) {
+          const vn = visitByDiagnosisId[tx.diagnosis_id];
+          if (vn == null) { unlinkedTreatments.push(tx); continue; }
+          (treatmentsByVisit[vn] ??= []).push(tx);
+        }
+
+        return (
         <div className="detail-list">
           {/* ── Doctor Assessment (disposition + clinical notes) ── */}
           <Card className="detail-item">
@@ -564,29 +761,43 @@ const PatientDetailPage = () => {
               <Button size="sm" variant="primary" onClick={() => setModal('treatment')}>+ Add Treatment</Button>
             </div>
           )}
-          {treatments.length === 0 ? <p className="text-muted">No treatment records.</p> : treatments.map((tx) => (
-            <Card key={tx.treatment_id} className="detail-item">
-              <div className="detail-item__header">
-                <span className="font-semibold">{tx.prescribed_medications}</span>
-              </div>
-              <p className="text-sm text-muted">Diagnosis: {tx.medical_condition || '—'}</p>
-              <p className="text-sm text-muted">Dosage: {tx.dosage || '—'}</p>
-              <p className="text-sm text-muted">Frequency: {tx.frequency || '—'}</p>
-              <p className="text-sm text-muted">Duration: {tx.treatment_duration || '—'}</p>
-            </Card>
-          ))}
+          {treatments.length === 0 ? <p className="text-muted">No treatment records.</p> : !isMultiVisit ? (
+            treatments.map(TreatmentCard)
+          ) : (
+            <>
+              {diagnosisVisitNumbers.filter((vn) => treatmentsByVisit[vn]?.length).map((vn) => {
+                const defaultExpanded = vn === maxVisitNumber;
+                const collapsed = isVisitCollapsed(`tx-${vn}`, defaultExpanded);
+                return (
+                  <div key={vn} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                    <VisitHeader visitKey={`tx-${vn}`} label={`Visit ${vn}`} defaultExpanded={defaultExpanded} />
+                    {!collapsed && treatmentsByVisit[vn].map(TreatmentCard)}
+                  </div>
+                );
+              })}
+              {unlinkedTreatments.length > 0 && (() => {
+                const collapsed = isVisitCollapsed('tx-unlinked', false);
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                    <VisitHeader visitKey="tx-unlinked" label="Unlinked" defaultExpanded={false} />
+                    {!collapsed && unlinkedTreatments.map(TreatmentCard)}
+                  </div>
+                );
+              })()}
+            </>
+          )}
         </div>
-      )}
+        );
+      })()}
 
-      {tab === 'Referrals' && (
-        <div className="detail-list">
-          {referrals.length === 0 ? <p className="text-muted">No referral history.</p> : referrals.map((r) => {
-            const RefFileIcon = fileIcon(r.file_attachment);
-            return (
+      {tab === 'Referrals' && (() => {
+        const ReferralCard = (r) => {
+          const RefFileIcon = fileIcon(r.file_attachment);
+          return (
             <Card key={r.referral_id} className="detail-item">
               <div className="detail-item__header">
                 <span>
-                  {r.is_external ? 'External Referral' : 'Referral'} — {formatDate(r.referral_date)}
+                  {r.is_external ? 'External Referral' : 'Referral'} — {formatDate(r.referral_date, true)}
                 </span>
                 <span style={{ display: 'inline-flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                   {/* External transfers must never be mistaken for an internal
@@ -669,35 +880,119 @@ const PatientDetailPage = () => {
                 )}
               </div>
             </Card>
-            );
-          })}
-        </div>
-      )}
+          );
+        };
 
-      {tab === 'Admissions' && (
-        <div className="detail-list">
-          {admissions.length === 0 ? <p className="text-muted">No admission records.</p> : admissions.map((a) => (
-            <Card key={a.admission_id} className="detail-item">
-              <div className="detail-item__header">
-                <span>{a.admission_type} — Room {a.bed_number}</span>
-                <Badge status={a.status} />
-              </div>
-              <p className="text-sm text-muted">Admitted: {formatDate(a.admission_date, true)}</p>
-              {a.discharge_date && <p className="text-sm text-muted">Discharged: {formatDate(a.discharge_date, true)}</p>}
-              {/* The OPD visit this discharge routed the patient to — the link
-                  between the inpatient stay and the outpatient record. */}
-              {followupByAdmission[a.admission_id] && (
-                <p className="text-sm" style={{ marginTop: 'var(--space-1)' }}>
-                  <strong>OPD follow-up:</strong>{' '}
-                  {followupByAdmission[a.admission_id].clinic_name ?? 'Clinic not set'} on{' '}
-                  {formatDate(followupByAdmission[a.admission_id].followup_date)}{' '}
-                  <Badge status={followupByAdmission[a.admission_id].status} />
-                </p>
-              )}
-            </Card>
-          ))}
-        </div>
-      )}
+        // Referrals inherit their visit via diagnosis_id, same as treatments.
+        // External referrals and any referral without a diagnosis land in
+        // "General" rather than being dropped.
+        const referralsByVisit = {};
+        const generalReferrals = [];
+        for (const r of referrals) {
+          const vn = visitByDiagnosisId[r.diagnosis_id];
+          if (vn == null) { generalReferrals.push(r); continue; }
+          (referralsByVisit[vn] ??= []).push(r);
+        }
+
+        if (referrals.length === 0) return <div className="detail-list"><p className="text-muted">No referral history.</p></div>;
+
+        if (!isMultiVisit) {
+          return <div className="detail-list">{referrals.map(ReferralCard)}</div>;
+        }
+
+        return (
+          <div className="detail-list">
+            {diagnosisVisitNumbers.filter((vn) => referralsByVisit[vn]?.length).map((vn) => {
+              const defaultExpanded = vn === maxVisitNumber;
+              const collapsed = isVisitCollapsed(`ref-${vn}`, defaultExpanded);
+              return (
+                <div key={vn} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <VisitHeader visitKey={`ref-${vn}`} label={`Visit ${vn}`} defaultExpanded={defaultExpanded} />
+                  {!collapsed && referralsByVisit[vn].map(ReferralCard)}
+                </div>
+              );
+            })}
+            {generalReferrals.length > 0 && (() => {
+              const collapsed = isVisitCollapsed('ref-general', false);
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <VisitHeader visitKey="ref-general" label="General" defaultExpanded={false} />
+                  {!collapsed && generalReferrals.map(ReferralCard)}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
+
+      {tab === 'Admissions' && (() => {
+        const AdmissionCard = (a) => (
+          <Card key={a.admission_id} className="detail-item">
+            <div className="detail-item__header">
+              <span>{a.admission_type} — Room {a.bed_number}</span>
+              <Badge status={a.status} />
+            </div>
+            <p className="text-sm text-muted">Admitted: {formatDate(a.admission_date, true)}</p>
+            {a.discharge_date && <p className="text-sm text-muted">Discharged: {formatDate(a.discharge_date, true)}</p>}
+            {/* The OPD visit this discharge routed the patient to — the link
+                between the inpatient stay and the outpatient record. */}
+            {followupByAdmission[a.admission_id] && (
+              <p className="text-sm" style={{ marginTop: 'var(--space-1)' }}>
+                <strong>OPD follow-up:</strong>{' '}
+                {followupByAdmission[a.admission_id].clinic_name ?? 'Clinic not set'} on{' '}
+                {formatDate(followupByAdmission[a.admission_id].followup_date)}{' '}
+                <Badge status={followupByAdmission[a.admission_id].status} />
+              </p>
+            )}
+          </Card>
+        );
+
+        // Admissions inherit their visit via diagnosis_id, same as referrals.
+        // A "Pending Room" admission has no diagnosis yet — it lands in "General".
+        const admissionsByVisit = {};
+        const generalAdmissions = [];
+        for (const a of admissions) {
+          const vn = visitByDiagnosisId[a.diagnosis_id];
+          if (vn == null) { generalAdmissions.push(a); continue; }
+          (admissionsByVisit[vn] ??= []).push(a);
+        }
+
+        if (admissions.length === 0) return <div className="detail-list"><p className="text-muted">No admission records.</p></div>;
+
+        if (!isMultiVisit) {
+          return <div className="detail-list">{admissions.map(AdmissionCard)}</div>;
+        }
+
+        return (
+          <div className="detail-list">
+            {diagnosisVisitNumbers.filter((vn) => admissionsByVisit[vn]?.length).map((vn) => {
+              const defaultExpanded = vn === maxVisitNumber;
+              const collapsed = isVisitCollapsed(`adm-${vn}`, defaultExpanded);
+              return (
+                <div key={vn} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <VisitHeader visitKey={`adm-${vn}`} label={`Visit ${vn}`} defaultExpanded={defaultExpanded} />
+                  {!collapsed && admissionsByVisit[vn].map(AdmissionCard)}
+                </div>
+              );
+            })}
+            {generalAdmissions.length > 0 && (() => {
+              const collapsed = isVisitCollapsed('adm-general', false);
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+                  <VisitHeader visitKey="adm-general" label="General" defaultExpanded={false} />
+                  {!collapsed && generalAdmissions.map(AdmissionCard)}
+                </div>
+              );
+            })()}
+          </div>
+        );
+      })()}
+
+      {/* OPD Follow-ups tab is left flat (not grouped by visit): a follow-up
+          links to admission_id, not diagnosis_id, so grouping it would need a
+          second hop (admission → diagnosis → visit) on top of the one
+          Admissions already does, and each card already shows the discharge
+          date of the stay it came from — enough to place it without a header. */}
 
       {/* ── OPD Follow-ups tab ── */}
       {tab === 'OPD Follow-ups' && (
@@ -858,7 +1153,7 @@ const PatientDetailPage = () => {
         <PatientForm initial={cleanedForRegistration} onSubmit={act((d) => updatePatient(id, { ...d, is_unidentified: 0 }))} loading={saving} />
       </Modal>
       <Modal isOpen={modal === 'triage'}    onClose={() => setModal(null)} title="Record Triage"    size="md"><TriageForm    patientId={id}    onSubmit={act(createTriage)}    loading={saving} disabled={atCapacity} /></Modal>
-      <Modal isOpen={modal === 'diagnosis'} onClose={() => setModal(null)} title="Record Diagnosis" size="md"><DiagnosisForm patientId={id}    onSubmit={act(createDiagnosis, { skipRefresh: true })} onComplete={load} loading={saving} /></Modal>
+      <Modal isOpen={modal === 'diagnosis'} onClose={() => setModal(null)} title="Record Diagnosis" size="md"><DiagnosisForm patientId={id} triageId={latestTriageId} onSubmit={act(createDiagnosis, { skipRefresh: true })} onComplete={load} loading={saving} /></Modal>
       {/* Referral modal — ReferralForm builds FormData; act() passes it straight through */}
       <Modal isOpen={modal === 'referral'} onClose={() => setModal(null)} title="Create Referral" size="md">
         <ReferralForm diagnoses={diagnoses} onSubmit={(fd) => act(createReferral)(fd)} loading={saving} />

@@ -67,7 +67,7 @@ const createDiagnosis = async (req, res) => {
 
     const [result] = await connection.query(
       `INSERT INTO diagnoses (patient_id, triage_id, doctor_id, medical_condition, diagnosis_date)
-       VALUES (?, ?, ?, ?, CURDATE())`,
+       VALUES (?, ?, ?, ?, NOW())`,
       [patient_id, triage_id || null, doctor_id, medical_condition]
     );
     diagnosisId = result.insertId;

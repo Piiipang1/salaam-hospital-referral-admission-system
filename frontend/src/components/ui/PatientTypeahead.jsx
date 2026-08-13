@@ -22,11 +22,15 @@ import { PATIENT_SEARCH_DEBOUNCE_MS } from '../../utils/constants';
  * @param {number|string} value        — selected patient_id ('' when none)
  * @param {function}      onChange     — (patient|null) => void
  * @param {string}        initialLabel — preselected patient's name, if any
+ * @param {object}        extraParams  — extra /api/patients/search query params,
+ *                                       e.g. { returning: true } for the
+ *                                       "Receive Returning Patient" picker
  */
 const PatientTypeahead = ({
   value, onChange, initialLabel = '', disabled = false,
   id = 'patient-typeahead', required = false,
   placeholder = 'Search by patient name or ID…',
+  extraParams = {},
 }) => {
   const [query,     setQuery]     = useState(initialLabel);
   const [results,   setResults]   = useState([]);
@@ -48,7 +52,7 @@ const PatientTypeahead = ({
     abortRef.current = controller;
 
     setLoading(true);
-    searchPatients(q, 10, { signal: controller.signal })
+    searchPatients(q, 10, { signal: controller.signal }, extraParams)
       .then((res) => {
         if (controller.signal.aborted) return;
         if (res.success) { setResults(res.data); setHighlight(0); setError(''); }
@@ -60,7 +64,8 @@ const PatientTypeahead = ({
         setError('Search failed. Check your connection and try again.');
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(extraParams)]);
 
   // Debounced query — one request per pause, not per keystroke.
   useEffect(() => {

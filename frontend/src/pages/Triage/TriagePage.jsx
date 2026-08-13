@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Siren } from 'lucide-react';
+import { Siren, UserSearch } from 'lucide-react';
 import { getAllTriages, createTriage, createEmergencyTriage, assignTriageDoctor } from '../../api/triages.api';
 import { cancelAssignment } from '../../api/assignments.api';
 import { getActiveDoctors } from '../../api/doctors.api';
+import { receiveReturningPatient } from '../../api/nursing.api';
 import { useAuth } from '../../context/AuthContext';
 import { useCapacity } from '../../context/CapacityContext';
 import { canManageTriage, canEmergencyTriage } from '../../utils/roleGuard';
@@ -16,6 +17,7 @@ import Modal from '../../components/ui/Modal';
 import Alert from '../../components/ui/Alert';
 import CapacityBanner from '../../components/ui/CapacityBanner';
 import TriageForm from '../../components/forms/TriageForm';
+import PatientTypeahead from '../../components/ui/PatientTypeahead';
 import './TriagePage.css';
 
 const TRIAGE_LEVELS = ['Critical', 'Urgent', 'Non-Urgent'];
@@ -73,6 +75,14 @@ const TriagePage = () => {
   const [emergencySaving, setEmergencySaving] = useState(false);
   const [etDoctors,       setEtDoctors]       = useState([]);
   const [etDoctorsFetching, setEtDoctorsFetching] = useState(true);
+
+  // ── Receive Returning Patient modal state (nurse-only) ───────
+  // Unscoped, Discharged-only search (?returning=true) — this is the front
+  // door taking custody of a record that may belong to nobody right now.
+  const [returningModal,      setReturningModal]      = useState(false);
+  const [returningPatientId,  setReturningPatientId]  = useState('');
+  const [returningSaving,     setReturningSaving]     = useState(false);
+  const [returningError,      setReturningError]      = useState('');
 
   // Fetch active doctors for the coordinator's assign-doctor modal dropdown
   useEffect(() => {
@@ -158,6 +168,24 @@ const TriagePage = () => {
         setError(err.response?.data?.message || 'Assignment failed.');
       }
     } finally { setAssignSaving(false); }
+  };
+
+  // Take custody of a discharged patient's record, then land on their chart to
+  // start the new visit (usually a new triage).
+  const handleReceiveReturning = async () => {
+    if (!returningPatientId) return;
+    setReturningError('');
+    setReturningSaving(true);
+    try {
+      const res = await receiveReturningPatient(returningPatientId);
+      setReturningModal(false);
+      setReturningPatientId('');
+      navigate(`/patients/${res.patient_id}`);
+    } catch (err) {
+      setReturningError(err.response?.data?.message || 'Could not receive this patient.');
+    } finally {
+      setReturningSaving(false);
+    }
   };
 
   // Withdraw a Pending proposal so the patient returns to the coordination queue.
@@ -274,6 +302,15 @@ const TriagePage = () => {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+          {user?.role === 'nurse' && (
+            <Button
+              variant="outline"
+              onClick={() => { setReturningPatientId(''); setReturningError(''); setReturningModal(true); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
+            >
+              <UserSearch size={16} /> Receive Returning Patient
+            </Button>
+          )}
           {canEmergencyTriage(user?.role) && (
             <Button
               variant="danger"
@@ -449,6 +486,32 @@ const TriagePage = () => {
           <Button type="button" variant="secondary" onClick={() => setEmergencyModal(false)}>Cancel</Button>
           <Button type="button" variant="danger" loading={emergencySaving} disabled={atCapacity} onClick={handleEmergencyTriage}>
             Start Emergency Triage
+          </Button>
+        </div>
+      </Modal>
+
+      {/* ── Receive Returning Patient modal (nurse-only) ── */}
+      <Modal isOpen={returningModal} onClose={() => setReturningModal(false)} title="Receive Returning Patient" size="sm">
+        <p className="text-sm text-muted" style={{ marginBottom: 'var(--space-4)' }}>
+          Search for a <strong>discharged</strong> patient who has come back for a new visit. This search
+          covers every discharged patient in the system, not just ones you registered or currently hold.
+          Selecting one gives you access to their record so you can open their chart and record a new triage.
+        </p>
+        {returningError && <Alert type="error" message={returningError} style={{ marginBottom: 'var(--space-4)' }} />}
+        <div className="form-group" style={{ marginBottom: 'var(--space-6)' }}>
+          <label htmlFor="returning-patient-picker">Patient *</label>
+          <PatientTypeahead
+            id="returning-patient-picker"
+            value={returningPatientId}
+            extraParams={{ returning: true }}
+            placeholder="Search discharged patients by name or ID…"
+            onChange={(p) => setReturningPatientId(p?.patient_id ?? '')}
+          />
+        </div>
+        <div className="form-actions">
+          <Button variant="secondary" onClick={() => setReturningModal(false)}>Cancel</Button>
+          <Button variant="primary" onClick={handleReceiveReturning} loading={returningSaving} disabled={!returningPatientId}>
+            Receive
           </Button>
         </div>
       </Modal>

@@ -15,9 +15,12 @@ export const getAllPatients  = (params = {}) => api.get('/api/patients', { param
  * @param {string} q      — name fragment(s) or a patient id; '' returns the first page
  * @param {number} limit  — max rows (default 10, hard cap 25)
  * @param {object} config — extra axios config, e.g. { signal } to cancel a stale keystroke
+ * @param {object} extra  — extra query params, e.g. { returning: true } for the
+ *                          "Receive Returning Patient" picker (nurse-only, unscoped,
+ *                          Discharged patients only — see backend searchPatients)
  */
-export const searchPatients = (q = '', limit = 10, config = {}) =>
-  api.get('/api/patients/search', { params: { q, limit }, ...config }).then(r => r.data);
+export const searchPatients = (q = '', limit = 10, config = {}, extra = {}) =>
+  api.get('/api/patients/search', { params: { q, limit, ...extra }, ...config }).then(r => r.data);
 
 export const getPatientById = (id) => api.get(`/api/patients/${id}`).then(r => r.data);
 export const getPatientHistory = (id) => api.get(`/api/patients/${id}/history`).then(r => r.data);

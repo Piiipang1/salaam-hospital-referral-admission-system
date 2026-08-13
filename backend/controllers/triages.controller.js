@@ -3,6 +3,7 @@ const { isDoctorInCharge } = require('../utils/dic');
 const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition, isPatientUnassigned } = require('../utils/scoping');
 const { rejectIfAtCapacity } = require('../utils/capacity');
 const { createAlert } = require('../utils/alerts');
+const { getNurseContext, isDischargedTriageDepartment } = require('../utils/nursing');
 
 // POST /api/triages
 // Assigning an attending doctor is a Doctor-in-Charge responsibility
@@ -32,10 +33,60 @@ const createTriage = async (req, res) => {
     // blocked: they continue the care of patients already inside.
     if (await rejectIfAtCapacity(res)) return;
 
+    // A discharged patient walking back in is a returning patient, not a
+    // continuation of their old stay. Same "Discharged" definition as
+    // CARE_STATUS_EXPR in patients.controller: no ongoing admission AND at
+    // least one admission that reached 'Discharged'. Reused inline rather than
+    // imported because CARE_STATUS_EXPR is written to run inside a join over
+    // p.patient_id, not as a standalone per-patient boolean.
+    //
+    // Computed unconditionally (not just for nurses) because visit_number below
+    // needs it regardless of who is recording the triage (e.g. an admin on
+    // behalf of an employee).
+    const [[careState]] = await db.query(
+      `SELECT
+         NOT EXISTS (
+           SELECT 1 FROM admissions ad
+           WHERE ad.patient_id = ?
+             AND ad.status IN ('Pending Room','Active','Pending Discharge')
+         ) AS no_ongoing_admission,
+         EXISTS (
+           SELECT 1 FROM admissions ad
+           WHERE ad.patient_id = ? AND ad.status = 'Discharged'
+         ) AS has_discharged_admission`,
+      [patient_id, patient_id]
+    );
+    const isDischargedPatient = !!careState.no_ongoing_admission && !!careState.has_discharged_admission;
+
+    // Only a front-door department (ER, and OPD once one exists) may triage a
+    // discharged patient back in — enforced for nurses only; admins/doctors
+    // recording on behalf of staff are not ward-scoped.
+    if (isDischargedPatient && req.user.role === 'nurse') {
+      const nurse = await getNurseContext(req.user.user_id, req.user.linked_id);
+      if (!isDischargedTriageDepartment(nurse?.department_name)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only Emergency Room/OPD nurses can triage a returning (discharged) patient.',
+        });
+      }
+    }
+
+    // visit_number: a returning (discharged) patient starts a new, higher
+    // visit_number; anyone else's triage joins the visit already in progress
+    // (same number as their most recent triage — COALESCE(...,1) covers a
+    // patient with no prior triage at all).
+    const [[visitRow]] = await db.query(
+      isDischargedPatient
+        ? 'SELECT COALESCE(MAX(visit_number), 0) + 1 AS visit_number FROM triages WHERE patient_id = ?'
+        : 'SELECT COALESCE(MAX(visit_number), 1) AS visit_number FROM triages WHERE patient_id = ?',
+      [patient_id]
+    );
+    const visitNumber = visitRow.visit_number;
+
     const [result] = await db.query(
-      `INSERT INTO triages (patient_id, employee_id, visit_room_id, triage_level, notes, triage_datetime)
-       VALUES (?, ?, ?, ?, ?, NOW())`,
-      [patient_id, employee_id || null, visit_room_id || null, triage_level, notes || null]
+      `INSERT INTO triages (patient_id, employee_id, visit_room_id, triage_level, visit_number, notes, triage_datetime)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [patient_id, employee_id || null, visit_room_id || null, triage_level, visitNumber, notes || null]
     );
 
     await db.query(
@@ -391,6 +442,9 @@ const createEmergencyTriage = async (req, res) => {
   // Emergency triage registers a placeholder patient AND a triage in one step,
   // so the same capacity rule applies — otherwise it would be an open bypass of
   // the registration/triage guards.
+  // Exempt from the discharged-patient department gate below: this always
+  // INSERTs a brand-new placeholder patient (see step 1) and never accepts an
+  // existing patient_id, so it can never target an already-discharged patient.
   try {
     if (await rejectIfAtCapacity(res)) return;
   } catch (capErr) {

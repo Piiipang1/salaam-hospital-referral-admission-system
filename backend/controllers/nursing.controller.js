@@ -1,5 +1,5 @@
 const db = require('../config/db');
-const { getNurseContext, requireNurseDepartment, OCCUPYING_STATUSES } = require('../utils/nursing');
+const { getNurseContext, requireNurseDepartment, OCCUPYING_STATUSES, isDischargedTriageDepartment } = require('../utils/nursing');
 
 // ── Ward roster + patient-to-nurse assignments ───────────────────────────────
 // A nurse's ward is derived, never hand-maintained: patient → admission → room
@@ -90,6 +90,10 @@ const getMyNursingContext = async (req, res) => {
         ward_patients:        wardPatients,
         my_patients:          myPatients,
         pending_endorsements: pendingEndorsements,
+        // UI hint only — createTriage re-checks this server-side, so this can
+        // never be the actual authorization boundary, only what drives the
+        // "+ Triage" button for a discharged patient. false when unassigned.
+        can_triage_discharged: isDischargedTriageDepartment(nurse.department_name),
       },
     });
   } catch (err) {
@@ -119,9 +123,23 @@ const getWardPatients = async (req, res) => {
         : [nurse.department_id, OCCUPYING_STATUSES]
     );
 
+    // Presence vs. record. Every ward nurse legitimately sees WHO is in WHICH
+    // bed — that is what this list is for. The diagnosis text is medical record,
+    // and only the nurse holding the patient should read it here.
+    //
+    // Masked in JS after the query rather than in the SELECT because
+    // WARD_PATIENT_COLUMNS / WARD_PATIENT_JOINS are shared with other callers.
+    // triage_level is deliberately KEPT for everyone: acuity is operational
+    // safety information — any nurse on the floor needs to know who is Critical.
+    const visible = rows.map((row) => (
+      Number(row.assigned_nurse_id) === Number(nurse.employee_id)
+        ? row
+        : { ...row, medical_condition: null }
+    ));
+
     return res.status(200).json({
       success: true,
-      data: rows,
+      data: visible,
       department: { department_id: nurse.department_id, department_name: nurse.department_name },
     });
   } catch (err) {
@@ -302,12 +320,76 @@ const releasePatient = async (req, res) => {
   }
 };
 
+// POST /api/nursing/returning-patient  { patient_id }
+// A discharged patient walking back in belongs to no active assignment and was
+// (most likely) registered months ago by someone else — this is the front
+// door's way of taking custody of that record without touching the original
+// registration or creating a nurse_assignments row (that stays reserved for
+// patients physically admitted to a bed).
+const receiveReturningPatient = async (req, res) => {
+  const { patient_id } = req.body;
+
+  if (!patient_id) {
+    return res.status(400).json({ success: false, message: 'patient_id is required.' });
+  }
+
+  try {
+    const nurse = await requireNurseDepartment(req, res);
+    if (!nurse) return;
+
+    // Same "Discharged" definition as CARE_STATUS_EXPR in patients.controller
+    // and the discharged gate in triages.controller createTriage: no ongoing
+    // admission AND at least one admission that reached 'Discharged'.
+    const [[patient]] = await db.query(
+      `SELECT p.patient_id, CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+         NOT EXISTS (
+           SELECT 1 FROM admissions ad
+           WHERE ad.patient_id = p.patient_id
+             AND ad.status IN ('Pending Room','Active','Pending Discharge')
+         ) AS no_ongoing_admission,
+         EXISTS (
+           SELECT 1 FROM admissions ad
+           WHERE ad.patient_id = p.patient_id AND ad.status = 'Discharged'
+         ) AS has_discharged_admission
+       FROM patients p
+       WHERE p.patient_id = ?`,
+      [patient_id]
+    );
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient not found.' });
+    }
+
+    const isDischarged = !!patient.no_ongoing_admission && !!patient.has_discharged_admission;
+    if (!isDischarged) {
+      return res.status(409).json({
+        success: false,
+        message: 'This patient has an ongoing admission and is not a returning patient.',
+      });
+    }
+
+    await db.query(
+      "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'RECEIVE_RETURNING', 'patients', ?)",
+      [req.user.user_id, patient_id]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `You now have access to ${patient.patient_name}'s record.`,
+      patient_id: patient.patient_id,
+    });
+  } catch (err) {
+    console.error('receiveReturningPatient error:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+};
+
 module.exports = {
   getMyNursingContext,
   getWardPatients,
   getWardNurses,
   assignPatient,
   releasePatient,
+  receiveReturningPatient,
   WARD_PATIENT_COLUMNS,
   WARD_PATIENT_JOINS,
 };

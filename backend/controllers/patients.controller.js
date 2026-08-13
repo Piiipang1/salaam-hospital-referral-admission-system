@@ -1,6 +1,6 @@
 const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
-const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition } = require('../utils/scoping');
+const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition, nurseCanAccessPatient, scopeToNurseAccessiblePatients } = require('../utils/scoping');
 const { rejectIfAtCapacity } = require('../utils/capacity');
 
 // Philippine mobile number — exactly 11 digits starting with 09. Both phone
@@ -89,15 +89,13 @@ const buildPatientAccessScope = async (req) => {
     params.push(...scope.params);
   }
 
-  // Nurses only see patients they personally registered (issue #10)
+  // Nurses see the patients they currently HOLD (active nurse_assignments),
+  // plus any they registered that nobody holds yet. Custody, not authorship —
+  // see nurseCanAccessPatient in utils/scoping.
   if (req.user.role === 'nurse') {
-    conditions.push(
-      `p.patient_id IN (
-        SELECT CAST(target_id AS UNSIGNED) FROM activity_logs
-        WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-      )`
-    );
-    params.push(req.user.user_id);
+    const nurseScope = scopeToNurseAccessiblePatients('p.patient_id', req.user.linked_id, req.user.user_id);
+    conditions.push(nurseScope.sql);
+    params.push(...nurseScope.params);
   }
 
   return { conditions, params };
@@ -120,6 +118,14 @@ const searchPatients = async (req, res) => {
   const q = String(req.query.q ?? '').trim();
   // Hard cap: this endpoint feeds a dropdown, not a report.
   const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 1), 25);
+
+  // The "Receive Returning Patient" picker needs to find a discharged patient
+  // regardless of who registered them or who last held them — that is the
+  // entire point of the flow, so the normal nurse registration/custody scope
+  // is replaced (not added to) with a Discharged-only condition. Doctors and
+  // admins never send this flag; it is a no-op for them either way since the
+  // scope below only applies `role === 'nurse'`.
+  const returningOnly = ['true', '1'].includes(String(req.query.returning)) && req.user.role === 'nurse';
 
   try {
     // An empty query returns the most recent patients rather than nothing, so
@@ -146,9 +152,26 @@ const searchPatients = async (req, res) => {
       }
     }
 
-    const scope = await buildPatientAccessScope(req);
-    conditions.push(...scope.conditions);
-    params.push(...scope.params);
+    if (returningOnly) {
+      // Same "Discharged" definition used everywhere else (CARE_STATUS_EXPR,
+      // the discharged triage gate, receiveReturningPatient): no ongoing
+      // admission AND at least one admission that reached 'Discharged'.
+      conditions.push(`
+        NOT EXISTS (
+          SELECT 1 FROM admissions ad
+          WHERE ad.patient_id = p.patient_id
+            AND ad.status IN ('Pending Room','Active','Pending Discharge')
+        )
+        AND EXISTS (
+          SELECT 1 FROM admissions ad
+          WHERE ad.patient_id = p.patient_id AND ad.status = 'Discharged'
+        )
+      `);
+    } else {
+      const scope = await buildPatientAccessScope(req);
+      conditions.push(...scope.conditions);
+      params.push(...scope.params);
+    }
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
@@ -326,17 +349,9 @@ const getPatientById = async (req, res) => {
       }
     }
 
-    // Nurses only see patients they personally registered (issue #10)
-    if (req.user.role === 'nurse') {
-      const [[nurseAccess]] = await db.query(
-        `SELECT 1 AS allowed FROM activity_logs
-         WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
-        [req.user.user_id, req.params.id]
-      );
-      if (!nurseAccess) {
-        return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
-      }
+    // Nurse record access follows the ACTIVE assignment (utils/scoping).
+    if (req.user.role === 'nurse' && !(await nurseCanAccessPatient(req, req.params.id))) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
     }
 
     return res.status(200).json({ success: true, data: rows[0] });
@@ -362,17 +377,9 @@ const getPatientHistory = async (req, res) => {
       }
     }
 
-    // Nurses only see history for patients they personally registered (issue #10)
-    if (req.user.role === 'nurse') {
-      const [[nurseAccess]] = await db.query(
-        `SELECT 1 AS allowed FROM activity_logs
-         WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
-        [req.user.user_id, id]
-      );
-      if (!nurseAccess) {
-        return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
-      }
+    // Same rule as getPatientById — the clinical timeline is the record.
+    if (req.user.role === 'nurse' && !(await nurseCanAccessPatient(req, id))) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
     }
 
     const [triages] = await db.query(
@@ -614,19 +621,11 @@ const updatePatient = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Patient not found.' });
     }
 
-    // Nurses may only edit patients they personally registered — the
-    // same ownership check getPatientById applies (this route is nurse
-    // only, so no doctor branch is needed).
-    if (req.user.role === 'nurse') {
-      const [[nurseAccess]] = await db.query(
-        `SELECT 1 AS allowed FROM activity_logs
-         WHERE user_id = ? AND action = 'CREATE' AND target_table = 'patients'
-         AND CAST(target_id AS UNSIGNED) = ? LIMIT 1`,
-        [req.user.user_id, req.params.id]
-      );
-      if (!nurseAccess) {
-        return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
-      }
+    // Editing demographics needs the same custody as reading the record: the
+    // nurse currently holding the patient, or the intake nurse before anyone
+    // has been assigned. (This route is nurse-only, so no doctor branch.)
+    if (req.user.role === 'nurse' && !(await nurseCanAccessPatient(req, req.params.id))) {
+      return res.status(403).json({ success: false, message: 'You do not have access to this patient record.' });
     }
 
     await db.query(

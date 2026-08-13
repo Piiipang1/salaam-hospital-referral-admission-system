@@ -280,8 +280,8 @@ const AdmissionsPage = () => {
     { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name  ?? '—' },
     { key: 'room_type',      label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : '—' },
     { key: 'admission_type', label: 'Type',    hideMobile: true },
-    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
-    { key: 'discharge_date', label: 'Discharged', hideMobile: true, render: (r) => formatDate(r.discharge_date) },
+    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date, true) },
+    { key: 'discharge_date', label: 'Discharged', hideMobile: true, render: (r) => formatDate(r.discharge_date, true) },
     { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
     { key: 'actions', label: '', width: '190px', align: 'right', render: renderRowActions },
   ];
@@ -291,7 +291,7 @@ const AdmissionsPage = () => {
     { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
     { key: 'room',           label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : (r.status === 'Pending Room' ? 'Awaiting room' : '—') },
     { key: 'admission_type', label: 'Type',    hideMobile: true },
-    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date) },
+    { key: 'admission_date', label: 'Admitted', hideMobile: true, render: (r) => formatDate(r.admission_date, true) },
     { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
     { key: 'actions', label: '', width: '190px', align: 'right', render: renderRowActions },
   ];
@@ -301,8 +301,8 @@ const AdmissionsPage = () => {
     { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
     { key: 'room_type',      label: 'Room',    render: (r) => r.room_id ? `${r.room_type} — ${r.bed_number}` : '—' },
     { key: 'admission_type', label: 'Type',    hideMobile: true },
-    { key: 'admission_date', label: 'Admitted', render: (r) => formatDate(r.admission_date) },
-    { key: 'discharge_date', label: 'Discharged', render: (r) => formatDate(r.discharge_date) },
+    { key: 'admission_date', label: 'Admitted', render: (r) => formatDate(r.admission_date, true) },
+    { key: 'discharge_date', label: 'Discharged', render: (r) => formatDate(r.discharge_date, true) },
     { key: 'status',         label: 'Status',  render: (r) => <Badge status={r.status} /> },
   ];
 
@@ -312,7 +312,7 @@ const AdmissionsPage = () => {
     { key: 'patient_name',   label: 'Patient', render: (r) => r.patient_name ?? 'Unknown Patient' },
     { key: 'room',           label: 'Room',    render: (r) => r.room_type ? `${r.room_type} — ${r.bed_number}` : '—' },
     { key: 'doctor_name',    label: 'Doctor',  hideMobile: true, render: (r) => r.doctor_name ?? '—' },
-    { key: 'discharge_date', label: 'Discharged', render: (r) => formatDate(r.discharge_date) },
+    { key: 'discharge_date', label: 'Discharged', render: (r) => formatDate(r.discharge_date, true) },
     { key: 'discharge_notes', label: "Doctor's Notes", hideMobile: true, render: (r) => (
         <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap' }}>
           {r.discharge_notes ? (r.discharge_notes.length > 80 ? r.discharge_notes.slice(0, 80) + '…' : r.discharge_notes) : '—'}

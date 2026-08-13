@@ -24,4 +24,8 @@ router.post('/assignments', auth, requireRole('nurse'), nursingController.assign
 // DELETE /api/nursing/assignments/:patientId — give up a patient I hold
 router.delete('/assignments/:patientId', auth, requireRole('nurse'), nursingController.releasePatient);
 
+// POST /api/nursing/returning-patient — take custody of a discharged patient's
+// record when they walk back in for a new visit
+router.post('/returning-patient', auth, requireRole('nurse'), nursingController.receiveReturningPatient);
+
 module.exports = router;

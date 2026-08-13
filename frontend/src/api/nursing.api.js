@@ -28,3 +28,7 @@ export const assignPatient = (patientId, nurseId) =>
 /** Give up a patient you hold. */
 export const releasePatient = (patientId) =>
   api.delete(`/api/nursing/assignments/${patientId}`).then(r => r.data);
+
+/** Take custody of a discharged patient's record — the front door of a new visit. */
+export const receiveReturningPatient = (patientId) =>
+  api.post('/api/nursing/returning-patient', { patient_id: patientId }).then(r => r.data);
