@@ -42,6 +42,19 @@ export const toInputDate = (dateStr) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+/**
+ * Format a Date (or datetime string) for an HTML datetime-local input
+ * (YYYY-MM-DDTHH:mm), built from LOCAL components — never round-tripped
+ * through toISOString(), which would UTC-shift the value (same reasoning as
+ * toInputDate above).
+ */
+export const toInputDateTime = (value) => {
+  const d = value instanceof Date ? value : new Date(value ?? Date.now());
+  if (isNaN(d)) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 /** Today's date in YYYY-MM-DD (local time) — for pre-filling date filters. */
 export const todayInput = () => {
   const d = new Date();
