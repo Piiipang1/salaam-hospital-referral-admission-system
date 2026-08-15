@@ -113,8 +113,3 @@ export const CLEARANCE_HINTS = {
   Administrative: 'Records, paperwork and patient property completed.',
   DoctorOrder:    'Recorded automatically when the doctor initiates the discharge.',
 };
-
-// ── Nursing ──────────────────────────────────────────────────────────────────
-// Matches the `shift` ENUM on the endorsements table. The value recorded is the
-// shift ENDING — the one being handed over.
-export const SHIFTS = ['Morning', 'Afternoon', 'Night'];
