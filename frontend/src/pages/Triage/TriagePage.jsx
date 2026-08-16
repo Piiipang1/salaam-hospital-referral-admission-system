@@ -4,7 +4,7 @@ import { Siren, UserSearch } from 'lucide-react';
 import { getAllTriages, createTriage, createEmergencyTriage, assignTriageDoctor } from '../../api/triages.api';
 import { cancelAssignment } from '../../api/assignments.api';
 import { getActiveDoctors } from '../../api/doctors.api';
-import { receiveReturningPatient } from '../../api/nursing.api';
+import { receiveReturningPatient, getMyNursingContext } from '../../api/nursing.api';
 import { useAuth } from '../../context/AuthContext';
 import { useCapacity } from '../../context/CapacityContext';
 import { canManageTriage, canEmergencyTriage } from '../../utils/roleGuard';
@@ -81,8 +81,16 @@ const TriagePage = () => {
   // door taking custody of a record that may belong to nobody right now.
   const [returningModal,      setReturningModal]      = useState(false);
   const [returningPatientId,  setReturningPatientId]  = useState('');
+  const [returningDob,        setReturningDob]        = useState('');
   const [returningSaving,     setReturningSaving]     = useState(false);
   const [returningError,      setReturningError]      = useState('');
+
+  // Nurse-only: whether this nurse's department may receive/triage a
+  // RETURNING (discharged) patient — see backend utils/nursing
+  // isDischargedTriageDepartment. Defaults to true so the button never
+  // flickers while this loads; the backend is the actual boundary regardless
+  // of what this holds (see receiveReturningPatient / createTriage).
+  const [canTriageDischarged, setCanTriageDischarged] = useState(true);
 
   // Fetch active doctors for the coordinator's assign-doctor modal dropdown
   useEffect(() => {
@@ -92,6 +100,13 @@ const TriagePage = () => {
       .catch(() => {})
       .finally(() => setEtDoctorsFetching(false));
   }, [isCoordinator]);
+
+  useEffect(() => {
+    if (user?.role !== 'nurse') return;
+    getMyNursingContext()
+      .then((res) => { if (res.success) setCanTriageDischarged(!!res.data.can_triage_discharged); })
+      .catch(() => { /* non-fatal: button stays at its default; backend still enforces */ });
+  }, [user?.role]);
 
   // ── Data fetching ─────────────────────────────────────────────
   const load = useCallback(() => {
@@ -209,6 +224,12 @@ const TriagePage = () => {
     { key: 'patient_name',    label: 'Patient',   render: (r) => r.patient_name || 'Unknown Patient' },
     { key: 'triage_level',    label: 'Level',     render: (r) => <Badge status={r.triage_level} /> },
     { key: 'triage_datetime', label: 'Date/Time', render: (r) => formatDate(r.triage_datetime, true) },
+    { key: 'chief_complaint', label: 'Chief Complaint', hideMobile: true, render: (r) => (
+        <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
+          {r.chief_complaint || '—'}
+        </span>
+      ),
+    },
     { key: 'notes',           label: 'Notes',     hideMobile: true, render: (r) => (
         <span style={{ color: 'var(--color-text-muted)', fontSize: 'var(--font-size-sm)' }}>
           {r.notes ? r.notes.substring(0, 60) + (r.notes.length > 60 ? '…' : '') : '—'}
@@ -305,7 +326,9 @@ const TriagePage = () => {
           {user?.role === 'nurse' && (
             <Button
               variant="outline"
-              onClick={() => { setReturningPatientId(''); setReturningError(''); setReturningModal(true); }}
+              disabled={!canTriageDischarged}
+              title={!canTriageDischarged ? 'Only Emergency Room/OPD nurses can receive a returning patient.' : undefined}
+              onClick={() => { setReturningPatientId(''); setReturningDob(''); setReturningError(''); setReturningModal(true); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
             >
               <UserSearch size={16} /> Receive Returning Patient
@@ -498,13 +521,27 @@ const TriagePage = () => {
           Selecting one gives you access to their record so you can open their chart and record a new triage.
         </p>
         {returningError && <Alert type="error" message={returningError} style={{ marginBottom: 'var(--space-4)' }} />}
+        <div className="form-group" style={{ marginBottom: 'var(--space-4)' }}>
+          <label htmlFor="returning-dob">Date of Birth</label>
+          <input
+            id="returning-dob"
+            type="date"
+            value={returningDob}
+            max={todayInput()}
+            onChange={(e) => setReturningDob(e.target.value)}
+          />
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
+            Recommended: confirm identity by last name + date of birth rather than full name — more
+            reliable than remembering exactly how the name was registered.
+          </span>
+        </div>
         <div className="form-group" style={{ marginBottom: 'var(--space-6)' }}>
-          <label htmlFor="returning-patient-picker">Patient *</label>
+          <label htmlFor="returning-patient-picker">Last Name *</label>
           <PatientTypeahead
             id="returning-patient-picker"
             value={returningPatientId}
-            extraParams={{ returning: true }}
-            placeholder="Search discharged patients by name or ID…"
+            extraParams={{ returning: true, dob: returningDob || undefined }}
+            placeholder="Search discharged patients by last name or ID…"
             onChange={(p) => setReturningPatientId(p?.patient_id ?? '')}
           />
         </div>
