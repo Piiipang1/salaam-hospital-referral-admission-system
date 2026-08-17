@@ -220,7 +220,7 @@ const ReferralsPage = () => {
             </span>
           : '—';
       } },
-    { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date) },
+    { key: 'referral_date',  label: 'Date',     hideMobile: true, render: (r) => formatDate(r.referral_date, true) },
     { key: 'status',         label: 'Status',   render: (r) => (
         <span style={{ display:'inline-flex', gap:'var(--space-2)', alignItems:'center', flexWrap:'wrap' }}>
           <Badge status={r.status} />
