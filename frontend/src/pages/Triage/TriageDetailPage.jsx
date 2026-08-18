@@ -63,6 +63,7 @@ const TriageDetailPage = () => {
         <div className="patient-info-grid">
           <div><span className="info-label">Patient</span><span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}>{triage.patient_name ?? '—'}{isUnidentifiedName(triage.patient_name) && <UnidentifiedBadge />}</span></div>
           <div><span className="info-label">Triage Level</span><Badge status={triage.triage_level} /></div>
+          <div><span className="info-label">Chief Complaint</span><span>{triage.chief_complaint || '—'}</span></div>
           <div><span className="info-label">Date/Time</span><span>{formatDate(triage.triage_datetime, true)}</span></div>
           <div><span className="info-label">Recorded By</span><span>{triage.employee_name ?? '—'}</span></div>
           <div><span className="info-label">Attending Doctor</span><span>{triage.attending_doctor_name ?? '—'}</span></div>
