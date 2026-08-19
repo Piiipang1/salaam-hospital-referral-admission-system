@@ -190,8 +190,8 @@ const admColumns = [
   { key:'room_type',      label:'Room Type' },
   { key:'bed_number',     label:'Bed'       },
   { key:'admission_type', label:'Type'      },
-  { key:'admission_date', label:'Admitted',  render:(r)=>formatDate(r.admission_date)  },
-  { key:'discharge_date', label:'Discharged',render:(r)=>formatDate(r.discharge_date) },
+  { key:'admission_date', label:'Admitted',  render:(r)=>formatDate(r.admission_date, true)  },
+  { key:'discharge_date', label:'Discharged',render:(r)=>formatDate(r.discharge_date, true) },
   { key:'status',         label:'Status',   render:(r)=><Badge status={r.status} />   },
 ];
 
@@ -200,7 +200,7 @@ const refColumns = [
   { key:'medical_condition',    label:'Condition'  },
   { key:'assigned_doctor_name', label:'Refer To'},
   { key:'specialization',       label:'Specialty'  },
-  { key:'referral_date',        label:'Date',      render:(r)=>formatDate(r.referral_date) },
+  { key:'referral_date',        label:'Date',      render:(r)=>formatDate(r.referral_date, true) },
   { key:'status',               label:'Status',    render:(r)=><Badge status={r.status} /> },
 ];
 
