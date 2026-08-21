@@ -716,6 +716,20 @@ const confirmDischarge = async (req, res) => {
          WHERE patient_id = ? AND released_at IS NULL`,
         [adm.patient_id]
       );
+      // Same reasoning for doctor_in_charge: it tracks who is coordinating the
+      // CURRENT episode, not a permanent claim on the patient. Without this,
+      // a patient who returns for a later visit still shows this closed
+      // episode's doctor as "attending" — invisible to every other doctor and
+      // to the DIC's unassigned queue, even though nobody is actually
+      // coordinating their new visit. admissions.doctor_id (this row, already
+      // written above) is the permanent historical record of who treated this
+      // stay; doctor_in_charge is not. Deleted rather than soft-released,
+      // matching assignTriageDoctor's own "DELETE then re-propose" pattern —
+      // this table has no released_at/history concept.
+      await connection.query(
+        'DELETE FROM doctor_in_charge WHERE patient_id = ?',
+        [adm.patient_id]
+      );
       // ── OPD follow-up routing ───────────────────────────────────────────
       // Booked inside the discharge transaction: if the follow-up cannot be
       // written, the discharge does not happen either. That is the whole point
