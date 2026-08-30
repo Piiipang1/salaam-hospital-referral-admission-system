@@ -11,18 +11,49 @@ const { requireNurseDepartment, OCCUPYING_STATUSES } = require('../utils/nursing
 //
 // Mirrors the doctor_in_charge propose/accept pattern already in the system.
 
-const VALID_SHIFTS = ['Morning', 'Afternoon', 'Night'];
+// Accepts a datetime-local value ('YYYY-MM-DDTHH:mm[:ss]') or an already
+// space-separated one, and returns a MySQL-ready 'YYYY-MM-DD HH:MM:SS'
+// string, or null if the input doesn't match. Treated as literal wall-clock
+// time and never round-tripped through Date/toISOString, which would
+// UTC-shift it — same reasoning as frontend utils/formatDate.js toInputDate.
+const normalizeDateTime = (value) => {
+  if (typeof value !== 'string') return null;
+  const m = value.trim().match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) return null;
+  const [, date, hh, mm, ss] = m;
+  return `${date} ${hh}:${mm}:${ss ?? '00'}`;
+};
+
+// For user-facing text only — renders two Date-like values compactly.
+// Accepts either Date objects (as mysql2 returns DATETIME columns) or the
+// normalized 'YYYY-MM-DD HH:MM:SS' strings this controller builds on write.
+const formatShiftRange = (start, end) => {
+  const startDate = start instanceof Date ? start : new Date(String(start).replace(' ', 'T'));
+  const endDate   = end   instanceof Date ? end   : new Date(String(end).replace(' ', 'T'));
+  const dateOpts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true };
+  const timeOpts = { hour: '2-digit', minute: '2-digit', hour12: true };
+  return `${startDate.toLocaleString('en-PH', dateOpts)} – ${endDate.toLocaleString('en-PH', timeOpts)}`;
+};
 
 // POST /api/endorsements
-// { to_nurse_id, shift, shift_date?, general_notes?, patients: [{patient_id, notes}] }
+// { to_nurse_id, shift_start_at, shift_end_at, general_notes?, patients: [{patient_id, notes}] }
 const createEndorsement = async (req, res) => {
-  const { to_nurse_id, shift, shift_date, general_notes, patients } = req.body;
+  const { to_nurse_id, shift_start_at, shift_end_at, general_notes, patients } = req.body;
 
   if (!to_nurse_id) {
     return res.status(400).json({ success: false, message: 'Select the nurse taking over.' });
   }
-  if (!shift || !VALID_SHIFTS.includes(shift)) {
-    return res.status(400).json({ success: false, message: `shift must be one of: ${VALID_SHIFTS.join(', ')}.` });
+  const shiftStartAt = normalizeDateTime(shift_start_at);
+  const shiftEndAt   = normalizeDateTime(shift_end_at);
+  if (!shiftStartAt || !shiftEndAt) {
+    return res.status(400).json({ success: false, message: 'shift_start_at and shift_end_at are required, valid date/times.' });
+  }
+  if (shiftEndAt <= shiftStartAt) {
+    return res.status(400).json({ success: false, message: 'Shift end must be after shift start.' });
+  }
+  const shiftDurationMs = new Date(shiftEndAt.replace(' ', 'T')) - new Date(shiftStartAt.replace(' ', 'T'));
+  if (shiftDurationMs > 24 * 60 * 60 * 1000) {
+    return res.status(400).json({ success: false, message: 'A single shift cannot span more than 24 hours.' });
   }
   if (patients !== undefined && !Array.isArray(patients)) {
     return res.status(400).json({ success: false, message: 'patients must be an array.' });
@@ -83,17 +114,15 @@ const createEndorsement = async (req, res) => {
       }
     }
 
-    const shiftDate = shift_date || new Date().toISOString().slice(0, 10);
-
     const connection = await db.getConnection();
     await connection.beginTransaction();
     let endorsementId;
     try {
       const [result] = await connection.query(
         `INSERT INTO endorsements
-           (from_nurse_id, to_nurse_id, department_id, shift, shift_date, general_notes, created_by)
+           (from_nurse_id, to_nurse_id, department_id, shift_start_at, shift_end_at, general_notes, created_by)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [nurse.employee_id, recipient.employee_id, nurse.department_id, shift, shiftDate,
+        [nurse.employee_id, recipient.employee_id, nurse.department_id, shiftStartAt, shiftEndAt,
          general_notes?.trim() || null, req.user.user_id]
       );
       endorsementId = result.insertId;
@@ -136,7 +165,7 @@ const createEndorsement = async (req, res) => {
           'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
           [
             recipientUser.user_id,
-            `${nurse.first_name} ${nurse.last_name} endorsed the ${shift} shift to you ` +
+            `${nurse.first_name} ${nurse.last_name} endorsed the ${formatShiftRange(shiftStartAt, shiftEndAt)} shift to you ` +
             `(${patientIds.length} patient${patientIds.length === 1 ? '' : 's'}) in ${nurse.department_name}. ` +
             'Acknowledge it to take over.',
             null,
@@ -168,7 +197,7 @@ const listEndorsements = async (req, res, direction) => {
     }
 
     const [rows] = await db.query(
-      `SELECT e.endorsement_id, e.shift, e.shift_date, e.status, e.general_notes,
+      `SELECT e.endorsement_id, e.shift_start_at, e.shift_end_at, e.status, e.general_notes,
               e.created_at, e.acknowledged_at,
               e.from_nurse_id, e.to_nurse_id,
               CONCAT(fn.first_name, ' ', fn.last_name) AS from_nurse_name,
@@ -176,11 +205,7 @@ const listEndorsements = async (req, res, direction) => {
               d.name AS department_name,
               (SELECT COUNT(*) FROM endorsement_patients ep
                 WHERE ep.endorsement_id = e.endorsement_id) AS patient_count,
-              CASE
-                WHEN HOUR(e.created_at) >= 6  AND HOUR(e.created_at) < 14 THEN 'Morning'
-                WHEN HOUR(e.created_at) >= 14 AND HOUR(e.created_at) < 22 THEN 'Afternoon'
-                ELSE 'Night'
-              END AS derived_shift
+              (e.created_at NOT BETWEEN e.shift_start_at AND e.shift_end_at) AS submitted_outside_shift
        FROM endorsements e
        JOIN employees fn ON fn.employee_id = e.from_nurse_id
        JOIN employees tn ON tn.employee_id = e.to_nurse_id
@@ -217,11 +242,7 @@ const getEndorsementById = async (req, res) => {
               CONCAT(fn.first_name, ' ', fn.last_name) AS from_nurse_name,
               CONCAT(tn.first_name, ' ', tn.last_name) AS to_nurse_name,
               d.name AS department_name,
-              CASE
-                WHEN HOUR(e.created_at) >= 6  AND HOUR(e.created_at) < 14 THEN 'Morning'
-                WHEN HOUR(e.created_at) >= 14 AND HOUR(e.created_at) < 22 THEN 'Afternoon'
-                ELSE 'Night'
-              END AS derived_shift
+              (e.created_at NOT BETWEEN e.shift_start_at AND e.shift_end_at) AS submitted_outside_shift
        FROM endorsements e
        JOIN employees fn ON fn.employee_id = e.from_nurse_id
        JOIN employees tn ON tn.employee_id = e.to_nurse_id
@@ -281,7 +302,7 @@ const acknowledgeEndorsement = async (req, res) => {
     try {
       // Lock the row so two taps on "Acknowledge" cannot both transfer.
       const [[endorsement]] = await connection.query(
-        `SELECT endorsement_id, from_nurse_id, to_nurse_id, department_id, shift, status
+        `SELECT endorsement_id, from_nurse_id, to_nurse_id, department_id, shift_start_at, shift_end_at, status
          FROM endorsements WHERE endorsement_id = ? FOR UPDATE`,
         [req.params.id]
       );
@@ -348,7 +369,10 @@ const acknowledgeEndorsement = async (req, res) => {
 
       await connection.commit();
       connection.release();
-      summary = { transferred, skipped, from_nurse_id: endorsement.from_nurse_id, shift: endorsement.shift };
+      summary = {
+        transferred, skipped, from_nurse_id: endorsement.from_nurse_id,
+        shift_range: formatShiftRange(endorsement.shift_start_at, endorsement.shift_end_at),
+      };
     } catch (txErr) {
       await connection.rollback();
       connection.release();
@@ -371,7 +395,7 @@ const acknowledgeEndorsement = async (req, res) => {
         await db.query(
           'INSERT INTO notifications (user_id, message, referral_id) VALUES (?, ?, ?)',
           [fromUser.user_id,
-           `${nurse.first_name} ${nurse.last_name} acknowledged your ${summary.shift} shift endorsement. ` +
+           `${nurse.first_name} ${nurse.last_name} acknowledged your ${summary.shift_range} shift endorsement. ` +
            `${summary.transferred} patient(s) are now theirs.`,
            null]
         );
