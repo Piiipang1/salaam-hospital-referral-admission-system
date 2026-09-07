@@ -81,13 +81,17 @@ const PatientDetailPage = () => {
   // stays correct as new data loads without needing to be reset on refresh.
   const [collapsedVisits, setCollapsedVisits] = useState({});
 
-  // Nurse-only: whether this nurse's department may triage a RETURNING
-  // (discharged) patient — see backend utils/nursing isDischargedTriageDepartment.
+  // Nurse-only: whether this nurse's department is a front-door (ER/OPD) one
+  // — needed when the patient has no current department (new/returning/
+  // Pending Room) — see backend utils/nursing isDischargedTriageDepartment.
   // Comes from /api/nursing/me, not /auth/me — department is nursing context,
   // not part of the auth payload. Defaults to true so a non-discharged patient
   // (the common case) never flickers the button while this loads; the backend
   // is the actual boundary regardless of what this holds.
   const [canTriageDischarged, setCanTriageDischarged] = useState(true);
+  // This nurse's own department_id, to compare against the patient's current
+  // department (patient.current_department_id) — see canNurseTriagePatient.
+  const [nurseDepartmentId, setNurseDepartmentId] = useState(null);
 
   // Attending-doctor assignment (Doctor-in-Charge only). Reuses the existing
   // assignTriageDoctor endpoint, keyed by the patient's latest triage_id taken
@@ -148,7 +152,12 @@ const PatientDetailPage = () => {
   useEffect(() => {
     if (user?.role !== 'nurse') return;
     getMyNursingContext()
-      .then((res) => { if (res.success) setCanTriageDischarged(!!res.data.can_triage_discharged); })
+      .then((res) => {
+        if (res.success) {
+          setCanTriageDischarged(!!res.data.can_triage_discharged);
+          setNurseDepartmentId(res.data.department_id ?? null);
+        }
+      })
       .catch(() => { /* non-fatal: button stays at its default; backend still enforces */ });
   }, [user?.role]);
 
@@ -528,16 +537,27 @@ const PatientDetailPage = () => {
       {/* Action buttons */}
       <div className="patient-actions">
         {canManageTriage(user?.role) && (() => {
-          const dischargedTriageBlocked =
-            user?.role === 'nurse' && patient?.care_status === 'Discharged' && !canTriageDischarged;
+          // Mirrors backend canNurseTriagePatient (utils/nursing.js): a patient
+          // currently in a department may only be triaged by a nurse in THAT
+          // department; a patient with no current department yet (new,
+          // returning/discharged, or Pending Room) needs a front-door nurse.
+          const patientHasDepartment = patient?.current_department_id != null;
+          const triageBlocked = user?.role === 'nurse' && (
+            patientHasDepartment
+              ? Number(patient.current_department_id) !== Number(nurseDepartmentId)
+              : !canTriageDischarged
+          );
+          const triageBlockedMessage = patientHasDepartment
+            ? `Only nurses in ${patient.current_department_name ?? 'the patient’s department'} can triage this patient.`
+            : 'Only ER/OPD nurses can triage a new or returning patient.';
           return (
             <Button
               size="sm"
               variant="primary"
-              disabled={atCapacity || dischargedTriageBlocked}
+              disabled={atCapacity || triageBlocked}
               title={
                 atCapacity ? NO_ROOMS_MESSAGE
-                  : dischargedTriageBlocked ? 'Only ER/OPD nurses can triage a returning patient.'
+                  : triageBlocked ? triageBlockedMessage
                   : undefined
               }
               onClick={() => setModal('triage')}
@@ -588,7 +608,10 @@ const PatientDetailPage = () => {
                 <Button size="sm" variant="outline" onClick={() => { setVitalTriageId(t.triage_id); setModal('vitals'); }}>+ Vitals</Button>
               )}
             </div>
-            <p className="text-sm" style={{ marginTop:'var(--space-3)' }}>{t.notes || '—'}</p>
+            {t.chief_complaint && (
+              <p className="text-sm" style={{ marginTop:'var(--space-3)' }}><strong>Chief Complaint:</strong> {t.chief_complaint}</p>
+            )}
+            <p className="text-sm" style={{ marginTop:'var(--space-2)' }}>{t.notes || '—'}</p>
             {t.blood_pressure && (
               <div className="vitals-grid">
                 <span>BP: {t.blood_pressure}</span>
