@@ -367,6 +367,18 @@ const receiveReturningPatient = async (req, res) => {
       });
     }
 
+    // Same front-door rule as createTriage's discharged-patient gate: taking
+    // custody of a returning patient's record is the first step of the same
+    // workflow that ends in triaging them back in, so it is restricted to the
+    // same departments. Without this, a nurse who could never actually record
+    // the triage could still gain standing read access to the chart.
+    if (!isDischargedTriageDepartment(nurse.department_name)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Emergency Room/OPD nurses can receive a returning (discharged) patient.',
+      });
+    }
+
     await db.query(
       "INSERT INTO activity_logs (user_id, action, target_table, target_id) VALUES (?, 'RECEIVE_RETURNING', 'patients', ?)",
       [req.user.user_id, patient_id]
