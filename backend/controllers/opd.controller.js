@@ -11,7 +11,7 @@ const VALID_STATUSES = ['Scheduled', 'Completed', 'Missed', 'Cancelled'];
 // Shared row shape so the list and the single read always agree.
 const FOLLOWUP_SELECT = `
   SELECT f.followup_id, f.patient_id, f.admission_id, f.clinic_id, f.diagnosis_id,
-         f.doctor_id, f.visit_type, f.followup_date, f.status,
+         f.doctor_id, f.created_by, f.visit_type, f.followup_date, f.status,
          f.classified_by, f.routing_basis, f.notes, f.created_at, f.updated_at,
          CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
          p.is_unidentified,
@@ -99,6 +99,21 @@ const getFollowups = async (req, res) => {
   }
 };
 
+// Same scoping getFollowups applies, for the single-record endpoints below —
+// doctors see their own patients' follow-ups, nurses see the ones they
+// booked. Without this, GET/PUT by id would be a back door around the list's
+// scoping (the exact back door that comment describes). Returns null when
+// allowed, or the { status, message } to send when denied.
+const guardFollowupAccess = (req, followup) => {
+  if (req.user.role === 'doctor' && Number(followup.doctor_id) !== Number(req.user.linked_id)) {
+    return { status: 403, message: 'You are not assigned to this follow-up.' };
+  }
+  if (req.user.role === 'nurse' && Number(followup.created_by) !== Number(req.user.user_id)) {
+    return { status: 403, message: 'You do not have access to this follow-up.' };
+  }
+  return null;
+};
+
 // GET /api/opd/followups/:id
 const getFollowupById = async (req, res) => {
   try {
@@ -106,6 +121,12 @@ const getFollowupById = async (req, res) => {
     if (!row) {
       return res.status(404).json({ success: false, message: 'Follow-up not found.' });
     }
+
+    const denied = guardFollowupAccess(req, row);
+    if (denied) {
+      return res.status(denied.status).json({ success: false, message: denied.message });
+    }
+
     return res.status(200).json({ success: true, data: row });
   } catch (err) {
     console.error('getFollowupById error:', err);
@@ -122,12 +143,18 @@ const updateFollowup = async (req, res) => {
 
   try {
     const [[existing]] = await db.query(
-      'SELECT followup_id, status FROM opd_followups WHERE followup_id = ?',
+      'SELECT followup_id, status, doctor_id, created_by FROM opd_followups WHERE followup_id = ?',
       [req.params.id]
     );
     if (!existing) {
       return res.status(404).json({ success: false, message: 'Follow-up not found.' });
     }
+
+    const denied = guardFollowupAccess(req, existing);
+    if (denied) {
+      return res.status(denied.status).json({ success: false, message: denied.message });
+    }
+
     if (['Completed', 'Cancelled'].includes(existing.status)) {
       return res.status(409).json({
         success: false,
@@ -189,12 +216,18 @@ const updateFollowupStatus = async (req, res) => {
 
   try {
     const [[existing]] = await db.query(
-      'SELECT followup_id, status FROM opd_followups WHERE followup_id = ?',
+      'SELECT followup_id, status, doctor_id, created_by FROM opd_followups WHERE followup_id = ?',
       [req.params.id]
     );
     if (!existing) {
       return res.status(404).json({ success: false, message: 'Follow-up not found.' });
     }
+
+    const denied = guardFollowupAccess(req, existing);
+    if (denied) {
+      return res.status(denied.status).json({ success: false, message: denied.message });
+    }
+
     if (existing.status === status) {
       return res.status(409).json({ success: false, message: `This follow-up is already ${status}.` });
     }
