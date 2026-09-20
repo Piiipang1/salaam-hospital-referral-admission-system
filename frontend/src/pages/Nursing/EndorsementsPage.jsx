@@ -17,6 +17,16 @@ import EndorsementForm from '../../components/forms/EndorsementForm';
 
 const TABS = ['Incoming', 'Outgoing'];
 
+// Full date+time on both ends — deliberately not compacted to "time only" on
+// the end even when both fall on the same calendar day: comparing that
+// safely requires the LOCAL calendar date (a shift like 6:00 AM–2:00 PM PHT
+// straddles the UTC day boundary the raw ISO string is serialized against),
+// which isn't worth the complexity for a label.
+const formatShiftRange = (start, end) => {
+  if (!start || !end) return '—';
+  return `${formatDate(start, true)} – ${formatDate(end, true)}`;
+};
+
 /**
  * EndorsementsPage — shift handoffs in and out.
  *
@@ -119,13 +129,12 @@ const EndorsementsPage = () => {
   const columns = [
     { key: 'shift', label: 'Shift', render: (e) => (
         <span style={{ display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontWeight: 600 }}>{e.shift}</span>
-          <span className="text-xs text-muted">{formatDate(e.shift_date)}</span>
-          {e.derived_shift && e.derived_shift !== e.shift && (
+          <span style={{ fontWeight: 600 }}>{formatShiftRange(e.shift_start_at, e.shift_end_at)}</span>
+          {e.submitted_outside_shift ? (
             <span className="text-xs" style={{ color: 'var(--color-primary)', marginTop: '2px' }}>
-              Submitted during {e.derived_shift}
+              Submitted outside this range
             </span>
-          )}
+          ) : null}
         </span>
       ) },
     { key: 'nurse', label: isIncoming ? 'From' : 'To',
@@ -235,7 +244,7 @@ const EndorsementsPage = () => {
       <Modal
         isOpen={!!detail}
         onClose={() => setDetail(null)}
-        title={detail ? `${detail.shift} Shift — ${formatDate(detail.shift_date)}` : ''}
+        title={detail ? `Shift ${formatShiftRange(detail.shift_start_at, detail.shift_end_at)}` : ''}
         size="md"
       >
         {detail && (
@@ -285,13 +294,13 @@ const EndorsementsPage = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginTop: 'var(--space-2)' }}>
               <p className="text-xs text-muted">
-                <strong>Declared shift:</strong> {detail.shift} ({formatDate(detail.shift_date)})
+                <strong>Declared shift:</strong> {formatShiftRange(detail.shift_start_at, detail.shift_end_at)}
               </p>
-              {detail.derived_shift && (
+              {detail.submitted_outside_shift ? (
                 <p className="text-xs text-muted">
-                  <strong>Submitted during:</strong> {detail.derived_shift} period
+                  <strong>Note:</strong> submitted outside the declared shift range.
                 </p>
-              )}
+              ) : null}
               <p className="text-xs text-muted">
                 <strong>Submitted at:</strong> {formatDate(detail.created_at, true)}
                 {detail.acknowledged_at ? ` · Acknowledged ${formatDate(detail.acknowledged_at, true)}` : ''}
@@ -317,7 +326,7 @@ const EndorsementsPage = () => {
         onConfirm={handleCancel}
         title="Withdraw Endorsement"
         message={cancelTarget
-          ? `Withdraw the ${cancelTarget.shift} shift endorsement to ${cancelTarget.to_nurse_name}? Nothing has transferred yet, so your patients stay with you.`
+          ? `Withdraw the ${formatShiftRange(cancelTarget.shift_start_at, cancelTarget.shift_end_at)} shift endorsement to ${cancelTarget.to_nurse_name}? Nothing has transferred yet, so your patients stay with you.`
           : ''}
         confirmLabel="Withdraw"
         loading={detailBusy}
