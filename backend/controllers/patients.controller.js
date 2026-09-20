@@ -2,6 +2,7 @@ const db = require('../config/db');
 const { isDoctorInCharge } = require('../utils/dic');
 const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition, nurseCanAccessPatient, scopeToNurseAccessiblePatients } = require('../utils/scoping');
 const { rejectIfAtCapacity } = require('../utils/capacity');
+const { getNurseContext, isDischargedTriageDepartment } = require('../utils/nursing');
 
 // Philippine mobile number — exactly 11 digits starting with 09. Both phone
 // fields are optional; only non-empty values are validated. Mirrors the
@@ -127,6 +128,15 @@ const searchPatients = async (req, res) => {
   // scope below only applies `role === 'nurse'`.
   const returningOnly = ['true', '1'].includes(String(req.query.returning)) && req.user.role === 'nurse';
 
+  // The "Record Triage" patient picker needs to offer only patients this
+  // nurse is actually allowed to triage — same rule as createTriage's
+  // canNurseTriagePatient (utils/nursing.js): a patient currently in the
+  // nurse's own department, OR a patient with no current department at all
+  // (new/returning/Pending Room) when the nurse is front-door (ER/OPD).
+  // This REPLACES the custody scope below, same as returningOnly — triage
+  // eligibility is departmental, not about who is individually assigned.
+  const forTriage = ['true', '1'].includes(String(req.query.for_triage)) && req.user.role === 'nurse';
+
   try {
     // An empty query returns the most recent patients rather than nothing, so
     // the dropdown is useful the moment it opens.
@@ -152,6 +162,17 @@ const searchPatients = async (req, res) => {
       }
     }
 
+    // Optional date-of-birth filter — combines with `q` (AND), so "last name
+    // + DOB" narrows to an exact identity match without needing the exact
+    // first-name spelling. Used by the "Receive Returning Patient" picker,
+    // where verifying identity by last name + DOB is the standard front-desk
+    // pattern for a patient who may not recall how their name was registered.
+    const dob = String(req.query.dob ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+      conditions.push('p.date_of_birth = ?');
+      params.push(dob);
+    }
+
     if (returningOnly) {
       // Same "Discharged" definition used everywhere else (CARE_STATUS_EXPR,
       // the discharged triage gate, receiveReturningPatient): no ongoing
@@ -167,6 +188,23 @@ const searchPatients = async (req, res) => {
           WHERE ad.patient_id = p.patient_id AND ad.status = 'Discharged'
         )
       `);
+    } else if (forTriage) {
+      const nurse = await getNurseContext(req.user.user_id, req.user.linked_id);
+      const isFrontDoor = isDischargedTriageDepartment(nurse?.department_name);
+      conditions.push(`(
+        EXISTS (
+          SELECT 1 FROM admissions ad JOIN rooms r ON r.room_id = ad.room_id
+          WHERE ad.patient_id = p.patient_id AND ad.status IN ('Active','Pending Discharge')
+            AND r.department_id = ?
+        )
+        ${isFrontDoor ? `OR NOT EXISTS (
+          SELECT 1 FROM admissions ad
+          WHERE ad.patient_id = p.patient_id AND ad.status IN ('Active','Pending Discharge')
+        )` : ''}
+      )`);
+      // department_id may be null for a nurse with no department yet; 0 never
+      // matches a real department_id, so this safely excludes everything.
+      params.push(nurse?.department_id ?? 0);
     } else {
       const scope = await buildPatientAccessScope(req);
       conditions.push(...scope.conditions);
@@ -314,6 +352,12 @@ const getPatientById = async (req, res) => {
               ${CARE_STATUS_EXPR},
               ${CARE_STATUS_DETAIL_EXPR},
               rm.room_type, rm.bed_number,
+              -- Current department, for the frontend's "+ Triage" gating —
+              -- NULL exactly when canNurseTriagePatient (utils/nursing.js)
+              -- would treat this patient as having no current department
+              -- (no room yet, whether Pending Room, Discharged, or brand new).
+              rm.department_id AS current_department_id,
+              cdept.name AS current_department_name,
               CONCAT(d.first_name, ' ', d.last_name) AS admitting_doctor,
               adoc.doctor_id AS attending_doctor_id,
               CASE WHEN adoc.doctor_id IS NOT NULL
@@ -324,6 +368,7 @@ const getPatientById = async (req, res) => {
        FROM patients p
        ${ONGOING_ADMISSION_JOIN}
        LEFT JOIN rooms   rm ON rm.room_id  = a.room_id
+       LEFT JOIN departments cdept ON cdept.department_id = rm.department_id
        LEFT JOIN doctors d  ON d.doctor_id = a.doctor_id
        LEFT JOIN doctor_in_charge adic ON adic.dic_id = (
          SELECT dc.dic_id FROM doctor_in_charge dc
