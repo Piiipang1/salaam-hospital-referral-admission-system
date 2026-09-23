@@ -3,14 +3,14 @@ const { isDoctorInCharge } = require('../utils/dic');
 const { scopeToAssignedPatients, doctorCanAccessPatient, scopeForDoctorInCharge, doctorInChargeCanAccessPatient, unassignedPatientsCondition, isPatientUnassigned } = require('../utils/scoping');
 const { rejectIfAtCapacity } = require('../utils/capacity');
 const { createAlert } = require('../utils/alerts');
-const { getNurseContext, isDischargedTriageDepartment } = require('../utils/nursing');
+const { getNurseContext, canNurseTriagePatient } = require('../utils/nursing');
 
 // POST /api/triages
 // Assigning an attending doctor is a Doctor-in-Charge responsibility
 // (assignTriageDoctor) — triage creation never writes doctor_in_charge, and
 // any assigned_doctor_id in the body is ignored.
 const createTriage = async (req, res) => {
-  const { patient_id, visit_room_id, triage_level, notes } = req.body;
+  const { patient_id, visit_room_id, triage_level, chief_complaint, notes } = req.body;
 
   // A nurse is always recorded as their own employee_id (cannot spoof another
   // employee); an admin may record a triage on behalf of an employee via the body.
@@ -58,15 +58,18 @@ const createTriage = async (req, res) => {
     );
     const isDischargedPatient = !!careState.no_ongoing_admission && !!careState.has_discharged_admission;
 
-    // Only a front-door department (ER, and OPD once one exists) may triage a
-    // discharged patient back in — enforced for nurses only; admins/doctors
-    // recording on behalf of staff are not ward-scoped.
-    if (isDischargedPatient && req.user.role === 'nurse') {
+    // A nurse may only triage a patient currently in their own department; a
+    // patient with no current department right now (brand new, discharged/
+    // returning, or Pending Room) may only be triaged by a front-door (ER/
+    // OPD) nurse. Enforced for nurses only — admins/doctors recording on
+    // behalf of staff are not ward-scoped. See utils/nursing.js
+    // canNurseTriagePatient for the full rule.
+    if (req.user.role === 'nurse') {
       const nurse = await getNurseContext(req.user.user_id, req.user.linked_id);
-      if (!isDischargedTriageDepartment(nurse?.department_name)) {
+      if (!(await canNurseTriagePatient(nurse, patient_id))) {
         return res.status(403).json({
           success: false,
-          message: 'Only Emergency Room/OPD nurses can triage a returning (discharged) patient.',
+          message: 'You can only triage a patient currently in your own department. A new or returning patient with no department yet can only be triaged by an Emergency Room/OPD nurse.',
         });
       }
     }
@@ -84,9 +87,9 @@ const createTriage = async (req, res) => {
     const visitNumber = visitRow.visit_number;
 
     const [result] = await db.query(
-      `INSERT INTO triages (patient_id, employee_id, visit_room_id, triage_level, visit_number, visit_type, notes, triage_datetime)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [patient_id, employee_id || null, visit_room_id || null, triage_level, visitNumber,
+      `INSERT INTO triages (patient_id, employee_id, visit_room_id, triage_level, chief_complaint, visit_number, visit_type, notes, triage_datetime)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [patient_id, employee_id || null, visit_room_id || null, triage_level, chief_complaint?.trim() || null, visitNumber,
        isDischargedPatient ? 'Outpatient' : 'Inpatient', notes || null]
     );
 
@@ -313,7 +316,7 @@ const getTriageById = async (req, res) => {
 
 // PUT /api/triages/:id
 const updateTriage = async (req, res) => {
-  const { triage_level, notes, visit_room_id } = req.body;
+  const { triage_level, chief_complaint, notes, visit_room_id } = req.body;
 
   const validLevels = ['Critical', 'Urgent', 'Non-Urgent'];
   if (triage_level != null && !validLevels.includes(triage_level)) {
@@ -339,10 +342,11 @@ const updateTriage = async (req, res) => {
     await db.query(
       `UPDATE triages SET
         triage_level = COALESCE(?, triage_level),
+        chief_complaint = COALESCE(?, chief_complaint),
         notes = COALESCE(?, notes),
         visit_room_id = COALESCE(?, visit_room_id)
        WHERE triage_id = ?`,
-      [triage_level, notes, visit_room_id, req.params.id]
+      [triage_level, chief_complaint, notes, visit_room_id, req.params.id]
     );
 
     await db.query(
@@ -443,9 +447,11 @@ const createEmergencyTriage = async (req, res) => {
   // Emergency triage registers a placeholder patient AND a triage in one step,
   // so the same capacity rule applies — otherwise it would be an open bypass of
   // the registration/triage guards.
-  // Exempt from the discharged-patient department gate below: this always
-  // INSERTs a brand-new placeholder patient (see step 1) and never accepts an
-  // existing patient_id, so it can never target an already-discharged patient.
+  // Exempt from createTriage's department-based triage gate (any nurse may
+  // record an emergency triage, not just their own department/front-door):
+  // this always INSERTs a brand-new placeholder patient (see step 1) and
+  // never accepts an existing patient_id, so it can never target a patient
+  // already assigned elsewhere.
   try {
     if (await rejectIfAtCapacity(res)) return;
   } catch (capErr) {
