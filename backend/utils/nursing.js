@@ -65,6 +65,38 @@ const isDischargedTriageDepartment = (departmentName) => {
   return DISCHARGED_TRIAGE_DEPARTMENTS.some((d) => d.trim().toLowerCase() === normalized);
 };
 
+// ── Patient's current department, for triage authorization ─────────────────
+// A patient occupying a bed right now (OCCUPYING_STATUSES) belongs to that
+// bed's department. A patient with no ongoing admission at all — brand new
+// and never triaged, discharged, or still Pending Room (admitted but not yet
+// roomed) — has no current department, and falls to the front-door rule
+// (isDischargedTriageDepartment) instead of a department match.
+const getPatientCurrentDepartment = async (patientId) => {
+  const [[row]] = await db.query(
+    `SELECT r.department_id, d.name AS department_name
+     FROM admissions ad
+     JOIN rooms r ON r.room_id = ad.room_id
+     JOIN departments d ON d.department_id = r.department_id
+     WHERE ad.patient_id = ? AND ad.status IN (?)
+     ORDER BY ad.admission_date DESC LIMIT 1`,
+    [patientId, OCCUPYING_STATUSES]
+  );
+  return row ?? null;
+};
+
+// ── Who may TRIAGE a given patient ──────────────────────────────────────────
+// Independent of nurse_assignments custody — triage is a departmental,
+// operational action, not gated by individual assignment (any nurse in the
+// patient's own department may triage them, even one someone else already
+// holds — same "any nurse can act" philosophy as room assignment/discharge).
+// A patient with no current department (new, discharged/returning, or
+// Pending Room) may only be triaged by a front-door (ER/OPD) nurse.
+const canNurseTriagePatient = async (nurse, patientId) => {
+  const patientDept = await getPatientCurrentDepartment(patientId);
+  if (!patientDept) return isDischargedTriageDepartment(nurse?.department_name);
+  return Number(nurse?.department_id) === Number(patientDept.department_id);
+};
+
 // ── Discharge-order notification routing ─────────────────────────────────────
 // A discharge order used to notify EVERY active nurse, which
 // made the alert something to dismiss rather than act on. It now goes to the
@@ -129,4 +161,6 @@ module.exports = {
   resolveDischargeNotificationTargets,
   DISCHARGED_TRIAGE_DEPARTMENTS,
   isDischargedTriageDepartment,
+  getPatientCurrentDepartment,
+  canNurseTriagePatient,
 };
