@@ -184,8 +184,11 @@ const PatientPrintView = ({ patient, history, printedBy, onClose }) => {
                       {t.triage_level} — {formatDate(t.triage_datetime, true)}
                       {t.visit_type ? ` (${t.visit_type})` : ''}
                     </p>
+                    {t.chief_complaint && (
+                      <p className="print-record-body">Chief complaint: {t.chief_complaint}</p>
+                    )}
                     {t.notes && (
-                      <p className="print-record-body">Chief complaint: {t.notes}</p>
+                      <p className="print-record-body">Notes: {t.notes}</p>
                     )}
                     {t.blood_pressure && (
                       <div className="print-vitals-row">
