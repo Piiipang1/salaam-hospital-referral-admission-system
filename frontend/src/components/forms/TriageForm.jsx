@@ -14,6 +14,7 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading, disabled = fal
   const [form, setForm] = useState({
     patient_id:          initial.patient_id          ?? patientId ?? '',
     triage_level:        initial.triage_level        ?? '',
+    chief_complaint:      initial.chief_complaint      ?? '',
     notes:               initial.notes               ?? '',
     visit_room_id:       initial.visit_room_id       ?? '',
     employee_id:         initial.employee_id         ?? '',
@@ -67,6 +68,7 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading, disabled = fal
             value={form.patient_id}
             disabled={disabled}
             required
+            extraParams={{ for_triage: true }}
             onChange={(p) => setForm((f) => ({ ...f, patient_id: p?.patient_id ?? '' }))}
           />
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-muted)' }}>
@@ -125,8 +127,21 @@ const TriageForm = ({ patientId, initial = {}, onSubmit, loading, disabled = fal
       </div>
 
       <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
+        <label htmlFor="tf-complaint">Chief Complaint</label>
+        <input
+          id="tf-complaint"
+          type="text"
+          value={form.chief_complaint}
+          onChange={set('chief_complaint')}
+          maxLength={255}
+          placeholder="Reason for this visit, e.g. Severe liver pain"
+          disabled={disabled}
+        />
+      </div>
+
+      <div className="form-group" style={{ marginTop: 'var(--space-4)' }}>
         <label htmlFor="tf-notes">Clinical Notes</label>
-        <textarea id="tf-notes" value={form.notes} onChange={set('notes')} rows={4} placeholder="Describe chief complaint, initial assessment..." disabled={disabled} />
+        <textarea id="tf-notes" value={form.notes} onChange={set('notes')} rows={4} placeholder="Initial assessment, additional observations..." disabled={disabled} />
       </div>
 
       <div className="form-actions">
