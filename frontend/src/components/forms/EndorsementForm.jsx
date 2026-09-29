@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getWardPatients, getWardNurses } from '../../api/nursing.api';
-import { todayInput } from '../../utils/formatDate';
-import { SHIFTS } from '../../utils/constants';
+import { toInputDateTime } from '../../utils/formatDate';
 import Button from '../ui/Button';
 import Alert from '../ui/Alert';
 import Badge from '../ui/Badge';
@@ -22,8 +21,10 @@ const EndorsementForm = ({ onSubmit, loading }) => {
   const [error,    setError]    = useState('');
 
   const [toNurseId,    setToNurseId]    = useState('');
-  const [shift,        setShift]        = useState(SHIFTS[0]);
-  const [shiftDate,    setShiftDate]    = useState(todayInput());
+  // Defaults to a typical 8-hour shift ending now — the nurse adjusts either
+  // end to match the shift actually being handed off.
+  const [shiftEndAt,   setShiftEndAt]   = useState(() => toInputDateTime(new Date()));
+  const [shiftStartAt, setShiftStartAt] = useState(() => toInputDateTime(new Date(Date.now() - 8 * 60 * 60 * 1000)));
   const [generalNotes, setGeneralNotes] = useState('');
 
   // patient_id -> { selected, notes }
@@ -54,11 +55,13 @@ const EndorsementForm = ({ onSubmit, loading }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!toNurseId) { setError('Select the nurse taking over.'); return; }
+    if (!shiftStartAt || !shiftEndAt) { setError('Enter both the shift start and end time.'); return; }
+    if (shiftEndAt <= shiftStartAt) { setError('Shift end must be after shift start.'); return; }
     setError('');
     onSubmit({
       to_nurse_id: Number(toNurseId),
-      shift,
-      shift_date: shiftDate,
+      shift_start_at: shiftStartAt,
+      shift_end_at: shiftEndAt,
       general_notes: generalNotes.trim() || undefined,
       patients: selectedIds.map((id) => ({
         patient_id: id,
@@ -89,15 +92,14 @@ const EndorsementForm = ({ onSubmit, loading }) => {
 
       <div className="form-row">
         <div className="form-group">
-          <label htmlFor="end-shift">Shift Ending *</label>
-          <select id="end-shift" value={shift} onChange={(e) => setShift(e.target.value)} required>
-            {SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <label htmlFor="end-shift-start">Shift Start *</label>
+          <input id="end-shift-start" type="datetime-local" value={shiftStartAt}
+            onChange={(e) => setShiftStartAt(e.target.value)} required />
         </div>
         <div className="form-group">
-          <label htmlFor="end-date">Shift Date *</label>
-          <input id="end-date" type="date" value={shiftDate}
-            onChange={(e) => setShiftDate(e.target.value)} required />
+          <label htmlFor="end-shift-end">Shift End *</label>
+          <input id="end-shift-end" type="datetime-local" value={shiftEndAt}
+            onChange={(e) => setShiftEndAt(e.target.value)} required />
         </div>
       </div>
 
