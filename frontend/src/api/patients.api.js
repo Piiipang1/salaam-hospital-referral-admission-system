@@ -17,7 +17,9 @@ export const getAllPatients  = (params = {}) => api.get('/api/patients', { param
  * @param {object} config — extra axios config, e.g. { signal } to cancel a stale keystroke
  * @param {object} extra  — extra query params, e.g. { returning: true } for the
  *                          "Receive Returning Patient" picker (nurse-only, unscoped,
- *                          Discharged patients only — see backend searchPatients)
+ *                          Discharged patients only — see backend searchPatients),
+ *                          or { dob: 'YYYY-MM-DD' } to narrow by exact date of birth
+ *                          (combines with `q` — e.g. last name + DOB)
  */
 export const searchPatients = (q = '', limit = 10, config = {}, extra = {}) =>
   api.get('/api/patients/search', { params: { q, limit, ...extra }, ...config }).then(r => r.data);
