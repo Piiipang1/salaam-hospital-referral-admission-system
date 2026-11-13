@@ -9,9 +9,10 @@ import api from './axios';
  */
 
 /**
- * @param {{to_nurse_id:number, shift:'Morning'|'Afternoon'|'Night',
- *          shift_date?:string, general_notes?:string,
+ * @param {{to_nurse_id:number, shift_start_at:string, shift_end_at:string,
+ *          general_notes?:string,
  *          patients:{patient_id:number, notes?:string}[]}} data
+ * shift_start_at/shift_end_at are datetime-local strings ('YYYY-MM-DDTHH:mm').
  */
 export const createEndorsement = (data) =>
   api.post('/api/endorsements', data).then(r => r.data);
